@@ -1,5 +1,7 @@
+'use client';
+
 import { LayoutDashboard, Calendar, Trash2, BarChart3, FileText, Map as MapIcon, Settings, LogOut, Shield } from 'lucide-react';
-import type { PageType, UserRole } from '../App';
+import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
   currentPage: PageType;

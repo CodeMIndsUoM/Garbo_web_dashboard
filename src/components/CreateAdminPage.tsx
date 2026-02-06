@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 
 interface CreateAdminPageProps {
@@ -12,7 +14,7 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
   const [success, setSuccess] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

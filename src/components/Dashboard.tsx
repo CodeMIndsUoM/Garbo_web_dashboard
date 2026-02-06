@@ -1,3 +1,5 @@
+'use client';
+
 import { Truck, Trash2, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
