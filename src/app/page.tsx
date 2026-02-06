@@ -1,26 +1,29 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { Dashboard } from './components/Dashboard';
-import { CollectionSchedule } from './components/CollectionSchedule';
-import { BinManagement } from './components/BinManagement';
-import { WasteAnalytics } from './components/WasteAnalytics';
-import { Reports } from './components/Reports';
-import { Sidebar } from './components/Sidebar';
-import { Login } from './components/Login';
-import { AdminAssignment } from './components/AdminAssignment';
-import { SuperadminCouncilSelect } from './components/SuperadminCouncilSelect';
-import { Map } from './components/Map';
-import { AllCouncilsWrapper } from './components/AllCouncilsWrapper';
-import AdminEditPassword from './components/AdminEditPassword';
-import CreateAdminPage from './components/CreateAdminPage';
+import { Dashboard } from '@/components/Dashboard';
+import { CollectionSchedule } from '@/components/CollectionSchedule';
+import { BinManagement } from '@/components/BinManagement';
+import { WasteAnalytics } from '@/components/WasteAnalytics';
+import { Reports } from '@/components/Reports';
+import { Sidebar } from '@/components/Sidebar';
+import { Login } from '@/components/Login';
+import { AdminAssignment } from '@/components/AdminAssignment';
+import { SuperadminCouncilSelect } from '@/components/SuperadminCouncilSelect';
+import { Map } from '@/components/Map';
+import AdminEditPassword from '@/components/AdminEditPassword';
+import CreateAdminPage from '@/components/CreateAdminPage';
 
 export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin';
+export type UserRole = 'admin' | 'superadmin' | null;
 
-export default function App() {
+export default function Home() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [selectedCouncil, setSelectedCouncil] = useState<any>(null);
+  const [userRole, setUserRole] = useState<UserRole>(null);
+  const [selectedCouncil, setSelectedCouncil] = useState<{ id: string; name: string; description?: string } | null>(null);
+
   // Mock councils for demo; replace with API call if needed
   const councils = [
     { id: '1', name: 'Colombo Municipal Council', description: 'Colombo city region' },
@@ -28,7 +31,7 @@ export default function App() {
     { id: '3', name: 'Galle Municipal Council', description: 'Galle city region' },
   ];
 
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
   useEffect(() => {
     const checkToken = async () => {
@@ -48,7 +51,7 @@ export default function App() {
         if (res.ok && json?.success && json?.data === true) {
           setIsAuthenticated(true);
           // Get role from localStorage
-          const role = localStorage.getItem('role');
+          const role = localStorage.getItem('role') as UserRole;
           setUserRole(role);
         } else {
           localStorage.removeItem('token');
@@ -69,7 +72,7 @@ export default function App() {
     };
 
     checkToken();
-  }, []);
+  }, [API_BASE]);
 
   const handleLogout = async () => {
     const token = localStorage.getItem('token');
@@ -95,14 +98,13 @@ export default function App() {
     setIsAuthenticated(true);
     setCurrentPage('dashboard');
     // Set userRole from localStorage after login
-    const role = localStorage.getItem('role');
+    const role = localStorage.getItem('role') as UserRole;
     setUserRole(role);
   };
 
   if (checkingAuth) {
     return <div className="min-h-screen flex items-center justify-center">Checking authentication...</div>;
   }
-
 
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
@@ -116,7 +118,7 @@ export default function App() {
         <div className="flex h-screen bg-gray-50">
           <Sidebar
             currentPage={currentPage}
-            onPageChange={page => {
+            onPageChange={(page) => {
               setCurrentPage(page);
               if (page === 'home') setSelectedCouncil(null);
             }}
@@ -130,6 +132,7 @@ export default function App() {
         </div>
       );
     }
+
     // Show all councils' details inside each tab
     const renderAllCouncilsTab = () => {
       switch (currentPage) {
@@ -149,11 +152,12 @@ export default function App() {
           return <Dashboard />;
       }
     };
+
     return (
       <div className="flex h-screen bg-gray-50">
         <Sidebar
           currentPage={currentPage}
-          onPageChange={page => {
+          onPageChange={(page) => {
             setCurrentPage(page);
             if (page === 'home') setSelectedCouncil(null);
           }}
@@ -165,13 +169,14 @@ export default function App() {
           <div className="p-4 bg-gray-100 border-b text-lg font-semibold text-gray-700">
             All Municipal Councils
           </div>
-          <SuperadminCouncilSelect councils={councils} onSelect={council => {
-            setSelectedCouncil(council);
-            setCurrentPage('dashboard');
-          }} />
-          <div className="mt-6">
-            {renderAllCouncilsTab()}
-          </div>
+          <SuperadminCouncilSelect
+            councils={councils}
+            onSelect={(council) => {
+              setSelectedCouncil(council);
+              setCurrentPage('dashboard');
+            }}
+          />
+          <div className="mt-6">{renderAllCouncilsTab()}</div>
         </main>
       </div>
     );

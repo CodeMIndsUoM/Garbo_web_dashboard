@@ -1,3 +1,5 @@
+'use client';
+
 import { TrendingUp, Recycle, Trash2, Leaf } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { 

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 
 interface LoginProps {
@@ -10,7 +12,7 @@ export function Login({ onLogin }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,15 +23,25 @@ export function Login({ onLogin }: LoginProps) {
     setError('');
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
-      if (!res.ok) {
-        setError('Invalid username or password');
+      const res = await fetch(`${API_BASE}/api/users/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: username,
+          password: password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.message || 'Invalid username or password');
         setLoading(false);
         return;
       }
-      const data = await res.json();
-      localStorage.setItem('role', data.role);
-      localStorage.setItem('admin', JSON.stringify({ username: data.email, role: data.role }));
+      const admin = data.data;
+      localStorage.setItem('role', admin.role || 'admin');
+      localStorage.setItem('admin', JSON.stringify({ username: admin.email, role: admin.role }));
       localStorage.setItem('token', 'dummy-token'); // Store a dummy token for backend auth
       setLoading(false);
       if (onLogin) onLogin();
