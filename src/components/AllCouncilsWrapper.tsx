@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 
 export function AllCouncilsWrapper({ councils, children, label }: { councils: any[]; children: (council: any) => React.ReactNode; label?: string }) {

@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import { Users, Shield, UserPlus, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -25,7 +27,11 @@ interface User {
   council?: string;
 }
 
-export function AdminAssignment() {
+interface AdminAssignmentProps {
+  onAddNewAdmin?: () => void;
+}
+
+export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,7 +43,7 @@ export function AdminAssignment() {
   const [isCreating, setIsCreating] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
   useEffect(() => {
     fetchUsers();
@@ -126,7 +132,7 @@ export function AdminAssignment() {
       if (!res.ok) {
         setError(json?.message || 'Failed to assign admin role');
       }
-      // Always re-fetch users to ensure UI is in sync
+
       await fetchUsers();
     } catch (err: any) {
       setError('Failed to assign admin: ' + (err?.message || err));
