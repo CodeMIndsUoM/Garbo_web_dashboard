@@ -1,3 +1,5 @@
+'use client';
+
 import { Trash2, MapPin, Battery, AlertTriangle, Search } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
