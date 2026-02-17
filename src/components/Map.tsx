@@ -4,7 +4,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// 🔴 Smaller bin icon
+const API_BASE = "http://localhost:8080/api/bins";
+
+// bin icon
 const binIcon = L.icon({
   iconUrl: 'https://cdn-icons-png.flaticon.com/512/484/484662.png',
   iconSize: [16, 16],
@@ -20,155 +22,222 @@ interface BinData {
   priority: 'low' | 'medium' | 'high';
 }
 
-type BinMarkersMap = Map<string, { marker: L.Marker; data: BinData }>;
+type BinMarkersMap = globalThis.Map<string, { marker: L.Marker; data: BinData }>;
 
-export const Map: React.FC = () => {
+export default function MapView() {
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const leafletMap = useRef<L.Map | null>(null);
+  const leafletMapRef = useRef<L.Map | null>(null);
   const addModeRef = useRef(false);
 
-  const [markers, setMarkers] = useState<BinMarkersMap>(new globalThis.Map());
+  const [markers, setMarkers] = useState<BinMarkersMap>(() => new globalThis.Map());
   const [addMode, setAddMode] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; binId: string } | null>(null);
 
-  // Keep ref in sync with state
   useEffect(() => {
     addModeRef.current = addMode;
   }, [addMode]);
 
-  useEffect(() => {
-    if (!mapRef.current || leafletMap.current) return;
-
-    const map = L.map(mapRef.current).setView([6.9271, 79.8612], 13);
-    leafletMap.current = map;
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
-
-    // Map click → add bin only if add mode enabled, also close context menu
-    map.on('click', (e: L.LeafletMouseEvent) => {
-      setContextMenu(null);
+  //  Load bins from backend
+  const loadBins = async () => {
+    try {
+      const res = await fetch(API_BASE);
       
+      if (!res.ok) {
+        console.error('Failed to load bins:', res.status);
+        return;
+      }
+      
+      const bins = await res.json();
+      console.log('✅ Loaded bins:', bins); // DEBUG
+
+      bins.forEach((bin: any) => {
+        console.log('🔍 Adding bin:', bin); // DEBUG
+        console.log('🔍 bin.lat:', bin.lat, typeof bin.lat);
+        console.log('🔍 bin.lng:', bin.lng, typeof bin.lng);
+        
+        addMarkerFromData({
+          id: String(bin.id),
+          lat: bin.lat,
+          lng: bin.lng,
+          fillLevel: bin.fillLevel,
+          priority: bin.priority,
+        });
+      });
+    } catch (error) {
+      console.error('❌ Error loading bins:', error);
+      alert('Failed to connect to backend. Make sure it is running on http://localhost:8080');
+    }
+  };
+
+  useEffect(() => {
+    if (!mapRef.current || leafletMapRef.current) return;
+
+    const leafletInstance = L.map(mapRef.current).setView([6.9271, 79.8612], 13);
+    leafletMapRef.current = leafletInstance;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+      .addTo(leafletInstance);
+
+    leafletInstance.on('click', (e: L.LeafletMouseEvent) => {
+      setContextMenu(null);
+
       if (!addModeRef.current) return;
 
       const { lat, lng } = e.latlng;
       addBin(lat, lng);
     });
 
-    // Close context menu on map drag/zoom
-    map.on('drag zoom', () => setContextMenu(null));
+    leafletInstance.on('drag zoom', () => setContextMenu(null));
+
+    loadBins();
   }, []);
 
-  const generateId = () => `BIN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  //  Add marker helper
+  const addMarkerFromData = (binData: BinData) => {
+    if (!leafletMapRef.current) return;
 
-  const addBin = (lat: number, lng: number) => {
-    if (!leafletMap.current) return;
+    console.log('🎯 Creating marker for:', binData); // DEBUG
 
-    const binData: BinData = {
-      id: generateId(),
-      lat,
-      lng,
-      fillLevel: Math.floor(Math.random() * 100), // Random for demo
-      priority: 'medium',
-    };
+    const marker = L.marker([binData.lat, binData.lng], { icon: binIcon })
+      .addTo(leafletMapRef.current);
 
-    const marker = L.marker([lat, lng], { icon: binIcon })
-      .addTo(leafletMap.current);
-
-    // Hover tooltip with bin info
     marker.bindTooltip(
-      `<div style="font-size: 12px; line-height: 1.4;">
+      `<div>
         <strong>ID:</strong> ${binData.id}<br/>
         <strong>Fill Level:</strong> ${binData.fillLevel}%<br/>
         <strong>Priority:</strong> ${binData.priority}
-      </div>`,
-      { permanent: false, direction: 'top', offset: [0, -10] }
+      </div>`
     );
 
-    // Right click → show context menu
     marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
-      const containerPoint = leafletMap.current!.latLngToContainerPoint(e.latlng);
-      setContextMenu({
-        x: containerPoint.x,
-        y: containerPoint.y,
-        binId: binData.id,
-      });
+      const pt = leafletMapRef.current!.latLngToContainerPoint(e.latlng);
+      setContextMenu({ x: pt.x, y: pt.y, binId: binData.id });
     });
 
-    setMarkers((prev) => {
+    setMarkers(prev => {
       const newMap = new globalThis.Map(prev);
       newMap.set(binData.id, { marker, data: binData });
       return newMap;
     });
-
-    // TODO: send to backend
   };
 
-  const removeBin = (binId: string) => {
-    if (!leafletMap.current) return;
+  //  Add bin
+  const addBin = async (lat: number, lng: number) => {
+    try {
+      const newBin = {
+        lat,
+        lng,
+        fillLevel: Math.floor(Math.random() * 100),
+        priority: 'medium',
+      };
 
-    const binEntry = markers.get(binId);
-    if (binEntry) {
-      leafletMap.current.removeLayer(binEntry.marker);
-      setMarkers((prev) => {
-        const newMap = new globalThis.Map(prev);
-        newMap.delete(binId);
-        return newMap;
+      console.log('📤 Sending to backend:', newBin); // DEBUG
+
+      const res = await fetch(API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newBin),
       });
 
-      // TODO: delete from backend
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Failed to create bin:', errorText);
+        alert('Failed to add bin. Make sure the backend is running.');
+        return;
+      }
+
+      const saved = await res.json();
+      console.log('✅ Saved bin:', saved); // DEBUG
+
+      addMarkerFromData({
+        id: String(saved.id),
+        lat: saved.lat,
+        lng: saved.lng,
+        fillLevel: saved.fillLevel,
+        priority: saved.priority,
+      });
+    } catch (error) {
+      console.error('Error adding bin:', error);
+      alert('Failed to add bin. Make sure the backend is running on http://localhost:8080');
     }
-    setContextMenu(null);
   };
 
-  const changePriority = (binId: string, newPriority: 'low' | 'medium' | 'high') => {
-    const binEntry = markers.get(binId);
-    if (binEntry) {
-      binEntry.data.priority = newPriority;
+  //  Remove bin
+  const removeBin = async (binId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/${binId}`, { method: "DELETE" });
       
-      // Update tooltip
-      binEntry.marker.unbindTooltip();
-      binEntry.marker.bindTooltip(
-        `<div style="font-size: 12px; line-height: 1.4;">
-          <strong>ID:</strong> ${binEntry.data.id}<br/>
-          <strong>Fill Level:</strong> ${binEntry.data.fillLevel}%<br/>
-          <strong>Priority:</strong> ${newPriority}
-        </div>`,
-        { permanent: false, direction: 'top', offset: [0, -10] }
+      if (!res.ok) {
+        console.error('Failed to delete bin');
+        return;
+      }
+
+      const entry = markers.get(binId);
+      if (entry && leafletMapRef.current) {
+        leafletMapRef.current.removeLayer(entry.marker);
+
+        setMarkers(prev => {
+          const newMap = new globalThis.Map(prev);
+          newMap.delete(binId);
+          return newMap;
+        });
+      }
+
+      setContextMenu(null);
+      console.log('✅ Bin removed:', binId); // DEBUG
+    } catch (error) {
+      console.error('Error removing bin:', error);
+    }
+  };
+
+  //  Change priority
+  const changePriority = async (binId: string, priority: 'low' | 'medium' | 'high') => {
+    try {
+      const res = await fetch(`${API_BASE}/${binId}/priority?priority=${priority}`, {
+        method: "PUT",
+      });
+
+      if (!res.ok) {
+        console.error('Failed to update priority');
+        return;
+      }
+
+      const entry = markers.get(binId);
+      if (!entry) return;
+
+      entry.data.priority = priority;
+
+      entry.marker.unbindTooltip();
+      entry.marker.bindTooltip(
+        `<div>
+          <strong>ID:</strong> ${entry.data.id}<br/>
+          <strong>Fill Level:</strong> ${entry.data.fillLevel}%<br/>
+          <strong>Priority:</strong> ${priority}
+        </div>`
       );
 
-      setMarkers((prev) => {
-        const newMap = new globalThis.Map(prev);
-        newMap.set(binId, binEntry);
-        return newMap;
-      });
-
-      // TODO: update backend
+      setMarkers(prev => new globalThis.Map(prev));
+      setContextMenu(null);
+      console.log('✅ Priority updated:', binId, priority); // DEBUG
+    } catch (error) {
+      console.error('Error updating priority:', error);
     }
-    setContextMenu(null);
   };
 
   return (
     <div className="w-screen h-screen">
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] text-2xl font-semibold bg-white px-4 py-2 rounded shadow">
-        Map View
-      </div>
-
       <div ref={mapRef} className="w-full h-full" />
 
-      {/* Add Bin Button */}
       <button
         onClick={() => setAddMode(!addMode)}
-        className={`absolute top-4 right-4 z-[1000] px-4 py-3 rounded-lg shadow text-white font-semibold transition-colors ${
+        className={`absolute top-4 right-4 z-[1000] px-4 py-3 rounded text-white font-semibold transition-colors ${
           addMode ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'
         }`}
       >
-        {addMode ? '✓ Click Map to Add Bin' : '+ Add New Bin Location'}
+        {addMode ? '✓ Click Map to Add Bin' : '+ Add New Bin'}
       </button>
 
-      {/* Context Menu */}
       {contextMenu && (
         <div
           className="absolute z-[2000] bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[200px]"
@@ -208,4 +277,4 @@ export const Map: React.FC = () => {
       )}
     </div>
   );
-};
+}
