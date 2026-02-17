@@ -10,9 +10,11 @@ import { Sidebar } from '@/components/Sidebar';
 import { Login } from '@/components/Login';
 import { AdminAssignment } from '@/components/AdminAssignment';
 import { SuperadminCouncilSelect } from '@/components/SuperadminCouncilSelect';
-import { Map } from '@/components/Map';
 import AdminEditPassword from '@/components/AdminEditPassword';
 import CreateAdminPage from '@/components/CreateAdminPage';
+import dynamic from 'next/dynamic';
+
+const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
 export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin';
 export type UserRole = 'admin' | 'superadmin' | null;
@@ -44,9 +46,16 @@ export default function Home() {
       }
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
         const res = await fetch(`${API_BASE}/api/auth/validate`, {
           headers: { Authorization: `Bearer ${token}` },
+          method: 'GET',
+          signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
         const json = await res.json();
         if (res.ok && json?.success && json?.data === true) {
           setIsAuthenticated(true);
@@ -78,10 +87,16 @@ export default function Home() {
     const token = localStorage.getItem('token');
     try {
       if (token) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
         await fetch(`${API_BASE}/api/auth/logout`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         });
+        
+        clearTimeout(timeoutId);
       }
     } catch (err) {
       // ignore network errors on logout
@@ -143,7 +158,7 @@ export default function Home() {
         case 'bins':
           return <BinManagement />;
         case 'map':
-          return <Map />;
+          return <MapView />;
         case 'analytics':
           return <WasteAnalytics />;
         case 'reports':
@@ -191,7 +206,7 @@ export default function Home() {
       case 'bins':
         return <BinManagement />;
       case 'map':
-        return <Map />;
+        return <MapView />;
       case 'analytics':
         return <WasteAnalytics />;
       case 'reports':
