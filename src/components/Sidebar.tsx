@@ -61,8 +61,8 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
                       : 'text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
+                  <Icon className="w-5 h-5 shrink-0" />
+                  <span className="whitespace-nowrap">{item.label}</span>
                 </button>
               </li>
             );
