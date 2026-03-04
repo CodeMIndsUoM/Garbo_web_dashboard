@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Truck, MapPin, Fuel, Wrench, Search, Plus, Pencil, X, Check, User } from 'lucide-react';
+import { Truck, MapPin, Fuel, Wrench, Search, Plus, Pencil, X, Check, User, Trash2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -218,7 +218,7 @@ export function VehicleManagement() {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button onClick={() => setDeletingVehicle(vehicle)} className="text-gray-400 hover:text-red-600">
-                      <X className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
