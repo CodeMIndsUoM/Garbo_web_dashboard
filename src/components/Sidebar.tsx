@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Calendar, Trash2, BarChart3, FileText, Map as MapIcon, Settings, LogOut, Shield } from 'lucide-react';
+import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, FileText, Map as MapIcon, Settings, LogOut, Shield } from 'lucide-react';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -19,6 +19,7 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'schedule' as PageType, label: 'Collection Schedule', icon: Calendar },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
+    { id: 'vehicles' as PageType, label: 'Vehicle Management', icon: Truck },
     { id: 'map' as PageType, label: 'Map', icon: MapIcon },
     { id: 'analytics' as PageType, label: 'Analytics', icon: BarChart3 },
     { id: 'reports' as PageType, label: 'Reports', icon: FileText },
