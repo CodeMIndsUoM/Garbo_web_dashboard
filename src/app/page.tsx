@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Dashboard } from '@/components/Dashboard';
 import { CollectionSchedule } from '@/components/CollectionSchedule';
 import { BinManagement } from '@/components/BinManagement';
+import { VehicleManagement } from '@/components/VehicleManagement';
 import { WasteAnalytics } from '@/components/WasteAnalytics';
 import { Reports } from '@/components/Reports';
 import { Sidebar } from '@/components/Sidebar';
@@ -14,7 +15,7 @@ import { Map } from '@/components/Map';
 import AdminEditPassword from '@/components/AdminEditPassword';
 import CreateAdminPage from '@/components/CreateAdminPage';
 
-export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin';
+export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'vehicles' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin';
 export type UserRole = 'admin' | 'superadmin' | null;
 
 export default function Home() {
@@ -142,6 +143,8 @@ export default function Home() {
           return <CollectionSchedule />;
         case 'bins':
           return <BinManagement />;
+        case 'vehicles':
+          return <VehicleManagement />;
         case 'map':
           return <Map />;
         case 'analytics':
@@ -190,6 +193,8 @@ export default function Home() {
         return <CollectionSchedule />;
       case 'bins':
         return <BinManagement />;
+      case 'vehicles':
+        return <VehicleManagement />;
       case 'map':
         return <Map />;
       case 'analytics':
