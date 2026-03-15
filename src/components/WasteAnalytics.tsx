@@ -1,6 +1,6 @@
 'use client';
 
-import { TrendingUp, Recycle, Trash2, Leaf } from 'lucide-react';
+import { TrendingUp, Recycle, Trash2, Leaf, Route, Users, Truck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { 
   BarChart, 
@@ -108,6 +108,50 @@ export function WasteAnalytics() {
         </Card>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm text-gray-600">Route Collection Performance</CardTitle>
+            <Route className="w-5 h-5 text-indigo-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl text-gray-900 mb-1">91.3%</div>
+            <div className="flex items-center gap-1 text-green-600 text-sm">
+              <TrendingUp className="w-4 h-4" />
+              <span>On-time completion</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm text-gray-600">Team Performance</CardTitle>
+            <Users className="w-5 h-5 text-teal-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl text-gray-900 mb-1">88.7%</div>
+            <div className="flex items-center gap-1 text-green-600 text-sm">
+              <TrendingUp className="w-4 h-4" />
+              <span>Efficiency score</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm text-gray-600">Vehicle Performance</CardTitle>
+            <Truck className="w-5 h-5 text-amber-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl text-gray-900 mb-1">94.1%</div>
+            <div className="flex items-center gap-1 text-green-600 text-sm">
+              <TrendingUp className="w-4 h-4" />
+              <span>Fleet uptime</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <Card className="lg:col-span-2">
@@ -159,7 +203,7 @@ export function WasteAnalytics() {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>Collection by Zone</CardTitle>
@@ -174,39 +218,6 @@ export function WasteAnalytics() {
                 <Bar dataKey="collected" fill="#3b82f6" name="Tons Collected" />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Environmental Impact</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">CO₂ Reduced</p>
-                  <p className="text-2xl text-gray-900">842 tons</p>
-                </div>
-                <Leaf className="w-12 h-12 text-green-600" />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Materials Recycled</p>
-                  <p className="text-2xl text-gray-900">1,340 tons</p>
-                </div>
-                <Recycle className="w-12 h-12 text-blue-600" />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Energy Saved</p>
-                  <p className="text-2xl text-gray-900">3,245 MWh</p>
-                </div>
-                <TrendingUp className="w-12 h-12 text-purple-600" />
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>
