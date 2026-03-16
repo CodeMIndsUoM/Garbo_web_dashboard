@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Truck, MapPin, Fuel, Wrench, Search, Plus, Pencil, X, Check, User, Trash2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -26,6 +26,12 @@ interface Vehicle {
   updatedAt: string;
 }
 
+interface Driver {
+  id: number;
+  driverCode: string;
+  name?: string;
+}
+
 const VEHICLE_TYPES = ['Truck', 'Compactor', 'Mini Truck'];
 const VEHICLE_STATUSES = ['available', 'on_route', 'maintenance', 'inactive'];
 
@@ -49,12 +55,31 @@ function getStatusLabel(status: string) {
 
 export function VehicleManagement() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [driversLoading, setDriversLoading] = useState(true);
+  const [showDriversListModal, setShowDriversListModal] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [deletingDriver, setDeletingDriver] = useState<Driver | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState('');
+
+  const fetchDrivers = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/drivers`);
+      const json = await res.json();
+      if (json.success) {
+        setDrivers(json.data);
+      }
+    } catch {
+      console.error('Failed to fetch drivers');
+    } finally {
+      setDriversLoading(false);
+    }
+  }, []);
 
   const fetchVehicles = useCallback(async () => {
     try {
@@ -71,6 +96,26 @@ export function VehicleManagement() {
   }, []);
 
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
+  useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
+
+  const driversById = useMemo(() => {
+    const map = new Map<number, Driver>();
+    for (const driver of drivers) map.set(driver.id, driver);
+    return map;
+  }, [drivers]);
+
+  const getDriverLabel = useCallback((driverId: number | null) => {
+    if (!driverId) return 'Unassigned';
+    const driver = driversById.get(driverId);
+    if (!driver) return `#${driverId}`;
+    if (driver.name && driver.name.trim()) return driver.name;
+    return driver.driverCode || `#${driverId}`;
+  }, [driversById]);
+
+  const handleDriverUpdated = () => {
+    setEditingDriver(null);
+    fetchDrivers();
+  };
 
   const filteredVehicles = vehicles.filter(v =>
     v.vehicleCode.toLowerCase().includes(search.toLowerCase()) ||
@@ -88,11 +133,31 @@ export function VehicleManagement() {
   const handleDelete = async () => {
     if (!deletingVehicle) return;
     try {
-      await fetch(`${API_BASE}/api/vehicles/${deletingVehicle.id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/vehicles/${deletingVehicle.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.message || 'Failed to delete vehicle');
+      }
       setDeletingVehicle(null);
       fetchVehicles();
     } catch {
       setError('Failed to delete vehicle');
+    }
+  };
+
+  const handleDeleteDriver = async () => {
+    if (!deletingDriver) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/drivers/${deletingDriver.id}`, { method: 'DELETE' });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.message || 'Failed to delete driver');
+      }
+      setDeletingDriver(null);
+      fetchDrivers();
+      fetchVehicles();
+    } catch {
+      setError('Failed to delete driver');
     }
   };
 
@@ -116,13 +181,21 @@ export function VehicleManagement() {
           <h2 className="text-gray-900 mb-2">Vehicle Management</h2>
           <p className="text-gray-600">Manage collection vehicles, assignments, and availability</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Vehicle
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowDriversListModal(true)}
+            className="px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Drivers
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Vehicle
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -179,6 +252,27 @@ export function VehicleManagement() {
           </CardContent>
         </Card>
       </div>
+
+      {showDriversListModal && (
+        <DriversListModal
+          drivers={drivers}
+          loading={driversLoading}
+          onClose={() => setShowDriversListModal(false)}
+          onEdit={(driver) => { setShowDriversListModal(false); setEditingDriver(driver); }}
+          onDelete={(driver) => { setShowDriversListModal(false); setDeletingDriver(driver); }}
+          onCreated={() => { fetchDrivers(); fetchVehicles(); }}
+          setGlobalError={setError}
+        />
+      )}
+
+      {editingDriver && (
+        <DriverEditModal
+          driver={editingDriver}
+          onClose={() => setEditingDriver(null)}
+          onSaved={handleDriverUpdated}
+          setGlobalError={setError}
+        />
+      )}
 
       {/* Search */}
       <div className="mb-6">
@@ -259,7 +353,7 @@ export function VehicleManagement() {
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 flex items-center gap-1"><User className="w-3 h-3" /> Driver</span>
-                      <span className="text-gray-900">{vehicle.assignedDriverId ? `#${vehicle.assignedDriverId}` : 'Unassigned'}</span>
+                      <span className="text-gray-900">{getDriverLabel(vehicle.assignedDriverId)}</span>
                     </div>
                     {vehicle.currentLocation && (
                       <div className="flex items-center justify-between text-sm">
@@ -294,6 +388,7 @@ export function VehicleManagement() {
       {(showCreateModal || editingVehicle) && (
         <VehicleFormModal
           vehicle={editingVehicle}
+          drivers={drivers}
           onClose={() => { setShowCreateModal(false); setEditingVehicle(null); }}
           onSaved={() => { setShowCreateModal(false); setEditingVehicle(null); fetchVehicles(); }}
         />
@@ -314,13 +409,29 @@ export function VehicleManagement() {
           </div>
         </div>
       )}
+
+      {/* Driver Delete Confirmation */}
+      {deletingDriver && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg text-gray-900 mb-2">Delete Driver</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete <strong>{deletingDriver.driverCode}</strong>{deletingDriver.name ? ` (${deletingDriver.name})` : ''}?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeletingDriver(null)} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDeleteDriver} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ── Create / Edit Modal ────────────────────────────────────────── */
 
-function VehicleFormModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle | null; onClose: () => void; onSaved: () => void }) {
+function VehicleFormModal({ vehicle, drivers, onClose, onSaved }: { vehicle: Vehicle | null; drivers: Driver[]; onClose: () => void; onSaved: () => void }) {
   const isEditing = !!vehicle;
   const [form, setForm] = useState({
     vehicleCode: vehicle?.vehicleCode || '',
@@ -423,12 +534,31 @@ function VehicleFormModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle | nu
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">Assigned Council</label>
-            <Input value={form.assignedCouncil} onChange={e => setForm({...form, assignedCouncil: e.target.value})} placeholder="Colombo Municipal Council" />
+            <select
+              value={form.assignedCouncil}
+              onChange={e => setForm({ ...form, assignedCouncil: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="">Select council</option>
+              <option value="Colombo">Colombo</option>
+              <option value="Galle">Galle</option>
+              <option value="Moratuwa">Moratuwa</option>
+              <option value="Kandy">Kandy</option>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Driver ID</label>
-              <Input type="number" value={form.assignedDriverId} onChange={e => setForm({...form, assignedDriverId: e.target.value})} placeholder="1001" />
+              <label className="block text-sm text-gray-600 mb-1">Driver Code</label>
+              <select
+                value={form.assignedDriverId}
+                onChange={e => setForm({ ...form, assignedDriverId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Unassigned</option>
+                {drivers.map(d => (
+                  <option key={d.id} value={d.id.toString()}>{d.name ? `${d.driverCode} - ${d.name}` : d.driverCode}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">Current Location</label>
@@ -440,6 +570,227 @@ function VehicleFormModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle | nu
             <button type="submit" disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
               <Check className="w-4 h-4" />
               {saving ? 'Saving...' : (isEditing ? 'Update Vehicle' : 'Create Vehicle')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ── Drivers List Modal ────────────────────────────────────────── */
+
+function DriversListModal({
+  drivers,
+  loading,
+  onClose,
+  onEdit,
+  onDelete,
+  onCreated,
+  setGlobalError,
+}: {
+  drivers: Driver[];
+  loading: boolean;
+  onClose: () => void;
+  onEdit: (driver: Driver) => void;
+  onDelete: (driver: Driver) => void;
+  onCreated: () => void;
+  setGlobalError: (msg: string) => void;
+}) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ driverCode: '', name: '' });
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.driverCode.trim() || !form.name.trim()) {
+      setFormError('Driver code and name are required');
+      return;
+    }
+
+    setSaving(true);
+    setFormError('');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/drivers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverCode: form.driverCode.trim(), name: form.name.trim() }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        setForm({ driverCode: '', name: '' });
+        setShowCreate(false);
+        onCreated();
+      } else {
+        setFormError(json?.message || 'Failed to add driver');
+      }
+    } catch {
+      setGlobalError('Failed to add driver');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg text-gray-900">Drivers</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setShowCreate((v) => !v); setFormError(''); }}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add New Driver
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+          </div>
+        </div>
+
+        {showCreate && (
+          <div className="mb-6 border border-gray-200 rounded-lg p-4">
+            {formError && <div className="mb-3 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
+            <form onSubmit={handleCreate} className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Driver Code *</label>
+                <Input value={form.driverCode} onChange={e => setForm({ ...form, driverCode: e.target.value })} placeholder="DRV-001" />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
+                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
+              </div>
+              <div className="flex gap-2 justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowCreate(false); setFormError(''); }}
+                  className="px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm"
+                >
+                  <Check className="w-4 h-4" />
+                  {saving ? 'Saving...' : 'Create Driver'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="text-sm text-gray-500">Loading drivers...</div>
+        ) : drivers.length === 0 ? (
+          <div className="text-sm text-gray-500">No drivers found.</div>
+        ) : (
+          <div className="space-y-2">
+            {drivers.map((d) => (
+              <div key={d.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm text-gray-900 truncate">{d.driverCode}{d.name ? ` - ${d.name}` : ''}</div>
+                  <div className="text-xs text-gray-500">#{d.id}</div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onEdit(d)}
+                    className="text-gray-500 hover:text-gray-700 px-2 py-1 rounded"
+                    title="Edit driver"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(d)}
+                    className="text-gray-500 hover:text-red-600 px-2 py-1 rounded"
+                    title="Delete driver"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-6">
+          <button onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Driver Edit Modal ─────────────────────────────────────────── */
+
+function DriverEditModal({
+  driver,
+  onClose,
+  onSaved,
+  setGlobalError,
+}: {
+  driver: Driver;
+  onClose: () => void;
+  onSaved: () => void;
+  setGlobalError: (msg: string) => void;
+}) {
+  const [form, setForm] = useState({ driverCode: driver.driverCode || '', name: driver.name || '' });
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.driverCode.trim() || !form.name.trim()) {
+      setFormError('Driver code and name are required');
+      return;
+    }
+    setSaving(true);
+    setFormError('');
+
+    try {
+      const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverCode: form.driverCode.trim(), name: form.name.trim() }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        onSaved();
+      } else {
+        setFormError(json.message || 'Failed to update driver');
+      }
+    } catch {
+      setGlobalError('Failed to update driver');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg text-gray-900">Edit Driver</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+        {formError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Driver Code *</label>
+            <Input value={form.driverCode} onChange={e => setForm({ ...form, driverCode: e.target.value })} placeholder="DRV-001" />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
+            <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              {saving ? 'Saving...' : 'Update Driver'}
             </button>
           </div>
         </form>
