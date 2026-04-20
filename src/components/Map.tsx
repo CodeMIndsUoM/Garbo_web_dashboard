@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const API_BASE = "http://localhost:8080/api/bins";
+const API_BASE = "http://localhost:8081/api/bins";
 
 // bin icon
 const binIcon = L.icon({
@@ -20,6 +20,7 @@ interface BinData {
   lng: number;
   fillLevel: number;
   priority: 'low' | 'medium' | 'high';
+  zone: string;
 }
 
 type BinMarkersMap = globalThis.Map<string, { marker: L.Marker; data: BinData }>;
@@ -32,6 +33,7 @@ export default function MapView() {
   const [markers, setMarkers] = useState<BinMarkersMap>(() => new globalThis.Map());
   const [addMode, setAddMode] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; binId: string } | null>(null);
+  const [zoneOptions, setZoneOptions] = useState<string[]>(['unassigned']);
 
   useEffect(() => {
     addModeRef.current = addMode;
@@ -50,10 +52,15 @@ export default function MapView() {
       const bins = await res.json();
       console.log('✅ Loaded bins:', bins); // DEBUG
 
+      const discoveredZones = new Set<string>(['unassigned']);
+
       bins.forEach((bin: any) => {
         console.log('🔍 Adding bin:', bin); // DEBUG
         console.log('🔍 bin.lat:', bin.lat, typeof bin.lat);
         console.log('🔍 bin.lng:', bin.lng, typeof bin.lng);
+
+        const zone = typeof bin.zone === 'string' && bin.zone.trim() ? bin.zone.trim() : 'unassigned';
+        discoveredZones.add(zone);
         
         addMarkerFromData({
           id: String(bin.id),
@@ -61,12 +68,24 @@ export default function MapView() {
           lng: bin.lng,
           fillLevel: bin.fillLevel,
           priority: bin.priority,
+          zone,
         });
       });
+
+      setZoneOptions(Array.from(discoveredZones));
     } catch (error) {
       console.error('❌ Error loading bins:', error);
-      alert('Failed to connect to backend. Make sure it is running on http://localhost:8080');
+      alert('Failed to connect to backend. Make sure it is running on http://localhost:8081');
     }
+  };
+
+  const renderBinTooltip = (binData: BinData) => {
+    return `<div>
+      <strong>ID:</strong> ${binData.id}<br/>
+      <strong>Fill Level:</strong> ${binData.fillLevel}%<br/>
+      <strong>Priority:</strong> ${binData.priority}<br/>
+      <strong>Zone:</strong> ${binData.zone}
+    </div>`;
   };
 
   useEffect(() => {
@@ -101,13 +120,7 @@ export default function MapView() {
     const marker = L.marker([binData.lat, binData.lng], { icon: binIcon })
       .addTo(leafletMapRef.current);
 
-    marker.bindTooltip(
-      `<div>
-        <strong>ID:</strong> ${binData.id}<br/>
-        <strong>Fill Level:</strong> ${binData.fillLevel}%<br/>
-        <strong>Priority:</strong> ${binData.priority}
-      </div>`
-    );
+    marker.bindTooltip(renderBinTooltip(binData));
 
     marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
       L.DomEvent.stopPropagation(e);
@@ -130,6 +143,7 @@ export default function MapView() {
         lng,
         fillLevel: Math.floor(Math.random() * 100),
         priority: 'medium',
+        zone: 'unassigned',
       };
 
       console.log('📤 Sending to backend:', newBin); // DEBUG
@@ -156,6 +170,7 @@ export default function MapView() {
         lng: saved.lng,
         fillLevel: saved.fillLevel,
         priority: saved.priority,
+        zone: saved.zone || 'unassigned',
       });
     } catch (error) {
       console.error('Error adding bin:', error);
@@ -209,13 +224,7 @@ export default function MapView() {
       entry.data.priority = priority;
 
       entry.marker.unbindTooltip();
-      entry.marker.bindTooltip(
-        `<div>
-          <strong>ID:</strong> ${entry.data.id}<br/>
-          <strong>Fill Level:</strong> ${entry.data.fillLevel}%<br/>
-          <strong>Priority:</strong> ${priority}
-        </div>`
-      );
+      entry.marker.bindTooltip(renderBinTooltip(entry.data));
 
       setMarkers(prev => new globalThis.Map(prev));
       setContextMenu(null);
@@ -224,6 +233,40 @@ export default function MapView() {
       console.error('Error updating priority:', error);
     }
   };
+
+  //  Change zone
+  const changeZone = async (binId: string, zone: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/${binId}/zone?zone=${encodeURIComponent(zone)}`, {
+        method: "PUT",
+      });
+
+      if (!res.ok) {
+        console.error('Failed to update zone');
+        return;
+      }
+
+      const entry = markers.get(binId);
+      if (!entry) return;
+
+      entry.data.zone = zone;
+
+      entry.marker.unbindTooltip();
+      entry.marker.bindTooltip(renderBinTooltip(entry.data));
+
+      setZoneOptions(prev => {
+        if (prev.includes(zone)) return prev;
+        return [...prev, zone];
+      });
+      setMarkers(prev => new globalThis.Map(prev));
+      setContextMenu(null);
+      console.log('✅ Zone updated:', binId, zone); // DEBUG
+    } catch (error) {
+      console.error('Error updating zone:', error);
+    }
+  };
+
+  const selectedBin = contextMenu ? markers.get(contextMenu.binId)?.data : null;
 
   return (
     <div className="w-screen h-screen">
@@ -253,6 +296,9 @@ export default function MapView() {
           <div className="px-4 py-1 text-xs text-gray-600">
             <strong>ID:</strong> {contextMenu.binId}
           </div>
+          <div className="px-4 py-1 text-xs text-gray-600">
+            <strong>Zone:</strong> {selectedBin?.zone || 'unassigned'}
+          </div>
           <div className="border-t border-gray-200 my-1"></div>
           <div className="px-4 py-1 text-xs text-gray-500 font-semibold uppercase">Change Priority:</div>
           <button
@@ -273,8 +319,23 @@ export default function MapView() {
           >
             <span>🔴</span> High Priority
           </button>
+          <div className="border-t border-gray-200 my-1"></div>
+          <div className="px-4 py-1 text-xs text-gray-500 font-semibold uppercase">Change Zone:</div>
+          {zoneOptions.map(zone => (
+            <button
+              key={zone}
+              onClick={() => changeZone(contextMenu.binId, zone)}
+              className="w-full px-4 py-2 text-left hover:bg-blue-50 text-sm"
+            >
+              📍 {zone}
+            </button>
+          ))}
         </div>
       )}
     </div>
   );
 }
+
+
+
+
