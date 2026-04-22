@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { decodeJwtPayload } from '@/lib/jwt';
 import { Dashboard } from '@/components/Dashboard';
 import { CollectionSchedule } from '@/components/CollectionSchedule';
 import { BinManagement } from '@/components/BinManagement';
@@ -60,8 +61,10 @@ export default function Home() {
         const json = await res.json();
         if (res.ok && json?.success && json?.data === true) {
           setIsAuthenticated(true);
-          // Get role from localStorage
-          const role = localStorage.getItem('role') as UserRole;
+          // Prefer role stored from token if available
+          const payload = decodeJwtPayload(token);
+          const roleFromToken = payload?.role || payload?.roles || null;
+          const role = (roleFromToken as UserRole) || (localStorage.getItem('role') as UserRole);
           setUserRole(role);
         } else {
           localStorage.removeItem('token');
@@ -143,7 +146,7 @@ export default function Home() {
             selectedCouncil={selectedCouncil}
           />
           <main className="flex-1 overflow-auto">
-            <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />
+            <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')}/>
           </main>
         </div>
       );
@@ -217,7 +220,7 @@ export default function Home() {
       case 'reports':
         return <Reports />;
       case 'admin-assignment':
-        return <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />;
+         return <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />;
       case 'admin-edit-password':
         return <AdminEditPassword />;
       case 'create-admin':
