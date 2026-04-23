@@ -35,7 +35,7 @@ export default function Home() {
     { id: '3', name: 'Galle Municipal Council', description: 'Galle city region' },
   ];
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   useEffect(() => {
     const checkToken = async () => {
@@ -121,6 +121,12 @@ export default function Home() {
     setUserRole(role);
   };
 
+  // Navigation helper for opening the Create Admin page
+  const openCreateAdmin = () => {
+    setCurrentPage('create-admin');
+  };
+  
+
   if (checkingAuth) {
     return <div className="min-h-screen flex items-center justify-center">Checking authentication...</div>;
   }
@@ -146,7 +152,28 @@ export default function Home() {
             selectedCouncil={selectedCouncil}
           />
           <main className="flex-1 overflow-auto">
-            <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')}/>
+            <AdminAssignment onAddNewAdmin={openCreateAdmin} />
+          </main>
+        </div>
+      );
+    }
+
+    // Allow explicit rendering of the Create Admin page even when no council is selected
+    if (currentPage === 'create-admin') {
+      return (
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar
+            currentPage={currentPage}
+            onPageChange={(page) => {
+              setCurrentPage(page);
+              if (page === 'home') setSelectedCouncil(null);
+            }}
+            onLogout={handleLogout}
+            userRole={userRole}
+            selectedCouncil={selectedCouncil}
+          />
+          <main className="flex-1 overflow-auto">
+            <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />
           </main>
         </div>
       );
@@ -220,7 +247,7 @@ export default function Home() {
       case 'reports':
         return <Reports />;
       case 'admin-assignment':
-         return <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />;
+        return <AdminAssignment onAddNewAdmin={openCreateAdmin} />;
       case 'admin-edit-password':
         return <AdminEditPassword />;
       case 'create-admin':
