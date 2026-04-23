@@ -2,9 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+//import 'leaflet/dist/leaflet.css
 
-const API_BASE = "http://localhost:8080/api/bins";
+const API_BASE = "http://localhost:8081/api/bins";
 
 // bin icon
 const binIcon = L.icon({
@@ -65,7 +65,7 @@ export default function MapView() {
       });
     } catch (error) {
       console.error('❌ Error loading bins:', error);
-      alert('Failed to connect to backend. Make sure it is running on http://localhost:8080');
+      alert('Failed to connect to backend. Make sure it is running on http://localhost:8081');
     }
   };
 
@@ -159,7 +159,7 @@ export default function MapView() {
       });
     } catch (error) {
       console.error('Error adding bin:', error);
-      alert('Failed to add bin. Make sure the backend is running on http://localhost:8080');
+      alert('Failed to add bin. Make sure the backend is running on http://localhost:8081');
     }
   };
 
