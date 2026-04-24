@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 //import 'leaflet/dist/leaflet.css
 
-const API_BASE = "http://localhost:8081/api/bins";
+const API_BASE = "http://localhost:8080/api/bins";
 
 // bin icon
 const binIcon = L.icon({

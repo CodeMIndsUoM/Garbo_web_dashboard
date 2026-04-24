@@ -1,227 +1,361 @@
 'use client';
 
-import { Trash2, MapPin, Battery, AlertTriangle, Search } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Trash2, MapPin, AlertTriangle, Search, Plus, Loader2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
+import { Button } from './ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { toast } from "sonner";
 
-const bins = [
-  {
-    id: 'BIN-001',
-    location: '123 Main St, Downtown',
-    type: 'General Waste',
-    fillLevel: 85,
-    battery: 92,
-    status: 'warning',
-    lastCollection: '2 days ago',
-    coordinates: '40.7128° N, 74.0060° W',
-  },
-  {
-    id: 'BIN-002',
-    location: '456 Oak Ave, Residential Zone A',
-    type: 'Recyclables',
-    fillLevel: 45,
-    battery: 78,
-    status: 'normal',
-    lastCollection: '1 day ago',
-    coordinates: '40.7589° N, 73.9851° W',
-  },
-  {
-    id: 'BIN-003',
-    location: '789 Industrial Rd, Industrial Park',
-    type: 'Organic Waste',
-    fillLevel: 92,
-    battery: 65,
-    status: 'critical',
-    lastCollection: '3 days ago',
-    coordinates: '40.7489° N, 73.9680° W',
-  },
-  {
-    id: 'BIN-004',
-    location: '321 Park Blvd, Shopping District',
-    type: 'General Waste',
-    fillLevel: 38,
-    battery: 88,
-    status: 'normal',
-    lastCollection: '1 day ago',
-    coordinates: '40.7282° N, 74.0776° W',
-  },
-  {
-    id: 'BIN-005',
-    location: '654 Elm St, Residential Zone B',
-    type: 'Recyclables',
-    fillLevel: 72,
-    battery: 45,
-    status: 'warning',
-    lastCollection: '2 days ago',
-    coordinates: '40.7580° N, 73.9855° W',
-  },
-  {
-    id: 'BIN-006',
-    location: '987 Commerce Dr, Business District',
-    type: 'Mixed Waste',
-    fillLevel: 55,
-    battery: 91,
-    status: 'normal',
-    lastCollection: '1 day ago',
-    coordinates: '40.7614° N, 73.9776° W',
-  },
-];
+const API_BASE = "http://localhost:8080/api/bins";
+
+interface Bin {
+  id: number;
+  binCode: string;
+  location: string;
+  type: string;
+  fillLevel: number;
+  status: string;
+  lastCollection: string;
+  coordinates: string;
+}
 
 export function BinManagement() {
+  const [bins, setBins] = useState<Bin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  
+  // Form State
+  const [newBin, setNewBin] = useState({
+    binCode: '',
+    location: '',
+    type: 'General Waste',
+    status: 'normal',
+    coordinates: ''
+  });
+
+  const fetchBins = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(API_BASE);
+      const result = await response.json();
+      if (result.success) {
+        setBins(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching bins:", error);
+      toast.error("Failed to load bins");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBins();
+  }, []);
+
+  const handleCreateBin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(API_BASE, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newBin),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Bin created successfully");
+        setIsCreateModalOpen(false);
+        setNewBin({
+          binCode: '',
+          location: '',
+          type: 'General Waste',
+          status: 'normal',
+          coordinates: ''
+        });
+        fetchBins();
+      } else {
+        toast.error(result.message || "Failed to create bin");
+      }
+    } catch (error) {
+      console.error("Error creating bin:", error);
+      toast.error("Connection error");
+    }
+  };
+
+  const handleDeleteBin = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this bin?")) return;
+    try {
+      const response = await fetch(`${API_BASE}/${id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success("Bin deleted successfully");
+        fetchBins();
+      }
+    } catch (error) {
+      toast.error("Failed to delete bin");
+    }
+  };
+
+  const filteredBins = bins.filter(bin => 
+    bin.binCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    bin.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    bin.type?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h2 className="text-gray-900 mb-2">Bin Management</h2>
-        <p className="text-gray-600">Monitor and manage all waste bins in real-time</p>
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h2 className="text-gray-900 mb-2">Bin Management</h2>
+          <p className="text-gray-600">Monitor and manage all waste bins in real-time</p>
+        </div>
+        
+        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Bin
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Waste Bin</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCreateBin} className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Bin Code</label>
+                <Input 
+                  placeholder="e.g. BIN-100" 
+                  value={newBin.binCode}
+                  onChange={(e) => setNewBin({...newBin, binCode: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Location</label>
+                <Input 
+                  placeholder="Street name, Area" 
+                  value={newBin.location}
+                  onChange={(e) => setNewBin({...newBin, location: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Type</label>
+                <Select 
+                  value={newBin.type} 
+                  onValueChange={(val) => setNewBin({...newBin, type: val})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="General Waste">General Waste</SelectItem>
+                    <SelectItem value="Recyclables">Recyclables</SelectItem>
+                    <SelectItem value="Organic Waste">Organic Waste</SelectItem>
+                    <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Coordinates (Optional)</label>
+                <Input 
+                  placeholder="lat, lng" 
+                  value={newBin.coordinates}
+                  onChange={(e) => setNewBin({...newBin, coordinates: e.target.value})}
+                />
+              </div>
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
+                Save Bin
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* Stats */}
+      {/* Stats Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card className="bg-white">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Total Bins</p>
-                <p className="text-2xl text-gray-900">856</p>
+                <p className="text-2xl font-semibold text-gray-900">{bins.length}</p>
               </div>
-              <Trash2 className="w-10 h-10 text-gray-400" />
+              <div className="p-3 bg-gray-50 rounded-full">
+                <Trash2 className="w-6 h-6 text-gray-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-white">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Critical</p>
-                <p className="text-2xl text-red-600">23</p>
+                <p className="text-2xl font-semibold text-red-600">
+                  {bins.filter(b => b.status === 'critical').length}
+                </p>
               </div>
-              <AlertTriangle className="w-10 h-10 text-red-400" />
+              <div className="p-3 bg-red-50 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-white">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Warning</p>
-                <p className="text-2xl text-orange-600">67</p>
+                <p className="text-2xl font-semibold text-orange-600">
+                  {bins.filter(b => b.status === 'warning').length}
+                </p>
               </div>
-              <AlertTriangle className="w-10 h-10 text-orange-400" />
+              <div className="p-3 bg-orange-50 rounded-full">
+                <AlertTriangle className="w-6 h-6 text-orange-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-white">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Normal</p>
-                <p className="text-2xl text-green-600">766</p>
+                <p className="text-2xl font-semibold text-green-600">
+                  {bins.filter(b => b.status === 'normal').length}
+                </p>
               </div>
-              <Trash2 className="w-10 h-10 text-green-400" />
+              <div className="p-3 bg-green-50 rounded-full">
+                <Trash2 className="w-6 h-6 text-green-400" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search */}
+      {/* Search and Filters */}
       <div className="mb-6">
-        <div className="relative">
+        <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <Input
             placeholder="Search bins by ID, location, or type..."
             className="pl-10"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
       </div>
 
       {/* Bins Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {bins.map((bin) => (
-          <Card key={bin.id} className="hover:shadow-lg transition-shadow">
-            <CardContent className="pt-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-gray-900 mb-1">{bin.id}</h3>
-                  <div className="flex items-center gap-1 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4" />
-                    <span className="line-clamp-1">{bin.location}</span>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+          <p className="text-gray-600">Loading bin data...</p>
+        </div>
+      ) : filteredBins.length === 0 ? (
+        <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+          <Trash2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 font-medium">No bins found</p>
+          <p className="text-sm text-gray-400 mt-1">Start by adding a new waste bin to the system.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredBins.map((bin) => (
+            <Card key={bin.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 group">
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-gray-900 font-semibold mb-1">{bin.binCode}</h3>
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                      <MapPin className="w-4 h-4" />
+                      <span className="line-clamp-1">{bin.location}</span>
+                    </div>
                   </div>
-                </div>
-                <Badge
-                  variant="secondary"
-                  className={
-                    bin.status === 'critical'
-                      ? 'bg-red-100 text-red-700'
-                      : bin.status === 'warning'
-                      ? 'bg-orange-100 text-orange-700'
-                      : 'bg-green-100 text-green-700'
-                  }
-                >
-                  {bin.status}
-                </Badge>
-              </div>
-
-              <div className="space-y-4">
-                {/* Fill Level */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Fill Level</span>
-                    <span className="text-sm text-gray-900">{bin.fillLevel}%</span>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      className={
+                        bin.status === 'critical'
+                          ? 'bg-red-50 text-red-700 border-red-100'
+                          : bin.status === 'warning'
+                          ? 'bg-orange-50 text-orange-700 border-orange-100'
+                          : 'bg-green-50 text-green-700 border-green-100'
+                      }
+                    >
+                      {bin.status}
+                    </Badge>
+                    <button 
+                      onClick={() => handleDeleteBin(bin.id)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  <Progress 
-                    value={bin.fillLevel} 
-                    className={
-                      bin.fillLevel >= 80
-                        ? '[&>div]:bg-red-500'
-                        : bin.fillLevel >= 60
-                        ? '[&>div]:bg-orange-500'
-                        : '[&>div]:bg-green-500'
-                    }
-                  />
-                </div>
-
-                {/* Battery */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600 flex items-center gap-1">
-                      <Battery className="w-4 h-4" />
-                      Battery
-                    </span>
-                    <span className="text-sm text-gray-900">{bin.battery}%</span>
-                  </div>
-                  <Progress 
-                    value={bin.battery} 
-                    className={
-                      bin.battery < 50
-                        ? '[&>div]:bg-red-500'
-                        : bin.battery < 70
-                        ? '[&>div]:bg-orange-500'
-                        : '[&>div]:bg-green-500'
-                    }
-                  />
                 </div>
 
-                {/* Info */}
-                <div className="pt-2 border-t border-gray-100 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Type</span>
-                    <span className="text-gray-900">{bin.type}</span>
+                <div className="space-y-4">
+                  {/* Fill Level */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">Fill Level</span>
+                      <span className="text-sm font-bold text-gray-900">{bin.fillLevel}%</span>
+                    </div>
+                    <Progress 
+                      value={bin.fillLevel} 
+                      className={
+                        bin.fillLevel >= 80
+                          ? '[&>div]:bg-red-500'
+                          : bin.fillLevel >= 60
+                          ? '[&>div]:bg-orange-500'
+                          : '[&>div]:bg-green-500'
+                      }
+                    />
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Last Collection</span>
-                    <span className="text-gray-900">{bin.lastCollection}</span>
+
+                  {/* Info */}
+                  <div className="pt-4 border-t border-gray-50 space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Type</span>
+                      <span className="font-medium text-gray-900">{bin.type}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Last Collection</span>
+                      <span className="font-medium text-gray-900">{bin.lastCollection || 'No data'}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
