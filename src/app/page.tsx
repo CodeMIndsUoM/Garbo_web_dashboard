@@ -113,9 +113,24 @@ export default function Home() {
     setUserRole(null);
   };
 
-  const handleLogin = () => {
+  const handleLogin = (opts?: { mustChangePassword?: boolean }) => {
     setIsAuthenticated(true);
-    setCurrentPage('dashboard');
+    // Prefer explicit flag passed from login response; fall back to localStorage for backward compatibility
+    let mustChange = opts?.mustChangePassword;
+    if (typeof mustChange === 'undefined') {
+      try {
+        mustChange = JSON.parse(localStorage.getItem('mustChangePassword') || 'false');
+      } catch (e) {
+        mustChange = false;
+      }
+    }
+
+    if (mustChange) {
+      setCurrentPage('admin-edit-password');
+    } else {
+      setCurrentPage('dashboard');
+    }
+
     // Set userRole from localStorage after login
     const role = localStorage.getItem('role') as UserRole;
     setUserRole(role);
@@ -249,7 +264,7 @@ export default function Home() {
       case 'admin-assignment':
         return <AdminAssignment onAddNewAdmin={openCreateAdmin} />;
       case 'admin-edit-password':
-        return <AdminEditPassword />;
+        return <AdminEditPassword onPasswordChanged={handleLogin} />;
       case 'create-admin':
         return <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />;
       default:

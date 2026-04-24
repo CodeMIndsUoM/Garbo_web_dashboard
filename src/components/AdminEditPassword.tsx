@@ -1,8 +1,9 @@
-'use client';
+ 'use client';
 
 import React, { useState } from "react";
+import { decodeJwtPayload } from '@/lib/jwt';
 
-const AdminEditPassword: React.FC = () => {
+const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void }> = ({ onPasswordChanged }) => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,14 +20,68 @@ const AdminEditPassword: React.FC = () => {
       return;
     }
     setLoading(true);
-    // TODO: Replace with real API call
-    setTimeout(() => {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+
+    // derive email from localStorage.admin or decode token
+    let email = '';
+    try {
+      const adminStr = localStorage.getItem('admin');
+      if (adminStr) {
+        const adminObj = JSON.parse(adminStr);
+        email = adminObj.username || adminObj.email || '';
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    if (!email) {
+      const token = localStorage.getItem('token');
+      const payload = decodeJwtPayload(token);
+      email = payload?.email || payload?.sub || '';
+    }
+
+    if (!email) {
       setLoading(false);
-      setSuccess("Password updated successfully.");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    }, 1000);
+      setError('Unable to determine email for password change.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/api/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          email,
+          oldPassword: currentPassword,
+          newPassword: newPassword,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.message || json?.error || 'Failed to change password');
+        setLoading(false);
+        return;
+      }
+
+      setSuccess('Password updated successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      try { localStorage.setItem('mustChangePassword', JSON.stringify(false)); } catch (e) {}
+      // trigger parent navigation handler if provided (state-based routing)
+      if (onPasswordChanged) {
+        try { onPasswordChanged(); } catch (e) {}
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
