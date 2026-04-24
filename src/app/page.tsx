@@ -12,11 +12,12 @@ import { AdminAssignment } from '@/components/AdminAssignment';
 import { SuperadminCouncilSelect } from '@/components/SuperadminCouncilSelect';
 import AdminEditPassword from '@/components/AdminEditPassword';
 import CreateAdminPage from '@/components/CreateAdminPage';
+import { TotalCollection } from '@/components/TotalCollection';
 import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
-export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin';
+export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection';
 export type UserRole = 'admin' | 'superadmin' | null;
 
 export default function Home() {
@@ -33,7 +34,7 @@ export default function Home() {
     { id: '3', name: 'Galle Municipal Council', description: 'Galle city region' },
   ];
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   useEffect(() => {
     const checkToken = async () => {
@@ -160,7 +161,9 @@ export default function Home() {
         case 'map':
           return <MapView />;
         case 'analytics':
-          return <WasteAnalytics />;
+          return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} />;
+        case 'total-collection':
+          return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
         case 'reports':
           return <Reports />;
         default:
@@ -208,7 +211,9 @@ export default function Home() {
       case 'map':
         return <MapView />;
       case 'analytics':
-        return <WasteAnalytics />;
+        return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} />;
+      case 'total-collection':
+        return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
       case 'reports':
         return <Reports />;
       case 'admin-assignment':
