@@ -42,7 +42,13 @@ export function Login({ onLogin }: LoginProps) {
       const admin = data.data;
       localStorage.setItem('role', admin.role || 'admin');
       localStorage.setItem('admin', JSON.stringify({ username: admin.email, role: admin.role }));
-      localStorage.setItem('token', 'dummy-token'); // Store a dummy token for backend auth
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      } else {
+        setError('Login response did not include a token.');
+        setLoading(false);
+        return;
+      }
       setLoading(false);
       if (onLogin) onLogin();
     } catch (err: any) {
