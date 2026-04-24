@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 
 interface LoginProps {
-  onLogin?: () => void;
+  onLogin?: (opts?: { mustChangePassword?: boolean }) => void;
 }
 
 export function Login({ onLogin }: LoginProps) {
@@ -39,6 +39,9 @@ export function Login({ onLogin }: LoginProps) {
 
       const data = await res.json();
 
+      // extract mustChangePassword if backend provides it (backwards compatible)
+      const mustChangePassword = data?.mustChangePassword ?? data?.data?.mustChangePassword ?? false;
+
       if (!res.ok) {
         setError(data.error || data.message || 'Invalid username or password');
         setLoading(false);
@@ -69,6 +72,8 @@ export function Login({ onLogin }: LoginProps) {
           'admin',
           JSON.stringify({ username: data.email||data.data?.email, role: roleToStore, id: idFromToken || undefined })
         );
+        // persist mustChangePassword flag for app-level routing (backwards compatible)
+        try { localStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword))); } catch (e) {}
       } catch (e) {
         localStorage.setItem('role', data.role||data.data?.role||'admin');
         localStorage.setItem(
@@ -78,7 +83,7 @@ export function Login({ onLogin }: LoginProps) {
       }
 
       setLoading(false);
-      if (onLogin) onLogin();
+      if (onLogin) onLogin({ mustChangePassword: Boolean(mustChangePassword) });
     } catch (err: any) {
       setError('Network error');
       setLoading(false);
