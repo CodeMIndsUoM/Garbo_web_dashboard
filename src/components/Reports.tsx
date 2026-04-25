@@ -16,68 +16,60 @@ const reports = [
   },
   {
     id: 2,
-    title: 'Recycling Performance Q3 2025',
-    type: 'Recycling Analysis',
-    date: '2025-10-15',
+    title: 'Monthly Collection Report - September 2025',
+    type: 'Collection Summary',
+    date: '2025-10-01',
     status: 'completed',
-    size: '1.8 MB',
+    size: '2.1 MB',
   },
   {
     id: 3,
-    title: 'Zone A Efficiency Report',
-    type: 'Zone Performance',
-    date: '2025-10-28',
+    title: 'Monthly Collection Report - August 2025',
+    type: 'Collection Summary',
+    date: '2025-09-01',
     status: 'completed',
-    size: '956 KB',
+    size: '1.9 MB',
   },
   {
     id: 4,
-    title: 'Equipment Maintenance Log',
-    type: 'Maintenance',
-    date: '2025-11-05',
+    title: 'Monthly Collection Report - July 2025',
+    type: 'Collection Summary',
+    date: '2025-08-01',
     status: 'completed',
-    size: '634 KB',
+    size: '2.2 MB',
   },
   {
     id: 5,
-    title: 'Environmental Impact Assessment',
-    type: 'Sustainability',
-    date: '2025-11-10',
+    title: 'Monthly Collection Report - June 2025',
+    type: 'Collection Summary',
+    date: '2025-07-01',
     status: 'completed',
-    size: '3.2 MB',
-  },
-  {
-    id: 6,
-    title: 'Weekly Operations Report - Week 46',
-    type: 'Operations',
-    date: '2025-11-15',
-    status: 'in-progress',
-    size: '-',
+    size: '2.0 MB',
   },
 ];
 
 const reportTypes = [
   {
-    name: 'Collection Summary',
+    name: 'Total Monthly Reports',
     count: 24,
     icon: FileText,
     color: 'bg-blue-100 text-blue-600',
   },
   {
-    name: 'Recycling Analysis',
-    count: 12,
+    name: 'Avg Report Size',
+    count: '2.1 MB',
     icon: FileText,
     color: 'bg-green-100 text-green-600',
   },
   {
-    name: 'Zone Performance',
-    count: 18,
+    name: 'Completed This Year',
+    count: 10,
     icon: FileText,
     color: 'bg-purple-100 text-purple-600',
   },
   {
-    name: 'Sustainability',
-    count: 8,
+    name: 'Storage Used',
+    count: '52 MB',
     icon: FileText,
     color: 'bg-emerald-100 text-emerald-600',
   },
@@ -88,8 +80,8 @@ export function Reports() {
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-gray-900 mb-2">Reports</h2>
-          <p className="text-gray-600">Generate and download system reports</p>
+          <h2 className="text-gray-900 mb-2">Monthly Reports</h2>
+          <p className="text-gray-600">Access and download monthly collection summaries</p>
         </div>
         <Button className="bg-green-600 hover:bg-green-700">
           <FileText className="w-4 h-4 mr-2" />
