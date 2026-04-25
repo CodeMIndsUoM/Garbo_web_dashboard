@@ -104,12 +104,7 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
           </>
         )}
 
-        <div className="flex items-center justify-between">
-          <button className="flex items-center gap-2 px-2 py-2 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm" type="button" aria-label="Settings">
-            <Settings className="w-5 h-5" />
-            <span className="whitespace-nowrap">Settings</span>
-          </button>
-
+        <div className="flex items-center justify-start gap-2">
           <button
             type="button"
             onClick={() => onLogout && onLogout()}

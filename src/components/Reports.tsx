@@ -24,8 +24,8 @@ const reports = [
   },
   {
     id: 3,
-    title: 'Zone A Efficiency Report',
-    type: 'Zone Performance',
+    title: 'Council A Efficiency Report',
+    type: 'Council Performance',
     date: '2025-10-28',
     status: 'completed',
     size: '956 KB',
@@ -70,7 +70,7 @@ const reportTypes = [
     color: 'bg-green-100 text-green-600',
   },
   {
-    name: 'Zone Performance',
+    name: 'Council Performance',
     count: 18,
     icon: FileText,
     color: 'bg-purple-100 text-purple-600',

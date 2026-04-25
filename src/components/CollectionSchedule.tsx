@@ -8,7 +8,7 @@ import { Button } from './ui/button';
 const schedules = [
   {
     id: 1,
-    zone: 'Residential Zone A',
+    council: 'Residential Council A',
     date: '2025-11-18',
     time: '08:00 AM - 12:00 PM',
     type: 'General Waste',
@@ -18,7 +18,7 @@ const schedules = [
   },
   {
     id: 2,
-    zone: 'Downtown Area',
+    council: 'Downtown Area',
     date: '2025-11-18',
     time: '01:00 PM - 04:00 PM',
     type: 'Recyclables',
@@ -28,7 +28,7 @@ const schedules = [
   },
   {
     id: 3,
-    zone: 'Industrial Park',
+    council: 'Industrial Park',
     date: '2025-11-19',
     time: '07:00 AM - 11:00 AM',
     type: 'Mixed Waste',
@@ -38,7 +38,7 @@ const schedules = [
   },
   {
     id: 4,
-    zone: 'Shopping District',
+    council: 'Shopping District',
     date: '2025-11-19',
     time: '02:00 PM - 06:00 PM',
     type: 'General Waste',
@@ -48,7 +48,7 @@ const schedules = [
   },
   {
     id: 5,
-    zone: 'Residential Zone B',
+    council: 'Residential Council B',
     date: '2025-11-20',
     time: '08:00 AM - 12:00 PM',
     type: 'Organic Waste',
@@ -58,7 +58,7 @@ const schedules = [
   },
   {
     id: 6,
-    zone: 'Business District',
+    council: 'Business District',
     date: '2025-11-20',
     time: '01:00 PM - 05:00 PM',
     type: 'Recyclables',
@@ -68,7 +68,13 @@ const schedules = [
   },
 ];
 
-export function CollectionSchedule() {
+export function CollectionSchedule({ council }: { council?: any | null }) {
+  const displaySchedules = council
+    ? schedules.filter((s) => {
+        const needle = (council.name || council.id || '').toString().toLowerCase();
+        return s.council.toLowerCase().includes(needle) || s.council.toLowerCase().includes(needle.replace(' council', ''));
+      })
+    : schedules;
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -122,14 +128,14 @@ export function CollectionSchedule() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {schedules.map((schedule) => (
+            {displaySchedules.map((schedule) => (
               <div
                 key={schedule.id}
                 className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-gray-900 mb-1">{schedule.zone}</h3>
+                    <h3 className="text-gray-900 mb-1">{schedule.council}</h3>
                     <div className="flex items-center gap-4 text-sm text-gray-600">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />

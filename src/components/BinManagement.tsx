@@ -19,7 +19,7 @@ const bins = [
   },
   {
     id: 'BIN-002',
-    location: '456 Oak Ave, Residential Zone A',
+    location: '456 Oak Ave, Residential Council A',
     type: 'Recyclables',
     fillLevel: 45,
     battery: 78,
@@ -49,7 +49,7 @@ const bins = [
   },
   {
     id: 'BIN-005',
-    location: '654 Elm St, Residential Zone B',
+    location: '654 Elm St, Residential Council B',
     type: 'Recyclables',
     fillLevel: 72,
     battery: 45,
@@ -69,12 +69,13 @@ const bins = [
   },
 ];
 
-export function BinManagement() {
+export function BinManagement({ council }: { council?: any | null }) {
   return (
     <div className="p-8">
       <div className="mb-8">
         <h2 className="text-gray-900 mb-2">Bin Management</h2>
         <p className="text-gray-600">Monitor and manage all waste bins in real-time</p>
+        {council && <div className="text-sm text-gray-500">Showing data for: {council.name || council.id}</div>}
       </div>
 
       {/* Stats */}

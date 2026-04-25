@@ -29,10 +29,12 @@ export default function Home() {
   const [selectedCouncil, setSelectedCouncil] = useState<{ id: string; name: string; description?: string } | null>(null);
 
   // Mock councils for demo; replace with API call if needed
-  const councils = [
-    { id: '1', name: 'Colombo Municipal Council', description: 'Colombo city region' },
-    { id: '2', name: 'Kandy Municipal Council', description: 'Kandy city region' },
-    { id: '3', name: 'Galle Municipal Council', description: 'Galle city region' },
+  const COUNCILS = [
+    { id: 'colombo', name: 'Colombo Council' },
+    { id: 'galle', name: 'Galle Council' },
+    { id: 'matara', name: 'Matara Council' },
+    { id: 'kandy', name: 'Kandy Council' },
+    { id: 'gampaha', name: 'Gampaha Council' },
   ];
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
@@ -109,6 +111,7 @@ export default function Home() {
     localStorage.removeItem('token');
     localStorage.removeItem('admin');
     localStorage.removeItem('role');
+    
     setIsAuthenticated(false);
     setUserRole(null);
   };
@@ -134,6 +137,16 @@ export default function Home() {
     // Set userRole from localStorage after login
     const role = localStorage.getItem('role') as UserRole;
     setUserRole(role);
+  };
+
+  const getActiveCouncil = () => {
+    if (userRole === 'superadmin') return selectedCouncil;
+    try {
+      const stored = localStorage.getItem('council');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
   };
 
   // Navigation helper for opening the Create Admin page
@@ -194,27 +207,7 @@ export default function Home() {
       );
     }
 
-    // Show all councils' details inside each tab
-    const renderAllCouncilsTab = () => {
-      switch (currentPage) {
-        case 'dashboard':
-          return <Dashboard />;
-        case 'schedule':
-          return <CollectionSchedule />;
-        case 'bins':
-          return <BinManagement />;
-        case 'vehicles':
-          return <VehicleManagement />;
-        case 'map':
-          return <MapView />;
-        case 'analytics':
-          return <WasteAnalytics />;
-        case 'reports':
-          return <Reports />;
-        default:
-          return <Dashboard />;
-      }
-    };
+    // Superadmin HOME: only show council selector and header (no dashboard content)
 
     return (
       <div className="flex h-screen bg-gray-50">
@@ -230,16 +223,15 @@ export default function Home() {
         />
         <main className="flex-1 overflow-auto">
           <div className="p-4 bg-gray-100 border-b text-lg font-semibold text-gray-700">
-            All Municipal Councils
+            All Councils
           </div>
           <SuperadminCouncilSelect
-            councils={councils}
+            councils={COUNCILS}
             onSelect={(council) => {
               setSelectedCouncil(council);
               setCurrentPage('dashboard');
             }}
           />
-          <div className="mt-6">{renderAllCouncilsTab()}</div>
         </main>
       </div>
     );
@@ -248,13 +240,13 @@ export default function Home() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard council={getActiveCouncil()} />;
       case 'schedule':
-        return <CollectionSchedule />;
+        return <CollectionSchedule council={getActiveCouncil()} />;
       case 'bins':
-        return <BinManagement />;
+        return <BinManagement council={getActiveCouncil()} />;
       case 'vehicles':
-        return <VehicleManagement />;
+        return <VehicleManagement council={getActiveCouncil()} />;
       case 'map':
         return <MapView />;
       case 'analytics':
