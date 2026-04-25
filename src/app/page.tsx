@@ -13,11 +13,17 @@ import { SuperadminCouncilSelect } from '@/components/SuperadminCouncilSelect';
 import AdminEditPassword from '@/components/AdminEditPassword';
 import CreateAdminPage from '@/components/CreateAdminPage';
 import { TotalCollection } from '@/components/TotalCollection';
+import { BinAnalytics } from '@/components/BinAnalytics';
+import { StaffAnalytics } from '@/components/StaffAnalytics';
+import { ComplaintAnalytics } from '@/components/ComplaintAnalytics';
+import { ThirdPartyAnalytics } from '@/components/ThirdPartyAnalytics';
+import { VehicleAnalytics } from '@/components/VehicleAnalytics';
+import { BinReportAnalytics } from '@/components/BinReportAnalytics';
 import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
-export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection';
+export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection' | 'bin-analytics' | 'staff-analytics' | 'complaint-analytics' | 'third-party-analytics' | 'vehicle-analytics' | 'bin-report-analytics';
 export type UserRole = 'admin' | 'superadmin' | null;
 
 export default function Home() {
@@ -153,7 +159,7 @@ export default function Home() {
     const renderAllCouncilsTab = () => {
       switch (currentPage) {
         case 'dashboard':
-          return <Dashboard />;
+          return <Dashboard onNavigate={(page) => setCurrentPage(page as PageType)} />;
         case 'schedule':
           return <CollectionSchedule />;
         case 'bins':
@@ -164,10 +170,22 @@ export default function Home() {
           return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} />;
         case 'total-collection':
           return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
+        case 'bin-analytics':
+          return <BinAnalytics onBack={() => setCurrentPage('analytics')} />;
+        case 'staff-analytics':
+          return <StaffAnalytics onBack={() => setCurrentPage('analytics')} />;
+        case 'complaint-analytics':
+          return <ComplaintAnalytics onBack={() => setCurrentPage('analytics')} />;
+        case 'third-party-analytics':
+          return <ThirdPartyAnalytics onBack={() => setCurrentPage('analytics')} />;
+        case 'vehicle-analytics':
+          return <VehicleAnalytics onBack={() => setCurrentPage('analytics')} />;
+        case 'bin-report-analytics':
+          return <BinReportAnalytics onBack={() => setCurrentPage('analytics')} />;
         case 'reports':
           return <Reports />;
         default:
-          return <Dashboard />;
+          return <Dashboard onNavigate={(page) => setCurrentPage(page as PageType)} />;
       }
     };
 
@@ -203,7 +221,7 @@ export default function Home() {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={(page) => setCurrentPage(page as PageType)} />;
       case 'schedule':
         return <CollectionSchedule />;
       case 'bins':
@@ -214,6 +232,18 @@ export default function Home() {
         return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} />;
       case 'total-collection':
         return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
+      case 'bin-analytics':
+        return <BinAnalytics onBack={() => setCurrentPage('analytics')} />;
+      case 'staff-analytics':
+        return <StaffAnalytics onBack={() => setCurrentPage('analytics')} />;
+      case 'complaint-analytics':
+        return <ComplaintAnalytics onBack={() => setCurrentPage('analytics')} />;
+      case 'third-party-analytics':
+        return <ThirdPartyAnalytics onBack={() => setCurrentPage('analytics')} />;
+      case 'vehicle-analytics':
+        return <VehicleAnalytics onBack={() => setCurrentPage('analytics')} />;
+      case 'bin-report-analytics':
+        return <BinReportAnalytics onBack={() => setCurrentPage('analytics')} />;
       case 'reports':
         return <Reports />;
       case 'admin-assignment':
@@ -223,7 +253,7 @@ export default function Home() {
       case 'create-admin':
         return <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={(page) => setCurrentPage(page as PageType)} />;
     }
   };
 
