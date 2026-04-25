@@ -65,7 +65,7 @@ export default function MapView() {
       });
     } catch (error) {
       console.error('❌ Error loading bins:', error);
-      alert('Failed to connect to backend. Make sure it is running on http://localhost:8081');
+      alert('Failed to connect to backend. Make sure it is running on http://localhost:8080');
     }
   };
 
@@ -159,7 +159,7 @@ export default function MapView() {
       });
     } catch (error) {
       console.error('Error adding bin:', error);
-      alert('Failed to add bin. Make sure the backend is running on http://localhost:8081');
+      alert('Failed to add bin. Make sure the backend is running on http://localhost:8080');
     }
   };
 

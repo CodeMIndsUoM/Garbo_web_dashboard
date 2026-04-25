@@ -35,7 +35,7 @@ export default function Home() {
     { id: '3', name: 'Galle Municipal Council', description: 'Galle city region' },
   ];
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
   useEffect(() => {
     const checkToken = async () => {
