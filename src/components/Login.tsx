@@ -82,6 +82,18 @@ export function Login({ onLogin }: LoginProps) {
         );
       }
 
+      // Enforce strict overwrite behavior for `council` returned by backend.
+      // Always clear previous council on every login. If backend returns null/undefined,
+      // remove `council` from localStorage; otherwise store the returned object.
+      try {
+        const council = data?.council ?? data?.data?.council;
+        if (council === null || council === undefined) {
+          localStorage.removeItem('council');
+        } else {
+          localStorage.setItem('council', JSON.stringify(council));
+        }
+      } catch (e) {}
+
       setLoading(false);
       if (onLogin) onLogin({ mustChangePassword: Boolean(mustChangePassword) });
     } catch (err: any) {

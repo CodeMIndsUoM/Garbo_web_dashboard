@@ -33,12 +33,12 @@ const wasteTypeData = [
   { name: 'General', value: 20, color: '#6b7280' },
 ];
 
-const zoneData = [
-  { zone: 'Zone A', collected: 245 },
-  { zone: 'Zone B', collected: 198 },
-  { zone: 'Zone C', collected: 312 },
-  { zone: 'Zone D', collected: 276 },
-  { zone: 'Zone E', collected: 189 },
+const councilData = [
+  { council: 'Council A', collected: 245 },
+  { council: 'Council B', collected: 198 },
+  { council: 'Council C', collected: 312 },
+  { council: 'Council D', collected: 276 },
+  { council: 'Council E', collected: 189 },
 ];
 
 export function WasteAnalytics() {
@@ -206,13 +206,13 @@ export function WasteAnalytics() {
       <div className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Collection by Zone</CardTitle>
+            <CardTitle>Collection by Council</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={zoneData}>
+              <BarChart data={councilData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="zone" />
+                <XAxis dataKey="council" />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="collected" fill="#3b82f6" name="Tons Collected" />
