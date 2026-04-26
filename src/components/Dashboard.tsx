@@ -17,7 +17,7 @@ const wasteData = [
 
 const recentCollections = [
   { id: 1, location: 'Downtown Area', time: '08:30 AM', status: 'completed', bins: 45 },
-  { id: 2, location: 'Residential Zone A', time: '10:15 AM', status: 'completed', bins: 38 },
+  { id: 2, location: 'Residential Council A', time: '10:15 AM', status: 'completed', bins: 38 },
   { id: 3, location: 'Industrial Park', time: '02:30 PM', status: 'in-progress', bins: 22 },
   { id: 4, location: 'Shopping District', time: '04:00 PM', status: 'scheduled', bins: 31 },
 ];
@@ -67,6 +67,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (page: string) => void 
       <div className="mb-8">
         <h2 className="text-gray-900 mb-2">Dashboard Overview</h2>
         <p className="text-gray-600">Monitor your waste management operations in real-time</p>
+        {council && <div className="text-sm text-gray-500">Showing data for: {council.name || council.id}</div>}
       </div>
 
       {/* Stats Grid */}

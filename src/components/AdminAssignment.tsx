@@ -98,7 +98,8 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
     }
   };
 
-  const filteredUsers = users; // All users are source of truth
+  // Show only users whose role is exactly the uppercase string 'ADMIN'
+  const filteredUsers = users.filter((u) => (u.role || '') === 'ADMIN');
 
   const stats = {
     total: users.length,
@@ -113,8 +114,8 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h2 className="text-gray-900 mb-2 text-2xl font-semibold">Assign Admins</h2>
-        <p className="text-gray-600">Manage user roles and assign admin privileges</p>
+        <h2 className="text-gray-900 mb-2 text-2xl font-semibold">Admin Management</h2>
+        <p className="text-gray-600">Assign and manage admins across all councils</p>
       </div>
 
       {/* Stats (temporarily hidden)
@@ -186,7 +187,7 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
       {/* Users Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Users</CardTitle>
+          <CardTitle className="text-lg font-semibold">All Admins</CardTitle>
         </CardHeader>
         <CardContent>
           {error && (
@@ -204,50 +205,19 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[180px]">Username</TableHead>
-                    <TableHead className="min-w-[220px]">Email</TableHead>
-                    <TableHead className="min-w-[140px]">Current Role</TableHead>
-                    <TableHead className="min-w-[160px]">Council</TableHead>
-                    <TableHead className="min-w-[180px]">Actions</TableHead>
+                    <TableHead className="min-w-[180px] text-lg font-semibold">Full Name</TableHead>
+                    <TableHead className="min-w-[220px] text-lg font-semibold">Email</TableHead>
+                    <TableHead className="min-w-[160px] text-lg font-semibold">Council</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
+                  {filteredUsers.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell className="font-medium align-middle">
                         {user.empName ? user.empName : (user.username ? user.username : (user.email || 'N/A'))}
                       </TableCell>
                       <TableCell className="align-middle">{user.email || 'N/A'}</TableCell>
-                      <TableCell className="align-middle">
-                        {(() => {
-                          const role = (user.role || '').toString();
-                          if (role === 'SUPERADMIN') {
-                            return <Badge variant="secondary" className="bg-purple-100 text-purple-700">Super Admin</Badge>;
-                          }
-                          if (role === 'ADMIN') {
-                            return <Badge variant="secondary" className="bg-blue-100 text-blue-700">Admin</Badge>;
-                          }
-                          return <Badge variant="secondary" className="bg-gray-100 text-gray-700">User</Badge>;
-                        })()}
-                      </TableCell>
                       <TableCell className="align-middle">{user.council ? user.council : '-'}</TableCell>
-                      <TableCell className="align-middle">
-                        {((user.role || '').toString() === 'SUPERADMIN') ? (
-                          <span className="text-sm text-gray-500 whitespace-nowrap">Cannot modify</span>
-                        ) : ((user.role || '').toString() === 'ADMIN') ? (
-                          <Button
-                            onClick={() => removeAdmin(user.id)}
-                            disabled={updatingUser === user.id}
-                            size="sm"
-                            variant="destructive"
-                            className="w-32"
-                          >
-                            {updatingUser === user.id ? 'Removing...' : 'Remove Admin'}
-                          </Button>
-                        ) : (
-                          <span className="text-sm text-gray-500">-</span>
-                        )}
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

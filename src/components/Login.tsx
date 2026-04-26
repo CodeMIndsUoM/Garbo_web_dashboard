@@ -90,6 +90,18 @@ export function Login({ onLogin }: LoginProps) {
         }
       } catch (e) {}
 
+      // Enforce strict overwrite behavior for `council` returned by backend.
+      // Always clear previous council on every login. If backend returns null/undefined,
+      // remove `council` from localStorage; otherwise store the returned object.
+      try {
+        const council = data?.council ?? data?.data?.council;
+        if (council === null || council === undefined) {
+          localStorage.removeItem('council');
+        } else {
+          localStorage.setItem('council', JSON.stringify(council));
+        }
+      } catch (e) {}
+
       setLoading(false);
       if (onLogin) onLogin({ mustChangePassword: Boolean(mustChangePassword) });
     } catch (err: any) {
@@ -166,10 +178,11 @@ export function Login({ onLogin }: LoginProps) {
 
         <p className="text-xs text-gray-400 mt-4"></p>
         <div className="mt-4 text-xs text-gray-500">
-          <p>Available test accounts:</p>
+          <p>Available test accounts :</p>
           <ul className="list-disc list-inside">
-            <li>superadmin / garbosuper123</li>
-            <li>admin1 / hansana123</li>
+            <li>testadmin21@garbo.com / testadmin21</li>
+            <li>testadmin22@garbo.com / testadmin22</li>
+            <li>testadmin23@garbo.com / testadmin23</li>
           </ul>
         </div>
       </div>

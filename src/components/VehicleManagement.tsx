@@ -53,7 +53,7 @@ function getStatusLabel(status: string) {
   }
 }
 
-export function VehicleManagement() {
+export function VehicleManagement({ council }: { council?: any | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driversLoading, setDriversLoading] = useState(true);
@@ -83,7 +83,8 @@ export function VehicleManagement() {
 
   const fetchVehicles = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/vehicles`);
+      const url = `${API_BASE}/api/vehicles${council ? `?council=${encodeURIComponent(council.name || council.id)}` : ''}`;
+      const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
         setVehicles(json.data);
@@ -93,7 +94,7 @@ export function VehicleManagement() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [council]);
 
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
   useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
