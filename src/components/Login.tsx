@@ -170,10 +170,11 @@ export function Login({ onLogin }: LoginProps) {
 
         <p className="text-xs text-gray-400 mt-4"></p>
         <div className="mt-4 text-xs text-gray-500">
-          <p>Available test accounts:</p>
+          <p>Available test accounts :</p>
           <ul className="list-disc list-inside">
-            <li>superadmin / garbosuper123</li>
-            <li>admin1 / hansana123</li>
+            <li>testadmin21@garbo.com / testadmin21</li>
+            <li>testadmin22@garbo.com / testadmin22</li>
+            <li>testadmin23@garbo.com / testadmin23</li>
           </ul>
         </div>
       </div>
