@@ -15,7 +15,7 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
   const [success, setSuccess] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
   // Admin list fetching moved to AdminAssignment; CreateAdminPage only handles creation
 

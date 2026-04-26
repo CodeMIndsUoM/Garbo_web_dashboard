@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Enable experimental features if needed
-  // experimental: {},
+  swcMinify: true,
+  staticPageGenerationTimeout: 120,
   
   // Proxy API calls to backend during development
   async rewrites() {
@@ -10,7 +10,7 @@ const nextConfig = {
       fallback: [
         {
           source: '/api/:path*',
-          destination: 'http://localhost:8081/api/:path*'
+          destination: 'http://localhost:8080/api/:path*'
         }
       ]
     };
