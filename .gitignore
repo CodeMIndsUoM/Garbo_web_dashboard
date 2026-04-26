@@ -1,3 +1,9 @@
 node_modules
 .next/
 .env.local
+
+# macOS
+.DS_Store
+
+# TypeScript build info
+tsconfig.tsbuildinfo

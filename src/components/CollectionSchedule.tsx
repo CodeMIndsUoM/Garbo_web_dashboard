@@ -1,9 +1,12 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Calendar, MapPin, Clock, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 const schedules = [
   {
@@ -69,6 +72,50 @@ const schedules = [
 ];
 
 export function CollectionSchedule() {
+  const [eventSuggestions, setEventSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+
+  const fetchSuggestions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/api/events/suggestions`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      setEventSuggestions(Array.isArray(json) ? json : []);
+    } catch (e) {
+      console.error('Failed to fetch event suggestions', e);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSuggestions();
+  }, []);
+
+  const updateSuggestion = async (id: number, action: 'approve' | 'reject') => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/api/events/${id}/${action}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: action === 'reject' ? JSON.stringify({ reason: 'Rejected by admin' }) : undefined,
+      });
+      if (!res.ok) {
+        alert(`Failed to ${action} event suggestion`);
+        return;
+      }
+      fetchSuggestions();
+    } catch (e) {
+      console.error(`Failed to ${action} event`, e);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
@@ -173,6 +220,46 @@ export function CollectionSchedule() {
               </div>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Citizen Event Suggestions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingSuggestions ? (
+            <div className="text-gray-500">Loading suggestions...</div>
+          ) : eventSuggestions.length === 0 ? (
+            <div className="text-gray-500">No pending event suggestions for your council.</div>
+          ) : (
+            <div className="space-y-4">
+              {eventSuggestions.map((event) => (
+                <div key={event.id} className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-gray-900">{event.title}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{event.description}</p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {event.location || 'No location'} • {event.eventDate || 'No date'}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                      Pending
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => updateSuggestion(event.id, 'approve')}>
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => updateSuggestion(event.id, 'reject')}>
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

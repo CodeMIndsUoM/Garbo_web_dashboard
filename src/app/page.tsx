@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { decodeJwtPayload } from '@/lib/jwt';
 import { Dashboard } from '@/components/Dashboard';
 import { CollectionSchedule } from '@/components/CollectionSchedule';
 import { BinManagement } from '@/components/BinManagement';
+import { VehicleManagement } from '@/components/VehicleManagement';
 import { WasteAnalytics } from '@/components/WasteAnalytics';
 import { Reports } from '@/components/Reports';
 import { Sidebar } from '@/components/Sidebar';
@@ -23,7 +25,7 @@ import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
-export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection' | 'bin-analytics' | 'staff-analytics' | 'complaint-analytics' | 'third-party-analytics' | 'vehicle-analytics' | 'bin-report-analytics';
+export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' |'vehicles' |'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection' | 'bin-analytics' | 'staff-analytics' | 'complaint-analytics' | 'third-party-analytics' | 'vehicle-analytics' | 'bin-report-analytics';
 export type UserRole = 'admin' | 'superadmin' | null;
 
 export default function Home() {
@@ -66,8 +68,10 @@ export default function Home() {
         const json = await res.json();
         if (res.ok && json?.success && json?.data === true) {
           setIsAuthenticated(true);
-          // Get role from localStorage
-          const role = localStorage.getItem('role') as UserRole;
+          // Prefer role stored from token if available
+          const payload = decodeJwtPayload(token);
+          const roleFromToken = payload?.role || payload?.roles || null;
+          const role = (roleFromToken as UserRole) || (localStorage.getItem('role') as UserRole);
           setUserRole(role);
         } else {
           localStorage.removeItem('token');
@@ -116,13 +120,34 @@ export default function Home() {
     setUserRole(null);
   };
 
-  const handleLogin = () => {
+  const handleLogin = (opts?: { mustChangePassword?: boolean }) => {
     setIsAuthenticated(true);
-    setCurrentPage('dashboard');
+    // Prefer explicit flag passed from login response; fall back to localStorage for backward compatibility
+    let mustChange = opts?.mustChangePassword;
+    if (typeof mustChange === 'undefined') {
+      try {
+        mustChange = JSON.parse(localStorage.getItem('mustChangePassword') || 'false');
+      } catch (e) {
+        mustChange = false;
+      }
+    }
+
+    if (mustChange) {
+      setCurrentPage('admin-edit-password');
+    } else {
+      setCurrentPage('dashboard');
+    }
+
     // Set userRole from localStorage after login
     const role = localStorage.getItem('role') as UserRole;
     setUserRole(role);
   };
+
+  // Navigation helper for opening the Create Admin page
+  const openCreateAdmin = () => {
+    setCurrentPage('create-admin');
+  };
+  
 
   if (checkingAuth) {
     return <div className="min-h-screen flex items-center justify-center">Checking authentication...</div>;
@@ -149,7 +174,28 @@ export default function Home() {
             selectedCouncil={selectedCouncil}
           />
           <main className="flex-1 overflow-auto">
-            <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />
+            <AdminAssignment onAddNewAdmin={openCreateAdmin} />
+          </main>
+        </div>
+      );
+    }
+
+    // Allow explicit rendering of the Create Admin page even when no council is selected
+    if (currentPage === 'create-admin') {
+      return (
+        <div className="flex h-screen bg-gray-50">
+          <Sidebar
+            currentPage={currentPage}
+            onPageChange={(page) => {
+              setCurrentPage(page);
+              if (page === 'home') setSelectedCouncil(null);
+            }}
+            onLogout={handleLogout}
+            userRole={userRole}
+            selectedCouncil={selectedCouncil}
+          />
+          <main className="flex-1 overflow-auto">
+            <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />
           </main>
         </div>
       );
@@ -164,6 +210,8 @@ export default function Home() {
           return <CollectionSchedule />;
         case 'bins':
           return <BinManagement />;
+        case 'vehicles':
+          return <VehicleManagement />;
         case 'map':
           return <MapView />;
         case 'analytics':
@@ -226,6 +274,8 @@ export default function Home() {
         return <CollectionSchedule />;
       case 'bins':
         return <BinManagement />;
+      case 'vehicles':
+        return <VehicleManagement />;
       case 'map':
         return <MapView />;
       case 'analytics':
@@ -247,9 +297,9 @@ export default function Home() {
       case 'reports':
         return <Reports />;
       case 'admin-assignment':
-        return <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />;
+        return <AdminAssignment onAddNewAdmin={openCreateAdmin} />;
       case 'admin-edit-password':
-        return <AdminEditPassword />;
+        return <AdminEditPassword onPasswordChanged={handleLogin} />;
       case 'create-admin':
         return <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />;
       default:
