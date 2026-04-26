@@ -1,195 +1,262 @@
 'use client';
 
-import { FileText, Download, Calendar, Filter } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileText, Download, Calendar, Filter, Loader2, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { ReportPrintView } from './Reportprintview';
 
-const reports = [
-  {
-    id: 1,
-    title: 'Monthly Collection Report - October 2025',
-    type: 'Collection Summary',
-    date: '2025-11-01',
-    status: 'completed',
-    size: '2.4 MB',
-  },
-  {
-    id: 2,
-    title: 'Monthly Collection Report - September 2025',
-    type: 'Collection Summary',
-    date: '2025-10-01',
-    status: 'completed',
-    size: '2.1 MB',
-  },
-  {
-    id: 3,
-    title: 'Monthly Collection Report - August 2025',
-    type: 'Collection Summary',
-    date: '2025-09-01',
-    status: 'completed',
-    size: '1.9 MB',
-  },
-  {
-    id: 4,
-    title: 'Monthly Collection Report - July 2025',
-    type: 'Collection Summary',
-    date: '2025-08-01',
-    status: 'completed',
-    size: '2.2 MB',
-  },
-  {
-    id: 5,
-    title: 'Monthly Collection Report - June 2025',
-    type: 'Collection Summary',
-    date: '2025-07-01',
-    status: 'completed',
-    size: '2.0 MB',
-  },
-];
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const reportTypes = [
-  {
-    name: 'Total Monthly Reports',
-    count: 24,
-    icon: FileText,
-    color: 'bg-blue-100 text-blue-600',
-  },
-  {
-    name: 'Avg Report Size',
-    count: '2.1 MB',
-    icon: FileText,
-    color: 'bg-green-100 text-green-600',
-  },
-  {
-    name: 'Completed This Year',
-    count: 10,
-    icon: FileText,
-    color: 'bg-purple-100 text-purple-600',
-  },
-  {
-    name: 'Storage Used',
-    count: '52 MB',
-    icon: FileText,
-    color: 'bg-emerald-100 text-emerald-600',
-  },
-];
+interface ReportSummary {
+  id: number;
+  title: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  createdAt: string;
+  fileSizeKb: number;
+  periodLabel: string;
+  fileSizeDisplay: string;
+}
+
+interface ReportDetail {
+  id: number;
+  title: string;
+  periodLabel: string;
+  snapshot: any;
+}
+
+const API_BASE = '/api/admin/reports';
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function Reports() {
+  const [reports, setReports]             = useState<ReportSummary[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [generating, setGenerating]       = useState(false);
+  const [openReport, setOpenReport]       = useState<ReportDetail | null>(null);
+  const [loadingReport, setLoadingReport] = useState<number | null>(null);
+  const [error, setError]                 = useState<string | null>(null);
+
+  // ── Fetch report list on mount ──────────────────────────────────────────────
+  useEffect(() => { fetchReports(); }, []);
+
+  async function fetchReports() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(API_BASE);
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const data: ReportSummary[] = await res.json();
+      setReports(data);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load reports');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Generate a new report ───────────────────────────────────────────────────
+  async function handleGenerate() {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/generate`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? `Server error: ${res.status}`);
+      }
+      await fetchReports();   // refresh list
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to generate report');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  // ── Open a report for preview / print ──────────────────────────────────────
+  async function handleOpen(id: number) {
+    setLoadingReport(id);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/${id}`);
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      const detail: ReportDetail = await res.json();
+      setOpenReport(detail);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load report');
+    } finally {
+      setLoadingReport(null);
+    }
+  }
+
+  // ── Download raw JSON snapshot ──────────────────────────────────────────────
+  function handleDownload(id: number, title: string) {
+    const a = document.createElement('a');
+    a.href = `${API_BASE}/${id}/download`;
+    a.download = `${title.replace(/\s+/g, '_')}.json`;
+    a.click();
+  }
+
+  // ── Derived stats ───────────────────────────────────────────────────────────
+  const completed     = reports.filter(r => r.status === 'COMPLETED').length;
+  const totalSizeKb   = reports.reduce((s, r) => s + (r.fileSizeKb ?? 0), 0);
+  const avgSizeKb     = reports.length > 0 ? Math.round(totalSizeKb / reports.length) : 0;
+  const formatKb      = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
+
+  const statCards = [
+    { label: 'Total Reports',        value: reports.length },
+    { label: 'Avg Report Size',      value: avgSizeKb > 0 ? formatKb(avgSizeKb) : '—' },
+    { label: 'Completed This Year',  value: completed },
+    { label: 'Storage Used',         value: totalSizeKb > 0 ? formatKb(totalSizeKb) : '—' },
+  ];
+
   return (
     <div className="p-8">
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-gray-900 mb-2">Monthly Reports</h2>
-          <p className="text-gray-600">Access and download monthly collection summaries</p>
+          <p className="text-gray-600">Generate and download monthly analytics summaries</p>
         </div>
-        <Button className="bg-green-600 hover:bg-green-700">
-          <FileText className="w-4 h-4 mr-2" />
-          Generate Report
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={fetchReports} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button
+            className="bg-green-600 hover:bg-green-700"
+            onClick={handleGenerate}
+            disabled={generating}
+          >
+            {generating
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</>
+              : <><FileText className="w-4 h-4 mr-2" />Generate Report</>
+            }
+          </Button>
+        </div>
       </div>
 
-      {/* Report Types Grid */}
+      {/* ── Error banner ────────────────────────────────────────────────────── */}
+      {error && (
+        <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* ── Stat cards ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {reportTypes.map((type) => {
-          const Icon = type.icon;
-          return (
-            <Card key={type.name}>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">{type.name}</p>
-                    <p className="text-2xl text-gray-900">{type.count}</p>
-                  </div>
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${type.color}`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
+        {statCards.map(s => (
+          <Card key={s.label}>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">{s.label}</p>
+                  <p className="text-2xl text-gray-900">{s.value}</p>
                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Filters */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm">
-              <Calendar className="w-4 h-4 mr-2" />
-              Date Range
-            </Button>
-            <Button variant="outline" size="sm">
-              <Filter className="w-4 h-4 mr-2" />
-              Report Type
-            </Button>
-            <Button variant="outline" size="sm">
-              <Filter className="w-4 h-4 mr-2" />
-              Status
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Reports List */}
+      {/* ── Reports list ────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle>Available Reports</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {reports.map((report) => (
-              <div
-                key={report.id}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
-              >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-gray-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-gray-900 mb-1">{report.title}</h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span>{report.type}</span>
-                      <span>•</span>
-                      <span>{new Date(report.date).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}</span>
-                      {report.size !== '-' && (
-                        <>
-                          <span>•</span>
-                          <span>{report.size}</span>
-                        </>
-                      )}
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-gray-400">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              Loading reports…
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>No reports yet. Click <strong>Generate Report</strong> to create the first one.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {reports.map(report => (
+                <div
+                  key={report.id}
+                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <FileText className="w-6 h-6 text-gray-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-gray-900 mb-1">{report.title}</h3>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span>{report.periodLabel}</span>
+                        <span>•</span>
+                        <span>{new Date(report.createdAt).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric',
+                        })}</span>
+                        {report.fileSizeDisplay && report.fileSizeDisplay !== '-' && (
+                          <><span>•</span><span>{report.fileSizeDisplay}</span></>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                  <Badge
-                    variant="secondary"
-                    className={
-                      report.status === 'completed'
+                  <div className="flex items-center gap-3">
+                    <Badge
+                      variant="secondary"
+                      className={report.status === 'COMPLETED'
                         ? 'bg-green-100 text-green-700'
-                        : 'bg-orange-100 text-orange-700'
-                    }
-                  >
-                    {report.status === 'completed' ? 'Ready' : 'Processing'}
-                  </Badge>
-                  {report.status === 'completed' && (
-                    <Button variant="outline" size="sm">
-                      <Download className="w-4 h-4 mr-2" />
-                      Download
-                    </Button>
-                  )}
+                        : 'bg-orange-100 text-orange-700'}
+                    >
+                      {report.status === 'COMPLETED' ? 'Ready' : report.status}
+                    </Badge>
+
+                    {report.status === 'COMPLETED' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpen(report.id)}
+                          disabled={loadingReport === report.id}
+                        >
+                          {loadingReport === report.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : '🖨 Print / View'
+                          }
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownload(report.id, report.title)}
+                        >
+                          <Download className="w-4 h-4 mr-2" />
+                          JSON
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* ── Print preview modal ──────────────────────────────────────────────── */}
+      {openReport && (
+        <ReportPrintView
+          snapshot={openReport.snapshot}
+          reportId={openReport.id}
+          onClose={() => setOpenReport(null)}
+        />
+      )}
     </div>
   );
 }
