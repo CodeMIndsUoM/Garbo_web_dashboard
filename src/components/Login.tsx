@@ -14,7 +14,7 @@ export function Login({ onLogin }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -81,6 +81,14 @@ export function Login({ onLogin }: LoginProps) {
           JSON.stringify({ username: data.email||data.data?.email, role: data.role||data.data?.role||'admin' })
         );
       }
+      try {
+        const council = data?.council ?? data?.data?.council;
+        if (council === null || council === undefined) {
+          localStorage.removeItem('council');
+        } else {
+          localStorage.setItem('council', JSON.stringify(council));
+        }
+      } catch (e) {}
 
       // Enforce strict overwrite behavior for `council` returned by backend.
       // Always clear previous council on every login. If backend returns null/undefined,
