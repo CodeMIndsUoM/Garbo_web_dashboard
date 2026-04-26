@@ -1,30 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Shield, UserPlus, Search } from 'lucide-react';
+import { Users, Shield, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
+// Removed search input import per UI refactor
 import { Badge } from './ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogClose,
-} from './ui/dialog';
-import { Label } from './ui/label';
+// Modal-based admin creation removed — keep file focused on listing and role management
 
 interface User {
   id: string;
-  username: string;
-  role: 'admin' | 'superadmin' | 'user';
+  empName?: string | null;
+  username?: string | null; // legacy
+  role?: string | null; // backend uses SUPERADMIN, ADMIN, CITIZEN/USER
   email?: string;
   createdAt?: string;
-  council?: string;
+  council?: string | null; // backend does not provide; show '-' when absent
 }
 
 interface AdminAssignmentProps {
@@ -35,13 +27,8 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
+  // Modal creation flow removed; creation should be done via CreateAdminPage
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
@@ -53,9 +40,18 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
     setLoading(true);
     setError('');
     try {
-      // Remove token/Authorization header for GET if not required by backend
-      const res = await fetch(`${API_BASE}/api/users`);
+      // Include token/Authorization header for GET
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/api/users`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
       const json = await res.json();
+      // log raw API response for verification
+      console.log('RAW USERS:', json);
       if (!res.ok) {
         setError(json?.message || 'Failed to fetch users');
         setUsers([]);
@@ -72,74 +68,9 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
     }
   };
 
-  const createAdmin = async () => {
-    if (!newUsername.trim() || !newEmail.trim() || !newPassword.trim()) {
-      setError('Please enter username, email, and password');
-      return;
-    }
+  // Admin creation should be handled by `CreateAdminPage` — modal creation disabled
 
-    setIsCreating(true);
-    setError('');
-    try {
-      const token = localStorage.getItem('token');
-      // Only send fields the backend expects: email, password, role
-      const res = await fetch(`${API_BASE}/api/users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          email: newEmail.trim(),
-          password: newPassword.trim(),
-          role: 'admin',
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        setError(json?.message || `Failed to create admin (status ${res.status})`);
-      } else if (json.success) {
-        const newUser = json.data;
-        setUsers((prev) => [...prev, newUser]);
-        setNewUsername('');
-        setNewEmail('');
-        setNewPassword('');
-        setIsDialogOpen(false);
-      }
-    } catch (err: any) {
-      setError('Failed to create admin: ' + (err?.message || err));
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const assignAdmin = async (userId: string) => {
-    setUpdatingUser(userId);
-    setError('');
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/api/users/${userId}/role`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ role: 'admin' }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json?.message || 'Failed to assign admin role');
-      }
-
-      await fetchUsers();
-    } catch (err: any) {
-      setError('Failed to assign admin: ' + (err?.message || err));
-    } finally {
-      setUpdatingUser(null);
-    }
-  };
+  // Assign admin removed per spec (no client-side assign feature)
 
   const removeAdmin = async (userId: string) => {
     setUpdatingUser(userId);
@@ -167,16 +98,16 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
     }
   };
 
-  const filteredUsers = users.filter((user) =>
-    (user.username?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (user.email?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-  );
+  const filteredUsers = users; // All users are source of truth
 
   const stats = {
     total: users.length,
-    superadmins: users.filter((u) => u.role === 'superadmin').length,
-    admins: users.filter((u) => u.role === 'admin').length,
-    regular: users.filter((u) => u.role === 'user').length,
+    superadmins: users.filter((u) => ((u.role || '').toString().toUpperCase() === 'SUPERADMIN')).length,
+    admins: users.filter((u) => ((u.role || '').toString().toUpperCase() === 'ADMIN')).length,
+    regular: users.filter((u) => {
+      const r = (u.role || '').toString().toUpperCase();
+      return r !== 'SUPERADMIN' && r !== 'ADMIN';
+    }).length,
   };
 
   return (
@@ -186,7 +117,7 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
         <p className="text-gray-600">Manage user roles and assign admin privileges</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats (temporarily hidden)
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardContent className="pt-6">
@@ -236,52 +167,21 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
           </CardContent>
         </Card>
       </div>
+      */}
 
 
       {/* Add Admin Button and Search */}
       <div className="mb-6 flex items-center gap-4">
-        <Button className="flex items-center gap-2" onClick={() => setIsDialogOpen(true)}>
+        <Button
+          className="flex items-center gap-2"
+          onClick={() => { if (onAddNewAdmin) onAddNewAdmin(); }}
+        >
           <UserPlus className="w-4 h-4" />
           Add New Admin
         </Button>
-
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <Input
-            placeholder="Search users by username or email..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
       </div>
 
-      {/* Admin Creation Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add New Admin</DialogTitle>
-            <DialogDescription>Fill in the details to create a new admin.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Label>Username</Label>
-            <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="Username" />
-            <Label>Email</Label>
-            <Input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" />
-            <Label>Password</Label>
-            <Input value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password" type="password" />
-            {error && <div className="text-red-600 text-sm">{error}</div>}
-          </div>
-          <DialogFooter>
-            <Button onClick={createAdmin} {...(isCreating ? { loading: true } : {})} disabled={isCreating}>
-              {isCreating ? 'Creating...' : 'Create Admin'}
-            </Button>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Admin creation moved to CreateAdminPage; modal removed */}
 
       {/* Users Table */}
       <Card>
@@ -297,7 +197,7 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
 
           {loading ? (
             <div className="text-center py-8 text-gray-500">Loading users...</div>
-          ) : filteredUsers.length === 0 ? (
+          ) : users.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No users found</div>
           ) : (
             <div className="overflow-x-auto">
@@ -312,29 +212,29 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
+                  {users.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium align-middle">{user.username}</TableCell>
+                      <TableCell className="font-medium align-middle">
+                        {user.empName ? user.empName : (user.username ? user.username : (user.email || 'N/A'))}
+                      </TableCell>
                       <TableCell className="align-middle">{user.email || 'N/A'}</TableCell>
                       <TableCell className="align-middle">
-                        <Badge
-                          variant="secondary"
-                          className={
-                            user.role === 'superadmin'
-                              ? 'bg-purple-100 text-purple-700'
-                              : user.role === 'admin'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-700'
+                        {(() => {
+                          const role = (user.role || '').toString();
+                          if (role === 'SUPERADMIN') {
+                            return <Badge variant="secondary" className="bg-purple-100 text-purple-700">Super Admin</Badge>;
                           }
-                        >
-                          {user.role === 'superadmin' ? 'superadmin' : user.role === 'admin' ? 'admin' : 'Regular User'}
-                        </Badge>
+                          if (role === 'ADMIN') {
+                            return <Badge variant="secondary" className="bg-blue-100 text-blue-700">Admin</Badge>;
+                          }
+                          return <Badge variant="secondary" className="bg-gray-100 text-gray-700">User</Badge>;
+                        })()}
                       </TableCell>
-                      <TableCell className="align-middle">{user.council || '—'}</TableCell>
+                      <TableCell className="align-middle">{user.council ? user.council : '-'}</TableCell>
                       <TableCell className="align-middle">
-                        {user.role === 'superadmin' ? (
+                        {((user.role || '').toString() === 'SUPERADMIN') ? (
                           <span className="text-sm text-gray-500 whitespace-nowrap">Cannot modify</span>
-                        ) : user.role === 'admin' ? (
+                        ) : ((user.role || '').toString() === 'ADMIN') ? (
                           <Button
                             onClick={() => removeAdmin(user.id)}
                             disabled={updatingUser === user.id}
@@ -345,15 +245,7 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
                             {updatingUser === user.id ? 'Removing...' : 'Remove Admin'}
                           </Button>
                         ) : (
-                          <Button
-                            onClick={() => assignAdmin(user.id)}
-                            disabled={updatingUser === user.id}
-                            size="sm"
-                            variant="default"
-                            className="w-32"
-                          >
-                            {updatingUser === user.id ? 'Assigning...' : 'Assign Admin'}
-                          </Button>
+                          <span className="text-sm text-gray-500">-</span>
                         )}
                       </TableCell>
                     </TableRow>
@@ -364,12 +256,7 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
           )}
         </CardContent>
       </Card>
-      {/* Submit Button at the bottom of the page */}
-      <div className="flex justify-end mt-8">
-        <Button type="button" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded">
-          Submit
-        </Button>
-      </div>
+      {/* Bottom submit button removed per UI refactor */}
     </div>
   );
 }
