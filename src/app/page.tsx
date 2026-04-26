@@ -68,6 +68,13 @@ export default function Home() {
           const roleFromToken = payload?.role || payload?.roles || null;
           const role = (roleFromToken as UserRole) || (localStorage.getItem('role') as UserRole);
           setUserRole(role);
+          // If this is a regular admin, initialize selectedCouncil from localStorage if available
+          if (role === 'admin') {
+            try {
+              const storedCouncil = localStorage.getItem('council');
+              if (storedCouncil) setSelectedCouncil(JSON.parse(storedCouncil));
+            } catch (e) {}
+          }
         } else {
           localStorage.removeItem('token');
           localStorage.removeItem('admin');
@@ -111,6 +118,8 @@ export default function Home() {
     localStorage.removeItem('token');
     localStorage.removeItem('admin');
     localStorage.removeItem('role');
+    localStorage.removeItem('council');
+    setSelectedCouncil(null);
     
     setIsAuthenticated(false);
     setUserRole(null);
@@ -137,6 +146,16 @@ export default function Home() {
     // Set userRole from localStorage after login
     const role = localStorage.getItem('role') as UserRole;
     setUserRole(role);
+    // Initialize selectedCouncil for admin users from localStorage written by Login
+    if (role === 'admin') {
+      try {
+        const stored = localStorage.getItem('council');
+        if (stored) setSelectedCouncil(JSON.parse(stored));
+        else setSelectedCouncil(null);
+      } catch (e) {
+        setSelectedCouncil(null);
+      }
+    }
   };
 
   const getActiveCouncil = () => {
