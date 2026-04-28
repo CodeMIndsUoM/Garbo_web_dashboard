@@ -21,9 +21,10 @@ interface User {
 
 interface AdminAssignmentProps {
   onAddNewAdmin?: () => void;
+  onLogout?: () => void;
 }
 
-export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
+export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -179,6 +180,14 @@ export function AdminAssignment({ onAddNewAdmin }: AdminAssignmentProps) {
         >
           <UserPlus className="w-4 h-4" />
           Add New Admin
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="border-red-200 text-red-600 hover:bg-red-50"
+          onClick={() => onLogout && onLogout()}
+        >
+          Log Out
         </Button>
       </div>
 
