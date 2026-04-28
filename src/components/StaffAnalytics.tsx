@@ -38,7 +38,7 @@ interface StaffAnalyticsResponse {
   zoneData: ZoneStaff[];
 }
 
-const BASE_URL = 'http://localhost:8081';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 export function StaffAnalytics({ onBack }: { onBack: () => void }) {
 

@@ -23,6 +23,7 @@ const fillLevelColors = {
 };
 
 export function BinAnalytics({ onBack }: { onBack: () => void }) {
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
   // ✅ STATE
   const [zoneData, setZoneData] = useState<any[]>([]);
   const [totalBins, setTotalBins] = useState(0);
@@ -32,7 +33,7 @@ export function BinAnalytics({ onBack }: { onBack: () => void }) {
 
   // ✅ FETCH DATA
   useEffect(() => {
-    fetch("http://localhost:8081/api/admin/bin-analytics")
+    fetch(`${API_BASE}/api/admin/bin-analytics`)
       .then(res => res.json())
       .then(data => {
         setZoneData(data.zoneData || []);

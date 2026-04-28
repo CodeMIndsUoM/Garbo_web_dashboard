@@ -43,7 +43,7 @@ const FILTER_MAP: Record<FilterType, string> = {
   'Last Month': 'MONTH',
 };
 
-const BASE_URL = 'http://localhost:8081';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function TotalCollection({ onBack }: { onBack: () => void }) {
