@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { decodeJwtPayload } from '@/lib/jwt';
 
-const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void }> = ({ onPasswordChanged }) => {
+const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: () => void }> = ({ onPasswordChanged, onLogout }) => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -192,6 +192,13 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void }> = ({ onPas
           disabled={loading}
         >
           {loading ? "Updating..." : "Change Password"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onLogout && onLogout()}
+          className="w-full border border-red-200 text-red-600 py-2 rounded hover:bg-red-50 transition-colors"
+        >
+          Log Out
         </button>
       </form>
     </div>

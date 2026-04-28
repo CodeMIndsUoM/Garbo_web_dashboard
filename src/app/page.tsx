@@ -214,7 +214,7 @@ export default function Home() {
             selectedCouncil={selectedCouncil}
           />
           <main className="flex-1 overflow-auto">
-            <AdminAssignment onAddNewAdmin={openCreateAdmin} />
+            <AdminAssignment onAddNewAdmin={openCreateAdmin} onLogout={handleLogout} />
           </main>
         </div>
       );
@@ -312,9 +312,9 @@ export default function Home() {
       case 'reports':
         return <Reports />;
       case 'admin-assignment':
-        return <AdminAssignment onAddNewAdmin={openCreateAdmin} />;
+        return <AdminAssignment onAddNewAdmin={openCreateAdmin} onLogout={handleLogout} />;
       case 'admin-edit-password':
-        return <AdminEditPassword onPasswordChanged={handleLogin} />;
+        return <AdminEditPassword onPasswordChanged={handleLogin} onLogout={handleLogout} />;
       case 'create-admin':
         return <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />;
       default:

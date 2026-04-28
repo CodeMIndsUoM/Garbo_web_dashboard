@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, Map as MapIcon, LogOut, Shield, Users, Building2 } from 'lucide-react';
+import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, Map as MapIcon, Shield, Users, Building2 } from 'lucide-react';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -72,10 +72,11 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-200 space-y-3">
-        {/* Role Badge - Clickable for superadmin, and password edit for admin */}
+      <div className="p-4 border-t border-gray-200">
         {userRole && (
-          <>
+          <div className={`rounded-xl border p-2 ${
+            userRole === 'superadmin' ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'
+          }`}>
             <button
               onClick={() => {
                 if (userRole === 'superadmin') {
@@ -87,36 +88,22 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
               }}
               className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors select-none ${
                 userRole === 'superadmin'
-                  ? 'bg-purple-50 hover:bg-purple-100 cursor-pointer'
-                  : userRole === 'admin'
-                  ? 'bg-blue-50 hover:bg-blue-100 cursor-pointer'
-                  : 'bg-gray-50 cursor-default'
+                  ? 'hover:bg-purple-100 cursor-pointer'
+                  : 'hover:bg-blue-100 cursor-pointer'
               }`}
               disabled={userRole !== 'superadmin' && userRole !== 'admin'}
             >
               <Shield className={`w-4 h-4 shrink-0 ${
-                userRole === 'superadmin' ? 'text-purple-600' : userRole === 'admin' ? 'text-blue-600' : 'text-blue-600'
+                userRole === 'superadmin' ? 'text-purple-600' : 'text-blue-600'
               }`} />
               <span className={`text-xs font-medium capitalize ${
-                userRole === 'superadmin' ? 'text-purple-700' : userRole === 'admin' ? 'text-blue-700' : 'text-gray-700'
+                userRole === 'superadmin' ? 'text-purple-700' : 'text-blue-700'
               }`}>
                 {userRole === 'superadmin' ? 'Superadmin' : 'Admin'}
               </span>
             </button>
-          </>
+          </div>
         )}
-
-        <div className="flex items-center justify-start gap-2">
-          <button
-            type="button"
-            onClick={() => onLogout && onLogout()}
-            aria-label="Log out"
-            className="flex items-center gap-1 px-2 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 text-sm"
-          >
-            <LogOut className="w-5 h-5 text-red-600" />
-            <span className="whitespace-nowrap">Log Out</span>
-          </button>
-        </div>
       </div>
     </aside>
   );
