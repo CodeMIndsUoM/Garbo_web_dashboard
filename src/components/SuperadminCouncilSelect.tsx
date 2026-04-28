@@ -12,11 +12,20 @@ interface Council {
 interface SuperadminCouncilSelectProps {
   councils: Council[];
   onSelect: (council: Council) => void;
+  onSelectAll?: () => void;
 }
 
-export const SuperadminCouncilSelect: React.FC<SuperadminCouncilSelectProps> = ({ councils, onSelect }) => {
+export const SuperadminCouncilSelect: React.FC<SuperadminCouncilSelectProps> = ({ councils, onSelect, onSelectAll }) => {
   return (
     <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+      <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => onSelectAll?.()}>
+        <CardHeader>
+          <CardTitle>All Councils</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-gray-600">View combined data across every council.</p>
+        </CardContent>
+      </Card>
       {councils.map((council) => (
         <Card key={council.id} className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => onSelect(council)}>
           <CardHeader>
