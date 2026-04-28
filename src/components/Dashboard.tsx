@@ -29,7 +29,7 @@ interface DaySummary {
   missed: number;
 }
 
-const BASE_URL = 'http://localhost:8081';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 export function Dashboard({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const [summary, setSummary]   = useState<DaySummary | null>(null);
@@ -67,7 +67,6 @@ export function Dashboard({ onNavigate }: { onNavigate?: (page: string) => void 
       <div className="mb-8">
         <h2 className="text-gray-900 mb-2">Dashboard Overview</h2>
         <p className="text-gray-600">Monitor your waste management operations in real-time</p>
-        {council && <div className="text-sm text-gray-500">Showing data for: {council.name || council.id}</div>}
       </div>
 
       {/* Stats Grid */}

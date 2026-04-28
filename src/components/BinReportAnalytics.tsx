@@ -44,7 +44,7 @@ function KpiSkeleton() {
   );
 }
 
-const API_BASE = 'http://localhost:8081';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
   const today = new Date().toLocaleDateString('en-US', {
@@ -103,7 +103,7 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
       {/* Error banner */}
       {error && (
         <div className="mb-6 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          ⚠ {error} — check that the backend is running on port 8081
+          ⚠ {error} — check that the backend is running on port 8080
         </div>
       )}
 
