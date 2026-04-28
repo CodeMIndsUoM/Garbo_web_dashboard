@@ -37,6 +37,7 @@ export default function Home() {
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [selectedCouncil, setSelectedCouncil] = useState<{ id: string; name: string; description?: string } | null>(null);
+  const [tabCouncilFilters, setTabCouncilFilters] = useState<Record<string, string>>({});
 
   // Mock councils for demo; replace with API call if needed
   const COUNCILS = [
@@ -169,7 +170,11 @@ export default function Home() {
   };
 
   const getActiveCouncil = () => {
-    if (userRole === 'superadmin') return selectedCouncil;
+    if (userRole === 'superadmin') {
+      const selectedId = tabCouncilFilters[currentPage];
+      if (!selectedId || selectedId === 'all') return null;
+      return COUNCILS.find((c) => c.id === selectedId) || null;
+    }
     try {
       const stored = localStorage.getItem('council');
       return stored ? JSON.parse(stored) : null;
@@ -192,8 +197,8 @@ export default function Home() {
     return <Login onLogin={handleLogin} />;
   }
 
-  // Superadmin: show sidebar and all-council summary if on 'home' tab or no council selected
-  if (userRole === 'superadmin' && (currentPage === 'home' || !selectedCouncil)) {
+  // Superadmin special pages around home/council selection
+  if (userRole === 'superadmin' && (currentPage === 'home' || currentPage === 'admin-assignment' || currentPage === 'create-admin')) {
     // Special case: allow admin-assignment page to render as normal
     if (currentPage === 'admin-assignment') {
       return (
@@ -257,7 +262,11 @@ export default function Home() {
           <SuperadminCouncilSelect
             councils={COUNCILS}
             onSelect={(council) => {
-              setSelectedCouncil(council);
+              setTabCouncilFilters((prev) => ({ ...prev, dashboard: council.id }));
+              setCurrentPage('dashboard');
+            }}
+            onSelectAll={() => {
+              setTabCouncilFilters((prev) => ({ ...prev, dashboard: 'all' }));
               setCurrentPage('dashboard');
             }}
           />
@@ -279,7 +288,7 @@ export default function Home() {
       case 'map':
         return <MapView />;
       case 'analytics':
-        return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} />;
+        return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} council={getActiveCouncil()} />;
       case 'citizen-management':
         return <CitizenManagement council={getActiveCouncil()} />;
       case 'third-party-collectors':
@@ -320,13 +329,27 @@ export default function Home() {
         onPageChange={setCurrentPage}
         onLogout={handleLogout}
         userRole={userRole}
-        selectedCouncil={selectedCouncil}
+        selectedCouncil={getActiveCouncil()}
       />
       <main className="flex-1 overflow-auto">
-        {/* Show selected council name for superadmin */}
-        {userRole === 'superadmin' && selectedCouncil && (
-          <div className="p-4 bg-gray-100 border-b text-lg font-semibold text-gray-700">
-            {selectedCouncil.name}
+        {userRole === 'superadmin' && currentPage !== 'home' && (
+          <div className="p-4 bg-gray-100 border-b text-sm flex items-center justify-between gap-4">
+            <div className="text-gray-700 font-semibold">
+              {getActiveCouncil()?.name || 'All Councils'}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-gray-600">Council</label>
+              <select
+                className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-700"
+                value={tabCouncilFilters[currentPage] || 'all'}
+                onChange={(e) => setTabCouncilFilters((prev) => ({ ...prev, [currentPage]: e.target.value }))}
+              >
+                <option value="all">All Councils</option>
+                {COUNCILS.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
         {renderPage()}

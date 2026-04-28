@@ -61,7 +61,7 @@ interface BinSummary {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
-export function WasteAnalytics({ onNavigate }: { onNavigate?: (page: string) => void }) {
+export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: string) => void; council?: { name?: string } | null }) {
 
   const [summary, setSummary] = useState<DaySummary | null>(null);
   const [staffSummary, setStaffSummary] = useState<StaffSummary | null>(null);
