@@ -31,7 +31,7 @@ interface DaySummary {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
-export function Dashboard({ onNavigate }: { onNavigate?: (page: string) => void }) {
+export function Dashboard({ onNavigate }: { onNavigate?: (page: string) => void; council?: { name?: string } | null }) {
   const [summary, setSummary]   = useState<DaySummary | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);

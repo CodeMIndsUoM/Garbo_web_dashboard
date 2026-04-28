@@ -19,6 +19,27 @@ The frontend uses:
 - a **dev rewrite** in `next.config.mjs`:
   - `/api/*` → `http://localhost:8080/api/*` (development only)
 
+## Role and council behavior
+
+Dashboard is role-aware:
+
+- **superadmin**
+  - gets `Home` tab
+  - can switch between councils from council selector
+  - can choose council from dropdowns in relevant create/edit flows
+- **admin**
+  - does not get council switching
+  - only sees/manages own council data context
+  - council is auto-enforced in admin create flows (for example bins/vehicles)
+
+Supported council list in current UI:
+
+- `Colombo`
+- `Galle`
+- `Kandy`
+- `Gampaha`
+- `Matara`
+
 ## Environment variables
 
 Create or update `.env` (already present in this repo):
@@ -66,6 +87,14 @@ Make sure:
 
 - Backend is running on `8080`
 - Backend CORS allows your frontend origin (`http://localhost:3000` / `http://localhost:3001`)
+
+### `401 Unauthorized` on dashboard actions
+
+Many create/update/delete endpoints require JWT auth headers. If you see 401:
+
+- log in again and confirm `token` exists in browser local storage
+- ensure requests include `Authorization: Bearer <token>`
+- verify backend security permits the endpoint for your role
 
 ### API calls hitting wrong port
 

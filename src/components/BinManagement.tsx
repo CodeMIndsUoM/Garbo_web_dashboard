@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Trash2, MapPin, AlertTriangle, Search, Plus, Loader2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -24,40 +24,56 @@ import {
 import { toast } from "sonner";
 
 const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080'}/api/bins`;
+const COUNCILS = ['Colombo', 'Galle', 'Kandy', 'Gampaha', 'Matara'];
 
 interface Bin {
   id: number;
   binCode: string;
   location: string;
   type: string;
+  zone?: string;
+  council?: string;
   fillLevel: number;
   status: string;
   lastCollection: string;
   coordinates: string;
 }
 
-export function BinManagement() {
+export function BinManagement({ council, userRole }: { council?: { name?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
   
   // Form State
   const [newBin, setNewBin] = useState({
     binCode: '',
     location: '',
     type: 'General Waste',
+    zone: council?.name || '',
     status: 'normal',
     coordinates: ''
   });
 
+  const isAdmin = userRole === 'admin';
+  const defaultCouncil = council?.name || '';
+  const authHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchBins = async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_BASE);
+      const query = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
+      const response = await fetch(`${API_BASE}${query}`, { headers: authHeaders() });
       const result = await response.json();
       if (result.success) {
-        setBins(result.data);
+        const data = Array.isArray(result.data) ? result.data : [];
+        const hasCouncilField = data.some((b: any) => typeof b?.council === 'string');
+        setCouncilFilterUnavailable(Boolean(council?.name) && !hasCouncilField && data.length > 0);
+        setBins(data);
       }
     } catch (error) {
       console.error("Error fetching bins:", error);
@@ -71,15 +87,33 @@ export function BinManagement() {
     fetchBins();
   }, []);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!defaultCouncil) return;
+    setNewBin((prev) => ({ ...prev, zone: defaultCouncil }));
+  }, [isAdmin, defaultCouncil]);
+
   const handleCreateBin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (isAdmin && !defaultCouncil) {
+        toast.error("Your admin account has no council assigned");
+        return;
+      }
+
+      const payload = {
+        ...newBin,
+        // Enforce council ownership server payload for admins.
+        zone: isAdmin ? defaultCouncil : newBin.zone,
+      };
+
       const response = await fetch(API_BASE, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders(),
         },
-        body: JSON.stringify(newBin),
+        body: JSON.stringify(payload),
       });
       const result = await response.json();
       if (result.success) {
@@ -89,6 +123,7 @@ export function BinManagement() {
           binCode: '',
           location: '',
           type: 'General Waste',
+          zone: defaultCouncil,
           status: 'normal',
           coordinates: ''
         });
@@ -107,6 +142,7 @@ export function BinManagement() {
     try {
       const response = await fetch(`${API_BASE}/${id}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       });
       const result = await response.json();
       if (result.success) {
@@ -123,6 +159,15 @@ export function BinManagement() {
     bin.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     bin.type?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const councilScopedBins = useMemo(() => {
+    if (!council?.name) return filteredBins;
+    const councilName = council.name.toLowerCase();
+    return filteredBins.filter((bin: any) => {
+      if (typeof bin?.council !== 'string') return true;
+      return bin.council.toLowerCase() === councilName;
+    });
+  }, [filteredBins, council]);
 
   return (
     <div className="p-8">
@@ -176,6 +221,23 @@ export function BinManagement() {
                     <SelectItem value="Recyclables">Recyclables</SelectItem>
                     <SelectItem value="Organic Waste">Organic Waste</SelectItem>
                     <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Council</label>
+                <Select
+                  value={newBin.zone}
+                  onValueChange={(val) => setNewBin({ ...newBin, zone: val })}
+                  disabled={isAdmin}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={isAdmin ? (defaultCouncil || 'No council found') : "Select council"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNCILS.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -261,6 +323,11 @@ export function BinManagement() {
       </div>
 
       {/* Search and Filters */}
+      {councilFilterUnavailable && (
+        <div className="mb-4 p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 text-sm">
+          Council-specific bin filtering is not available from backend data yet, so all bins are shown for this section.
+        </div>
+      )}
       <div className="mb-6">
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -279,7 +346,7 @@ export function BinManagement() {
           <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
           <p className="text-gray-600">Loading bin data...</p>
         </div>
-      ) : filteredBins.length === 0 ? (
+      ) : councilScopedBins.length === 0 ? (
         <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
           <Trash2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-500 font-medium">No bins found</p>
@@ -287,7 +354,7 @@ export function BinManagement() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredBins.map((bin) => (
+          {councilScopedBins.map((bin) => (
             <Card key={bin.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 group">
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">

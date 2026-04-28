@@ -32,6 +32,7 @@ interface Driver {
   name?: string;
 }
 
+const COUNCILS = ['Colombo', 'Galle', 'Kandy', 'Gampaha', 'Matara'];
 const VEHICLE_TYPES = ['Truck', 'Compactor', 'Mini Truck'];
 const VEHICLE_STATUSES = ['available', 'on_route', 'maintenance', 'inactive'];
 
@@ -53,7 +54,7 @@ function getStatusLabel(status: string) {
   }
 }
 
-export function VehicleManagement({ council }: { council?: any | null }) {
+export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driversLoading, setDriversLoading] = useState(true);
@@ -67,9 +68,14 @@ export function VehicleManagement({ council }: { council?: any | null }) {
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState('');
 
+  const authHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchDrivers = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/drivers`);
+      const res = await fetch(`${API_BASE}/api/drivers`, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) {
         setDrivers(json.data);
@@ -83,11 +89,18 @@ export function VehicleManagement({ council }: { council?: any | null }) {
 
   const fetchVehicles = useCallback(async () => {
     try {
-      const url = `${API_BASE}/api/vehicles${council ? `?council=${encodeURIComponent(council.name || council.id)}` : ''}`;
-      const res = await fetch(url);
+      const councilQuery = council?.name || council?.id || '';
+      const url = `${API_BASE}/api/vehicles${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
+      const res = await fetch(url, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) {
-        setVehicles(json.data);
+        const rawVehicles: Vehicle[] = Array.isArray(json.data) ? json.data : [];
+        if (council?.name) {
+          const councilName = council.name.toLowerCase();
+          setVehicles(rawVehicles.filter((v) => (v.assignedCouncil || '').toLowerCase() === councilName));
+        } else {
+          setVehicles(rawVehicles);
+        }
       }
     } catch {
       console.error('Failed to fetch vehicles');
@@ -134,7 +147,7 @@ export function VehicleManagement({ council }: { council?: any | null }) {
   const handleDelete = async () => {
     if (!deletingVehicle) return;
     try {
-      const res = await fetch(`${API_BASE}/api/vehicles/${deletingVehicle.id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/vehicles/${deletingVehicle.id}`, { method: 'DELETE', headers: authHeaders() });
       if (!res.ok) {
         const json = await res.json().catch(() => null);
         throw new Error(json?.message || 'Failed to delete vehicle');
@@ -149,7 +162,7 @@ export function VehicleManagement({ council }: { council?: any | null }) {
   const handleDeleteDriver = async () => {
     if (!deletingDriver) return;
     try {
-      const res = await fetch(`${API_BASE}/api/drivers/${deletingDriver.id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE}/api/drivers/${deletingDriver.id}`, { method: 'DELETE', headers: authHeaders() });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.success) {
         throw new Error(json?.message || 'Failed to delete driver');
@@ -166,7 +179,7 @@ export function VehicleManagement({ council }: { council?: any | null }) {
     try {
       await fetch(`${API_BASE}/api/vehicles/${vehicle.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ status: newStatus }),
       });
       fetchVehicles();
@@ -390,6 +403,8 @@ export function VehicleManagement({ council }: { council?: any | null }) {
         <VehicleFormModal
           vehicle={editingVehicle}
           drivers={drivers}
+          council={council}
+          userRole={userRole}
           onClose={() => { setShowCreateModal(false); setEditingVehicle(null); }}
           onSaved={() => { setShowCreateModal(false); setEditingVehicle(null); fetchVehicles(); }}
         />
@@ -432,21 +447,47 @@ export function VehicleManagement({ council }: { council?: any | null }) {
 
 /* ── Create / Edit Modal ────────────────────────────────────────── */
 
-function VehicleFormModal({ vehicle, drivers, onClose, onSaved }: { vehicle: Vehicle | null; drivers: Driver[]; onClose: () => void; onSaved: () => void }) {
+function VehicleFormModal({
+  vehicle,
+  drivers,
+  council,
+  userRole,
+  onClose,
+  onSaved
+}: {
+  vehicle: Vehicle | null;
+  drivers: Driver[];
+  council?: { name?: string; id?: string } | null;
+  userRole?: 'admin' | 'superadmin' | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const isEditing = !!vehicle;
+  const isAdmin = userRole === 'admin';
+  const defaultCouncil = council?.name || '';
   const [form, setForm] = useState({
     vehicleCode: vehicle?.vehicleCode || '',
     licensePlate: vehicle?.licensePlate || '',
     type: vehicle?.type || VEHICLE_TYPES[0],
     capacity: vehicle?.capacity?.toString() || '',
     status: vehicle?.status || 'available',
-    assignedCouncil: vehicle?.assignedCouncil || '',
+    assignedCouncil: vehicle?.assignedCouncil || defaultCouncil,
     assignedDriverId: vehicle?.assignedDriverId?.toString() || '',
     currentLocation: vehicle?.currentLocation || '',
     fuelLevel: vehicle?.fuelLevel?.toString() || '100',
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const authHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (!defaultCouncil) return;
+    setForm((prev) => ({ ...prev, assignedCouncil: defaultCouncil }));
+  }, [isAdmin, defaultCouncil]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -457,13 +498,20 @@ function VehicleFormModal({ vehicle, drivers, onClose, onSaved }: { vehicle: Veh
     setSaving(true);
     setFormError('');
 
+    if (isAdmin && !defaultCouncil) {
+      setFormError('Your admin account has no council assigned.');
+      setSaving(false);
+      return;
+    }
+
     const payload = {
       vehicleCode: form.vehicleCode,
       licensePlate: form.licensePlate,
       type: form.type,
       capacity: form.capacity ? parseFloat(form.capacity) : null,
       status: form.status,
-      assignedCouncil: form.assignedCouncil || null,
+      // Enforce council ownership server payload for admins.
+      assignedCouncil: (isAdmin ? defaultCouncil : form.assignedCouncil) || null,
       assignedDriverId: form.assignedDriverId ? parseInt(form.assignedDriverId) : null,
       currentLocation: form.currentLocation || null,
       fuelLevel: parseInt(form.fuelLevel) || 100,
@@ -474,7 +522,7 @@ function VehicleFormModal({ vehicle, drivers, onClose, onSaved }: { vehicle: Veh
       const method = isEditing ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
@@ -538,13 +586,13 @@ function VehicleFormModal({ vehicle, drivers, onClose, onSaved }: { vehicle: Veh
             <select
               value={form.assignedCouncil}
               onChange={e => setForm({ ...form, assignedCouncil: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                disabled={isAdmin}
             >
-              <option value="">Select council</option>
-              <option value="Colombo">Colombo</option>
-              <option value="Galle">Galle</option>
-              <option value="Moratuwa">Moratuwa</option>
-              <option value="Kandy">Kandy</option>
+                <option value="">{isAdmin ? (defaultCouncil || 'No council found') : 'Select council'}</option>
+                {COUNCILS.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -598,6 +646,10 @@ function DriversListModal({
   onCreated: () => void;
   setGlobalError: (msg: string) => void;
 }) {
+  const authHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ driverCode: '', name: '' });
   const [saving, setSaving] = useState(false);
@@ -616,7 +668,7 @@ function DriversListModal({
     try {
       const res = await fetch(`${API_BASE}/api/drivers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ driverCode: form.driverCode.trim(), name: form.name.trim() }),
       });
       const json = await res.json().catch(() => null);
@@ -738,6 +790,10 @@ function DriverEditModal({
   onSaved: () => void;
   setGlobalError: (msg: string) => void;
 }) {
+  const authHeaders = (): Record<string, string> => {
+    const token = localStorage.getItem('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
   const [form, setForm] = useState({ driverCode: driver.driverCode || '', name: driver.name || '' });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -754,7 +810,7 @@ function DriverEditModal({
     try {
       const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ driverCode: form.driverCode.trim(), name: form.name.trim() }),
       });
       const json = await res.json();

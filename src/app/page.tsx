@@ -21,11 +21,14 @@ import { ComplaintAnalytics } from '@/components/ComplaintAnalytics';
 import { ThirdPartyAnalytics } from '@/components/ThirdPartyAnalytics';
 import { VehicleAnalytics } from '@/components/VehicleAnalytics';
 import { BinReportAnalytics } from '@/components/BinReportAnalytics';
+import { CitizenManagement } from '@/components/CitizenManagement';
+import { ThirdPartyCollectors } from '@/components/ThirdPartyCollectors';
+import { InternalUsers } from '@/components/InternalUsers';
 import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
-export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' |'vehicles' |'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection' | 'bin-analytics' | 'staff-analytics' | 'complaint-analytics' | 'third-party-analytics' | 'vehicle-analytics' | 'bin-report-analytics';
+export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'map' |'vehicles' |'analytics' | 'citizen-management' | 'third-party-collectors' | 'internal-users' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin' | 'total-collection' | 'bin-analytics' | 'staff-analytics' | 'complaint-analytics' | 'third-party-analytics' | 'vehicle-analytics' | 'bin-report-analytics';
 export type UserRole = 'admin' | 'superadmin' | null;
 
 export default function Home() {
@@ -37,11 +40,11 @@ export default function Home() {
 
   // Mock councils for demo; replace with API call if needed
   const COUNCILS = [
-    { id: 'colombo', name: 'Colombo Council' },
-    { id: 'galle', name: 'Galle Council' },
-    { id: 'matara', name: 'Matara Council' },
-    { id: 'kandy', name: 'Kandy Council' },
-    { id: 'gampaha', name: 'Gampaha Council' },
+    { id: 'colombo', name: 'Colombo' },
+    { id: 'galle', name: 'Galle' },
+    { id: 'kandy', name: 'Kandy' },
+    { id: 'gampaha', name: 'Gampaha' },
+    { id: 'matara', name: 'Matara' },
   ];
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
@@ -68,7 +71,7 @@ export default function Home() {
         
         clearTimeout(timeoutId);
         const json = await res.json();
-        if (res.ok && json?.success && json?.data === true) {
+        if (res.ok && (json?.success === true || json?.message === 'Token is valid')) {
           setIsAuthenticated(true);
           // Prefer role stored from token if available
           const payload = decodeJwtPayload(token);
@@ -270,13 +273,19 @@ export default function Home() {
       case 'schedule':
         return <CollectionSchedule council={getActiveCouncil()} />;
       case 'bins':
-        return <BinManagement council={getActiveCouncil()} />;
+        return <BinManagement council={getActiveCouncil()} userRole={userRole} />;
       case 'vehicles':
-        return <VehicleManagement council={getActiveCouncil()} />;
+        return <VehicleManagement council={getActiveCouncil()} userRole={userRole} />;
       case 'map':
         return <MapView />;
       case 'analytics':
         return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} />;
+      case 'citizen-management':
+        return <CitizenManagement council={getActiveCouncil()} />;
+      case 'third-party-collectors':
+        return <ThirdPartyCollectors council={getActiveCouncil()} />;
+      case 'internal-users':
+        return <InternalUsers council={getActiveCouncil()} />;
       case 'total-collection':
         return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
       case 'bin-analytics':
