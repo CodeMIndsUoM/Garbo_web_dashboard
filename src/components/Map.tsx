@@ -9,7 +9,7 @@ import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point, polygon as turfPolygon } from "@turf/helpers";
 import { MapPin, Route, Plus, Navigation } from "lucide-react";
 
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 const BINS_API = `${API_ORIGIN}/api/bins`;
 const ROUTE_SESSION_API = `${API_ORIGIN}/api/route-sessions`;
 const DEPOT_LAT = 6.775080;

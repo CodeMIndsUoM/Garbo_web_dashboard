@@ -31,7 +31,7 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
   const [updatingUser, setUpdatingUser] = useState<string | null>(null);
   // Modal creation flow removed; creation should be done via CreateAdminPage
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   useEffect(() => {
     fetchUsers();

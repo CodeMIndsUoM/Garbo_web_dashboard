@@ -14,7 +14,7 @@ export function Login({ onLogin }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {

@@ -7,7 +7,7 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 interface Vehicle {
   id: number;
@@ -32,7 +32,13 @@ interface Driver {
   name?: string;
 }
 
-const COUNCILS = ['Colombo', 'Galle', 'Kandy', 'Gampaha', 'Matara'];
+const COUNCILS = [
+  'Colombo',
+  'Dehiwala-Mt. Lavinia',
+  'Kaduwela',
+  'Moratuwa',
+  'Sri Jayewardenepura Kotte',
+];
 const VEHICLE_TYPES = ['Truck', 'Compactor', 'Mini Truck'];
 const VEHICLE_STATUSES = ['available', 'on_route', 'maintenance', 'inactive'];
 

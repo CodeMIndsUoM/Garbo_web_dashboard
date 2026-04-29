@@ -15,7 +15,7 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
   const [success, setSuccess] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   // Admin list fetching moved to AdminAssignment; CreateAdminPage only handles creation
 
@@ -123,10 +123,10 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
               Select Council
             </option>
             <option value="Colombo">Colombo</option>
-            <option value="Kandy">Kandy</option>
-            <option value="Galle">Galle</option>
-            <option value="Gampaha">Gampaha</option>
-            <option value="Matara">Matara</option>
+            <option value="Dehiwala-Mt. Lavinia">Dehiwala-Mt. Lavinia</option>
+            <option value="Kaduwela">Kaduwela</option>
+            <option value="Moratuwa">Moratuwa</option>
+            <option value="Sri Jayewardenepura Kotte">Sri Jayewardenepura Kotte</option>
           </select>
         </div>
         {error && <div className="text-red-600 text-sm">{error}</div>}
