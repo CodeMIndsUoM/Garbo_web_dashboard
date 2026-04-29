@@ -23,7 +23,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
       return;
     }
     setLoading(true);
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
     // derive email from localStorage.admin or decode token
     let email = '';

@@ -42,13 +42,13 @@ export default function Home() {
   // Mock councils for demo; replace with API call if needed
   const COUNCILS = [
     { id: 'colombo', name: 'Colombo' },
-    { id: 'galle', name: 'Galle' },
-    { id: 'kandy', name: 'Kandy' },
-    { id: 'gampaha', name: 'Gampaha' },
-    { id: 'matara', name: 'Matara' },
+    { id: 'dehiwala-mt-lavinia', name: 'Dehiwala-Mt. Lavinia' },
+    { id: 'kaduwela', name: 'Kaduwela' },
+    { id: 'moratuwa', name: 'Moratuwa' },
+    { id: 'sri-jayewardenepura-kotte', name: 'Sri Jayewardenepura Kotte' },
   ];
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   useEffect(() => {
     const checkToken = async () => {

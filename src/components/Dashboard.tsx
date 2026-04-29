@@ -29,7 +29,7 @@ interface DaySummary {
   missed: number;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 export function Dashboard({ onNavigate }: { onNavigate?: (page: string) => void; council?: { name?: string } | null }) {
   const [summary, setSummary]   = useState<DaySummary | null>(null);

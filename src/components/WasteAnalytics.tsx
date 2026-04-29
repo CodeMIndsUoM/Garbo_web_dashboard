@@ -59,7 +59,7 @@ interface BinSummary {
   totalBins: number;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: string) => void; council?: { name?: string } | null }) {
 

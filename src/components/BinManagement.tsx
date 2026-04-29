@@ -23,8 +23,14 @@ import {
 } from "./ui/select";
 import { toast } from "sonner";
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080'}/api/bins`;
-const COUNCILS = ['Colombo', 'Galle', 'Kandy', 'Gampaha', 'Matara'];
+const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'}/api/bins`;
+const COUNCILS = [
+  'Colombo',
+  'Dehiwala-Mt. Lavinia',
+  'Kaduwela',
+  'Moratuwa',
+  'Sri Jayewardenepura Kotte',
+];
 
 interface Bin {
   id: number;
