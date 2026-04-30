@@ -298,7 +298,7 @@ export default function Home() {
       case 'total-collection':
         return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
       case 'bin-analytics':
-        return <BinAnalytics onBack={() => setCurrentPage('analytics')} />;
+        return <BinAnalytics onBack={() => setCurrentPage('analytics')} onNavigate={(page) => setCurrentPage(page as PageType)} />;
       case 'staff-analytics':
         return <StaffAnalytics onBack={() => setCurrentPage('analytics')} />;
       case 'complaint-analytics':

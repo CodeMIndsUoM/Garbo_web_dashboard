@@ -5,7 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 
-// ── Types mirroring the backend snapshot ─────────────────────────────────────
+//  Types mirroring the backend snapshot 
 
 interface ZoneAnalytics {
   zone: string;
