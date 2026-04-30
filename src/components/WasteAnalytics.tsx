@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Trash2, Users, Truck, Loader2, AlertCircle, Briefcase, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
 import {
   BarChart,
   Bar,
@@ -202,9 +203,15 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Waste Analytics</h1>
-        <p className="text-gray-500 text-lg">Detailed insights and trends from waste collection operations</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Waste Analytics</h1>
+          <p className="text-gray-500 text-lg">Detailed insights and trends from waste collection operations</p>
+        </div>
+        <Button onClick={() => onNavigate?.('reports')} className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors rounded-lg px-4 py-2 flex items-center gap-2">
+          <FileText className="w-4 h-4" />
+          View Report
+        </Button>
       </div>
 
       {/* KPI Cards Row 1 */}
