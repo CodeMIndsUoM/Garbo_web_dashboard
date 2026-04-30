@@ -96,16 +96,22 @@ export default function MapView() {
   const [markers, setMarkers] = useState<BinMarkersMap>(new Map());
   const [addMode, setAddMode] = useState(false);
   const [contextMenu, setContextMenu] = useState<any>(null);
-  // 🔽 NEW STATES
   const [showRouteMenu, setShowRouteMenu] = useState(false);
+  const [showAssignedRouteMenu, setShowAssignedRouteMenu] = useState(false);
+  const [assignedRoutes, setAssignedRoutes] = useState<any[]>([]);
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBins, setSelectedBins] = useState<string[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [routeStatus, setRouteStatus] = useState<string>('');
   const [routeError, setRouteError] = useState<string>('');
-  const [vehicleCountInput, setVehicleCountInput] = useState<string>('');
-  const [vehicleCapacityInput, setVehicleCapacityInput] = useState<string>('');
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [collectors, setCollectors] = useState<any[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
+  const [selectedDriverId, setSelectedDriverId] = useState<string>('');
+  const [selectedCollectorIds, setSelectedCollectorIds] = useState<string[]>([]);
   const selectionModeRef = useRef(false);
 
   useEffect(() => {
@@ -115,6 +121,38 @@ export default function MapView() {
   useEffect(() => {
     selectionModeRef.current = selectionMode;
   }, [selectionMode]);
+
+  useEffect(() => {
+    const fetchResources = async () => {
+      const token = localStorage.getItem('token');
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      try {
+        const [vehRes, drvRes, usrRes] = await Promise.all([
+          fetch(`${API_ORIGIN}/api/vehicles`, { headers: authHeaders }),
+          fetch(`${API_ORIGIN}/api/drivers`, { headers: authHeaders }),
+          fetch(`${API_ORIGIN}/api/users`, { headers: authHeaders })
+        ]);
+
+        if (vehRes.ok) {
+          const vehJson = await vehRes.json();
+          if (vehJson.success) setVehicles(vehJson.data);
+        }
+        if (drvRes.ok) {
+          const drvJson = await drvRes.json();
+          if (drvJson.success) setDrivers(drvJson.data);
+        }
+        if (usrRes.ok) {
+          const usrJson = await usrRes.json();
+          if (usrJson.data) {
+            setCollectors(usrJson.data.filter((u: any) => u.role === 'COLLECTOR'));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch routing resources', e);
+      }
+    };
+    fetchResources();
+  }, []);
 
   const toggleBinSelection = (id: string) => {
     setSelectedBins(prev => {
@@ -398,12 +436,20 @@ export default function MapView() {
     const bins = Array.isArray(payload) ? payload : Array.isArray(payload?.value) ? payload.value : [];
 
     bins.forEach((bin: any) => {
+      const lat = Number(bin.lat ?? bin.latitude);
+      const lng = Number(bin.lng ?? bin.longitude);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        console.warn('Skipping bin with invalid coordinates', bin);
+        return;
+      }
+
       addMarker({
         id: String(bin.id),
-        lat: Number(bin.lat),
-        lng: Number(bin.lng),
+        lat,
+        lng,
         fillLevel: bin.fillLevel,
-        priority: bin.priority,
+        priority: bin.priority || 'medium',
         zone: bin.zone || 'unassigned'
       });
     });
@@ -469,15 +515,28 @@ export default function MapView() {
       })
     });
 
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to create bin: ${res.status}`, errorText);
+      return;
+    }
+
     const saved = await res.json();
+    const resolvedLat = Number(saved?.lat ?? saved?.latitude ?? lat);
+    const resolvedLng = Number(saved?.lng ?? saved?.longitude ?? lng);
+
+    if (!Number.isFinite(resolvedLat) || !Number.isFinite(resolvedLng)) {
+      console.error('Created bin response missing coordinates', saved);
+      return;
+    }
 
     addMarker({
       id: String(saved.id),
-      lat: saved.lat,
-      lng: saved.lng,
-      fillLevel: saved.fillLevel,
-      priority: saved.priority,
-      zone: saved.zone
+      lat: resolvedLat,
+      lng: resolvedLng,
+      fillLevel: saved.fillLevel ?? Math.floor(Math.random() * 100),
+      priority: saved.priority || 'medium',
+      zone: saved.zone || 'unassigned'
     });
   };
 
@@ -549,7 +608,7 @@ export default function MapView() {
   };
 
   // ===============================
-  // ROUTE ACTIONS (NEW)
+  // ROUTE ACTIONS
   // ===============================
   const handleSelectBins = () => {
     setSelectionMode(true);
@@ -563,11 +622,34 @@ export default function MapView() {
 
   const handleOptimizeZone = async () => {
     alert("Trigger route optimization for zones");
-
-    // 🔥 you can call backend here
-    // await fetch("/api/routes/optimize", {...})
-
     setShowRouteMenu(false);
+  };
+
+  // ===============================
+  // ASSIGNED ROUTES — CHANGE 1 & 2
+  // ===============================
+  const handleToggleAssignedRoutes = async () => {
+    setShowAssignedRouteMenu(!showAssignedRouteMenu);
+    if (!showAssignedRouteMenu && assignedRoutes.length === 0) {
+      setLoadingRoutes(true);
+      try {
+        const userId = getCurrentUserId();
+        // Try the user-scoped active sessions endpoint first;
+        // fall back to /api/routes/active if your backend exposes that instead.
+        const res = await fetch(
+          `${API_ORIGIN}/api/route-sessions/user/${userId}/active`,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        );
+        if (res.ok) {
+          const json = await res.json();
+          setAssignedRoutes(Array.isArray(json) ? json : (json.data || []));
+        }
+      } catch (e) {
+        console.error('Failed to fetch assigned routes', e);
+      } finally {
+        setLoadingRoutes(false);
+      }
+    }
   };
 
   return (
@@ -577,44 +659,97 @@ export default function MapView() {
 
       {/* SELECTION OVERLAY */}
       {selectionMode && (
-        <div style={{ zIndex: 9999 }} className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-700 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-top-4">
-          <span className="font-semibold text-sm">Selecting Bins: {selectedBins.length} selected</span>
-          <div className="flex items-center gap-2 text-xs">
-            <input
-              type="number"
-              min={1}
-              placeholder="Vehicles (default 3)"
-              value={vehicleCountInput}
-              onChange={(e) => setVehicleCountInput(e.target.value)}
-              className="w-36 rounded border border-white/30 bg-white/15 px-2 py-1 placeholder:text-white/70 text-white outline-none"
-            />
-            <input
-              type="number"
-              min={1}
-              placeholder="Capacity (default 25)"
-              value={vehicleCapacityInput}
-              onChange={(e) => setVehicleCapacityInput(e.target.value)}
-              className="w-40 rounded border border-white/30 bg-white/15 px-2 py-1 placeholder:text-white/70 text-white outline-none"
-            />
+        <div style={{ zIndex: 9999 }} className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-700 text-white px-6 py-4 rounded-xl shadow-2xl flex flex-col gap-4 animate-in fade-in slide-in-from-top-4 min-w-[500px]">
+          <div className="flex justify-between items-center border-b border-white/20 pb-2">
+            <span className="font-semibold text-base">Selecting Bins: {selectedBins.length} selected</span>
+            <button
+              onClick={() => {
+                setSelectionMode(false);
+                clearSelectedBinIcons(selectedBins);
+                setSelectedBins([]);
+              }}
+              className="text-white/70 hover:text-white transition-colors p-1"
+              title="Close"
+            >
+              ✕
+            </button>
           </div>
-          <div className="flex items-center bg-white/20 rounded p-1 text-sm font-medium">
+
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <label className="block text-white/80 mb-1 text-xs font-medium">Select Vehicle</label>
+              <select
+                value={selectedVehicleId}
+                onChange={e => setSelectedVehicleId(e.target.value)}
+                className="w-full rounded border border-white/30 bg-white/15 px-3 py-2 text-white outline-none [&>option]:text-gray-900"
+              >
+                <option value="">-- Choose Vehicle --</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.vehicleCode} (Cap: {v.capacity || 25})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-white/80 mb-1 text-xs font-medium">Select Driver</label>
+              <select
+                value={selectedDriverId}
+                onChange={e => setSelectedDriverId(e.target.value)}
+                className="w-full rounded border border-white/30 bg-white/15 px-3 py-2 text-white outline-none [&>option]:text-gray-900"
+              >
+                <option value="">-- Choose Driver --</option>
+                {drivers.map(d => (
+                  <option key={d.id} value={d.id}>{d.driverCode} - {d.name || 'Unnamed'}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-white/80 mb-1 text-xs font-medium">Collectors (Select 2 or more)</label>
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto bg-white/5 p-3 rounded border border-white/10">
+              {collectors.length === 0 ? (
+                <span className="text-white/50 text-xs italic">No collectors available</span>
+              ) : (
+                collectors.map(c => (
+                  <label key={c.empId} className={`flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors border select-none ${selectedCollectorIds.includes(String(c.empId)) ? 'bg-white/30 border-white/50' : 'bg-white/10 border-transparent hover:bg-white/20'}`}>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={selectedCollectorIds.includes(String(c.empId))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedCollectorIds([...selectedCollectorIds, String(c.empId)]);
+                        else setSelectedCollectorIds(selectedCollectorIds.filter(id => id !== String(c.empId)));
+                      }}
+                    />
+                    <span className="text-sm">{c.empName || c.email}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end items-center mt-2">
             <button
               onClick={async () => {
                 if (selectedBins.length === 0) {
                   alert("Please select at least one bin");
                   return;
                 }
+                if (!selectedVehicleId) {
+                  alert("Please select a vehicle");
+                  return;
+                }
+                if (!selectedDriverId) {
+                  alert("Please select a driver");
+                  return;
+                }
+                if (selectedCollectorIds.length < 2) {
+                  alert("Please select at least two collectors");
+                  return;
+                }
 
-                const requestedVehicleCount = Number(vehicleCountInput);
-                const requestedCapacity = Number(vehicleCapacityInput);
-
-                const vehicleCount = Number.isFinite(requestedVehicleCount) && requestedVehicleCount > 0
-                  ? Math.floor(requestedVehicleCount)
-                  : DEFAULT_VEHICLE_COUNT;
-
-                const capacity = Number.isFinite(requestedCapacity) && requestedCapacity > 0
-                  ? Math.floor(requestedCapacity)
-                  : DEFAULT_VEHICLE_CAPACITY;
+                const vehicle = vehicles.find(v => String(v.id) === selectedVehicleId);
+                const capacity = vehicle?.capacity || DEFAULT_VEHICLE_CAPACITY;
 
                 try {
                   const selectedBinIds = selectedBins
@@ -626,11 +761,14 @@ export default function MapView() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       userId: getCurrentUserId(),
-                      vehicleCount,
-                      vehicleCapacities: Array.from({ length: vehicleCount }, () => capacity),
+                      vehicleCount: 1,
+                      vehicleCapacities: [capacity],
                       depotLat: DEPOT_LAT,
                       depotLng: DEPOT_LNG,
-                      selectedBinIds
+                      selectedBinIds,
+                      vehicleId: Number(selectedVehicleId),
+                      driverId: Number(selectedDriverId),
+                      collectorIds: selectedCollectorIds.map(Number)
                     })
                   });
 
@@ -645,7 +783,7 @@ export default function MapView() {
                   setActiveSessionId(snapshot.sessionId);
                   connectRouteSocket(snapshot.sessionId);
 
-                  // Exit mode
+                  // Exit selection mode
                   setSelectionMode(false);
                   clearSelectedBinIcons(selectedBins);
                   setSelectedBins([]);
@@ -654,20 +792,9 @@ export default function MapView() {
                   alert("Error generating routes");
                 }
               }}
-              className="px-3 py-1 hover:text-green-300 transition-colors"
+              className="px-6 py-2 bg-green-500 hover:bg-green-400 text-white font-semibold rounded shadow transition-colors"
             >
               Generate Route
-            </button>
-            <span className="w-px h-4 bg-white/40 mx-1"></span>
-            <button
-              onClick={() => {
-                setSelectionMode(false);
-                clearSelectedBinIcons(selectedBins);
-                setSelectedBins([]);
-              }}
-              className="px-3 py-1 hover:text-red-300 transition-colors cursor-pointer"
-            >
-              Cancel
             </button>
           </div>
         </div>
@@ -708,9 +835,100 @@ export default function MapView() {
         Create Route
       </button>
 
+      {/* SHOW ASSIGNED ROUTES BUTTON */}
+      <button
+        style={{ zIndex: 9999 }}
+        onClick={handleToggleAssignedRoutes}
+        className={`absolute top-28 right-4 z-[1000] flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm shadow-md transition-all duration-200 active:scale-95 ${showAssignedRouteMenu
+          ? "bg-gray-800 hover:bg-gray-900 text-white hover:shadow-lg"
+          : "bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg"
+          }`}
+      >
+        <Route className="w-4 h-4" />
+        Assigned Routes
+      </button>
+
+      {/* ASSIGNED ROUTES DROPDOWN */}
+      {showAssignedRouteMenu && (
+        <div style={{ zIndex: 9999 }} className="absolute top-40 right-4 z-[2000] bg-white rounded-xl shadow-xl border border-gray-100 w-72 overflow-hidden flex flex-col max-h-64 overflow-y-auto">
+          {loadingRoutes ? (
+            <div className="p-4 text-sm text-gray-500 text-center">Loading routes...</div>
+          ) : assignedRoutes.length === 0 ? (
+            <div className="p-4 text-sm text-gray-500 text-center">No assigned routes found.</div>
+          ) : (
+            assignedRoutes.map((r, i) => (
+              <button
+                key={r.sessionId || r.id || i}
+                onClick={async () => {
+                  setShowAssignedRouteMenu(false);
+                  clearRouteVisualization();
+
+                  try {
+                    const res = await fetch(
+                      `${API_ORIGIN}/api/route-sessions/${r.sessionId}/routes`,
+                      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+                    );
+                    if (!res.ok) throw new Error('Failed to fetch route');
+
+                    const vehicleRoutes = await res.json();
+
+                    // Build a snapshot shape compatible with visualizeRoutes()
+                    const fakeSnapshot: RouteSessionSnapshot = {
+                      sessionId: r.sessionId,
+                      userId: 0,
+                      version: 0,
+                      status: 'READY',
+                      trigger: 'ASSIGNED_ROUTES',
+                      selectedBinIds: [],
+                      addedBinIds: [],
+                      removedBinIds: [],
+                      route: {
+                        totalVehiclesUsed: vehicleRoutes.length,
+                        routes: Object.fromEntries(
+                          vehicleRoutes.map((vr: any, idx: number) => [
+                            String(idx),
+                            {
+                              vehicleId: idx,
+                              capacity: vr.capacity,
+                              totalBins: vr.totalBins,
+                              estimatedDurationSeconds: vr.estimatedDurationSeconds,
+                              binSequence: (vr.binStops ?? []).map((s: any) => ({
+                                stopOrder: s.stopOrder,
+                                binId: s.binId,
+                                lat: s.lat,
+                                lng: s.lng,
+                                durationFromPrevStopSeconds: s.durationFromPrevSeconds,
+                              }))
+                            }
+                          ])
+                        )
+                      },
+                      message: null
+                    };
+
+                    await visualizeRoutes(fakeSnapshot);
+                  } catch (e) {
+                    console.error('Failed to visualize assigned route', e);
+                  }
+                }}
+                className="flex items-start text-left px-4 py-3 hover:bg-indigo-50 transition-colors border-b border-gray-100 group"
+              >
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg group-hover:bg-indigo-200 group-hover:text-indigo-700 transition-colors shrink-0">
+                  <Route className="w-5 h-5" />
+                </div>
+                <div className="ml-3 min-w-0">
+                  <span className="block font-semibold text-gray-800 text-sm truncate">Route #{r.id || i + 1}</span>
+                  <span className="block text-xs text-gray-500 mt-0.5 truncate">Vehicle: {r.vehicleCode || 'N/A'}</span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
       {/* DROPDOWN */}
       {showRouteMenu && (
-        <div style={{ zIndex: 9999 }} className="absolute top-28 right-4 z-[2000] bg-white rounded-xl shadow-xl border border-gray-100 w-72 overflow-hidden flex flex-col">
+        <div style={{ zIndex: 9999 }} className="absolute top-16 right-40 z-[2000] bg-white rounded-xl shadow-xl border border-gray-100 w-72 overflow-hidden flex flex-col">
           <button
             onClick={handleSelectBins}
             className="flex items-start text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-100 group"
