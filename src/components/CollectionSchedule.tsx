@@ -18,8 +18,9 @@ interface CollectorUser {
 
 interface VehicleItem {
   id: number;
-  vehicleCode?: string;
+
   licensePlate?: string;
+  vehicleCode?: string;
   assignedDriverId?: number | null;
   assignedCouncil?: string;
 }
@@ -358,7 +359,7 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
                     <option value="">Select vehicle</option>
                     {vehicles.map((vehicle) => (
                       <option key={vehicle.id} value={String(vehicle.id)}>
-                        {vehicle.vehicleCode} ({vehicle.licensePlate})
+                        {vehicle.vehicleCode ? `${vehicle.vehicleCode} (${vehicle.licensePlate})` : vehicle.licensePlate}
                       </option>
                     ))}
                   </select>
