@@ -156,9 +156,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
       try {
         const [vehRes, drvRes, usrRes] = await Promise.all([
-          fetch(`${API_ORIGIN}/api/vehicles`, { headers: authHeaders }),
-          fetch(`${API_ORIGIN}/api/drivers`, { headers: authHeaders }),
-          fetch(`${API_ORIGIN}/api/users`, { headers: authHeaders })
+          fetch(`${API_ORIGIN}/api/route-sessions/available-vehicles`, { headers: authHeaders }),
+          fetch(`${API_ORIGIN}/api/route-sessions/available-drivers`, { headers: authHeaders }),
+          fetch(`${API_ORIGIN}/api/route-sessions/available-collectors`, { headers: authHeaders })
         ]);
 
         if (vehRes.ok) {
@@ -171,8 +171,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         }
         if (usrRes.ok) {
           const usrJson = await usrRes.json();
+          // Backend returns CollectorLabour objects directly from available-collectors
           if (usrJson.data) {
-            setCollectors(usrJson.data.filter((u: any) => u.role === 'COLLECTOR'));
+            setCollectors(usrJson.data);
           }
         }
       } catch (e) {
@@ -180,7 +181,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       }
     };
     fetchResources();
-  }, []);
+  }, [selectionMode]); // Re-fetch when entering selection mode to get latest availability
 
   const toggleBinSelection = (id: string) => {
     setSelectedBins(prev => {
@@ -440,6 +441,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     });
 
     loadBins();
+    loadActiveSession();
 
     routeLayerRef.current = L.featureGroup().addTo(map);
 
@@ -500,14 +502,20 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   // ===============================
   // TOOLTIP
   // ===============================
-  const renderTooltip = (d: BinData) => `
+  const renderTooltip = (d: BinData) => {
+    const statusLabel = d.status === 'full' ? 'Full' :
+                        d.status === 'half' ? 'Half' :
+                        d.status === 'empty' ? 'Empty' :
+                        'Not Checked';
+    return `
     <div>
       <strong>Code:</strong> ${d.binCode || d.id}<br/>
-      <strong>Fill:</strong> ${d.fillLevel}%<br/>
+      <strong>Fill Status:</strong> ${statusLabel}<br/>
       <strong>Priority:</strong> ${d.priority}<br/>
       <strong>Zone:</strong> ${d.zone}
     </div>
   `;
+  };
 
   // ===============================
   // MARKER
@@ -704,6 +712,27 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  const loadActiveSession = async () => {
+    try {
+      const userId = getCurrentUserId();
+      const res = await fetch(
+        `${API_ORIGIN}/api/route-sessions/user/${userId}/active`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      if (res.ok) {
+        const snapshot = await res.json() as RouteSessionSnapshot;
+        setActiveSessionId(snapshot.sessionId);
+        setRouteStatus(snapshot.status || '');
+        if (snapshot.status === 'READY') {
+          await visualizeRoutes(snapshot);
+        }
+        connectRouteSocket(snapshot.sessionId);
+      }
+    } catch (e) {
+      console.error('Failed to load active session on mount', e);
+    }
+  };
+
   return (
     <div className="w-full h-full relative">
 
@@ -795,7 +824,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               >
                 <option value="">-- Choose Vehicle --</option>
                 {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.vehicleCode} (Cap: {v.capacity || 25})</option>
+                  <option key={v.id} value={v.id}>{v.licensePlate || v.vehicleCode} (Cap: {v.capacity || 25})</option>
                 ))}
               </select>
             </div>
@@ -808,7 +837,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               >
                 <option value="">-- Choose Driver --</option>
                 {drivers.map(d => (
-                  <option key={d.id} value={d.id}>{d.driverCode} - {d.name || 'Unnamed'}</option>
+                  <option key={d.empId} value={d.empId}>{d.empName || 'Unnamed'}</option>
                 ))}
               </select>
             </div>
@@ -821,17 +850,19 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                 <span className="text-white/50 text-xs italic">No collectors available</span>
               ) : (
                 collectors.map(c => (
-                  <label key={c.empId} className={`flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition-colors border select-none ${selectedCollectorIds.includes(String(c.empId)) ? 'bg-white/30 border-white/50' : 'bg-white/10 border-transparent hover:bg-white/20'}`}>
+                  <label key={c.id} className={`flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors border select-none w-full sm:w-[calc(50%-0.5rem)] ${selectedCollectorIds.includes(String(c.id)) ? 'bg-white/30 border-white/50' : 'bg-white/10 border-transparent hover:bg-white/20'}`}>
                     <input
                       type="checkbox"
-                      className="hidden"
-                      checked={selectedCollectorIds.includes(String(c.empId))}
+                      className="w-4 h-4 rounded border-white/30 bg-transparent text-blue-600 focus:ring-0 focus:ring-offset-0"
+                      checked={selectedCollectorIds.includes(String(c.id))}
                       onChange={(e) => {
-                        if (e.target.checked) setSelectedCollectorIds([...selectedCollectorIds, String(c.empId)]);
-                        else setSelectedCollectorIds(selectedCollectorIds.filter(id => id !== String(c.empId)));
+                        if (e.target.checked) setSelectedCollectorIds([...selectedCollectorIds, String(c.id)]);
+                        else setSelectedCollectorIds(selectedCollectorIds.filter(id => id !== String(c.id)));
                       }}
                     />
-                    <span className="text-sm">{c.empName || c.email}</span>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{c.name}</span>
+                    </div>
                   </label>
                 ))
               )}
@@ -891,6 +922,11 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                   setRouteStatus(snapshot.status || 'PROCESSING');
                   setRouteError('');
                   setActiveSessionId(snapshot.sessionId);
+                  
+                  if (snapshot.status === 'READY') {
+                    await visualizeRoutes(snapshot);
+                  }
+                  
                   connectRouteSocket(snapshot.sessionId);
 
                   // Exit selection mode

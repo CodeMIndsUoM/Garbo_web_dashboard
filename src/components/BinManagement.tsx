@@ -36,13 +36,12 @@ interface Bin {
   id: number;
   binCode: string;
   location: string;
-  type: string;
   zone?: string;
   council?: string;
   fillLevel: number;
   status: string;
-  lastCollection: string;
   coordinates: string;
+  isAssigned?: boolean;
 }
 
 export function BinManagement({ council, userRole }: { council?: { name?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
@@ -58,7 +57,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     location: '',
     type: 'General Waste',
     zone: '',
-    status: 'normal',
+    status: 'notChecked',
     coordinates: ''
   });
 
@@ -125,7 +124,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           location: '',
           type: 'General Waste',
           zone: '',
-          status: 'normal',
+          status: 'notChecked',
           coordinates: ''
         });
         fetchBins();
@@ -157,8 +156,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
   const filteredBins = bins.filter(bin => 
     bin.binCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    bin.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    bin.type?.toLowerCase().includes(searchQuery.toLowerCase())
+    bin.location?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const councilScopedBins = useMemo(() => {
@@ -239,19 +237,19 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Type</label>
+                <label className="text-sm font-medium text-gray-700">Initial Fill Status</label>
                 <Select 
-                  value={newBin.type} 
-                  onValueChange={(val) => setNewBin({...newBin, type: val})}
+                  value={newBin.status} 
+                  onValueChange={(val) => setNewBin({...newBin, status: val})}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
+                    <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="General Waste">General Waste</SelectItem>
-                    <SelectItem value="Recyclables">Recyclables</SelectItem>
-                    <SelectItem value="Organic Waste">Organic Waste</SelectItem>
-                    <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
+                    <SelectItem value="notChecked">Not Checked</SelectItem>
+                    <SelectItem value="empty">Empty</SelectItem>
+                    <SelectItem value="half">Half</SelectItem>
+                    <SelectItem value="full">Full</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -338,7 +336,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <Input
-            placeholder="Search bins by ID, location, or type..."
+            placeholder="Search bins by ID or location..."
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -361,7 +359,13 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {councilScopedBins.map((bin) => (
-            <Card key={bin.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 group">
+            <Card key={bin.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 group overflow-hidden relative">
+              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                bin.status === 'full' ? 'bg-red-500' :
+                bin.status === 'half' ? 'bg-yellow-400' :
+                bin.status === 'empty' ? 'bg-green-500' :
+                'bg-white'
+              }`} />
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -373,16 +377,14 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge
-                      variant="secondary"
                       className={
-                        bin.status === 'critical'
-                          ? 'bg-red-50 text-red-700 border-red-100'
-                          : bin.status === 'warning'
-                          ? 'bg-orange-50 text-orange-700 border-orange-100'
-                          : 'bg-green-50 text-green-700 border-green-100'
+                        bin.isAssigned
+                          ? 'bg-blue-50 text-blue-700 border-blue-100'
+                          : 'bg-gray-50 text-gray-700 border-gray-100'
                       }
+                      variant="outline"
                     >
-                      {bin.status}
+                      {bin.isAssigned ? 'Assigned' : 'Not Assigned'}
                     </Badge>
                     <button 
                       onClick={() => handleDeleteBin(bin.id)}
@@ -397,32 +399,21 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   {/* Fill Level */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-600">Fill Level</span>
-                      <span className="text-sm font-bold text-gray-900">{bin.fillLevel}%</span>
+                      <span className="text-sm font-medium text-gray-600">Fill Status</span>
+                      <span className={`text-sm font-bold ${
+                        bin.status === 'full' ? 'text-red-600' :
+                        bin.status === 'half' ? 'text-yellow-600' :
+                        bin.status === 'empty' ? 'text-green-600' :
+                        'text-gray-400'
+                      }`}>
+                        {bin.status === 'full' ? 'Full' :
+                         bin.status === 'half' ? 'Half' :
+                         bin.status === 'empty' ? 'Empty' :
+                         'Not Checked'}
+                      </span>
                     </div>
-                    <Progress 
-                      value={bin.fillLevel} 
-                      className={
-                        bin.fillLevel >= 80
-                          ? '[&>div]:bg-red-500'
-                          : bin.fillLevel >= 60
-                          ? '[&>div]:bg-orange-500'
-                          : '[&>div]:bg-green-500'
-                      }
-                    />
                   </div>
 
-                  {/* Info */}
-                  <div className="pt-4 border-t border-gray-50 space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Type</span>
-                      <span className="font-medium text-gray-900">{bin.type}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">Last Collection</span>
-                      <span className="font-medium text-gray-900">{bin.lastCollection || 'No data'}</span>
-                    </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>
