@@ -57,7 +57,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     binCode: '',
     location: '',
     type: 'General Waste',
-    zone: council?.name || '',
+    zone: '',
     status: 'normal',
     coordinates: ''
   });
@@ -93,11 +93,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     fetchBins();
   }, []);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (!defaultCouncil) return;
-    setNewBin((prev) => ({ ...prev, zone: defaultCouncil }));
-  }, [isAdmin, defaultCouncil]);
+
 
   const handleCreateBin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,8 +105,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
       const payload = {
         ...newBin,
-        // Enforce council ownership server payload for admins.
-        zone: isAdmin ? defaultCouncil : newBin.zone,
+        zone: newBin.zone,
       };
 
       const response = await fetch(API_BASE, {
@@ -129,7 +124,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           binCode: '',
           location: '',
           type: 'General Waste',
-          zone: defaultCouncil,
+          zone: '',
           status: 'normal',
           coordinates: ''
         });
@@ -175,6 +170,26 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     });
   }, [filteredBins, council]);
 
+  const nextBinCode = useMemo(() => {
+    if (!council?.name) return 'Auto-generated';
+    const prefix = `${council.name.trim()}-`.toLowerCase();
+    
+    const maxNumber = councilScopedBins.reduce((max, bin) => {
+      const code = bin.binCode?.toLowerCase() || '';
+      if (code.startsWith(prefix)) {
+        const numStr = code.slice(prefix.length).trim();
+        if (/^\d+$/.test(numStr)) {
+          return Math.max(max, parseInt(numStr, 10));
+        }
+      }
+      return max;
+    }, 0);
+    
+    return `${council.name.trim()}-${maxNumber + 1}`;
+  }, [council, councilScopedBins]);
+
+
+
   return (
     <div className="p-8">
       <div className="flex justify-between items-start mb-8">
@@ -196,20 +211,30 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             </DialogHeader>
             <form onSubmit={handleCreateBin} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Bin Code</label>
+                <label className="text-sm font-medium text-gray-700">Bin Code (Auto-generated)</label>
                 <Input 
-                  placeholder="e.g. BIN-100" 
-                  value={newBin.binCode}
-                  onChange={(e) => setNewBin({...newBin, binCode: e.target.value})}
+                  value={nextBinCode}
+                  disabled
+                  className="bg-gray-50 text-gray-500 font-semibold"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
+                <Input 
+                  placeholder="lat, lng" 
+                  value={newBin.location}
+                  onChange={(e) => setNewBin({...newBin, location: e.target.value})}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Location</label>
+                <label className="text-sm font-medium text-gray-700">Zone</label>
                 <Input 
-                  placeholder="Street name, Area" 
-                  value={newBin.location}
-                  onChange={(e) => setNewBin({...newBin, location: e.target.value})}
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 1" 
+                  value={newBin.zone}
+                  onChange={(e) => setNewBin({...newBin, zone: e.target.value})}
                   required
                 />
               </div>
@@ -229,31 +254,6 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                     <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Council</label>
-                <Select
-                  value={newBin.zone}
-                  onValueChange={(val) => setNewBin({ ...newBin, zone: val })}
-                  disabled={isAdmin}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={isAdmin ? (defaultCouncil || 'No council found') : "Select council"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNCILS.map((name) => (
-                      <SelectItem key={name} value={name}>{name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Coordinates (Optional)</label>
-                <Input 
-                  placeholder="lat, lng" 
-                  value={newBin.coordinates}
-                  onChange={(e) => setNewBin({...newBin, coordinates: e.target.value})}
-                />
               </div>
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
                 Save Bin

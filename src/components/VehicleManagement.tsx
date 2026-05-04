@@ -11,7 +11,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 interface Vehicle {
   id: number;
-  vehicleCode: string;
+
   licensePlate: string;
   type: string;
   capacity: number | null;
@@ -30,6 +30,7 @@ interface Driver {
   id: number;
   driverCode: string;
   name?: string;
+  council?: string;
 }
 
 const COUNCILS = [
@@ -81,17 +82,25 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
   const fetchDrivers = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/drivers`, { headers: authHeaders() });
+      const councilQuery = council?.name || council?.id || '';
+      const url = `${API_BASE}/api/drivers${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
+      const res = await fetch(url, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) {
-        setDrivers(json.data);
+        const rawDrivers: Driver[] = Array.isArray(json.data) ? json.data : [];
+        if (council?.name) {
+          const councilName = council.name.toLowerCase();
+          setDrivers(rawDrivers.filter((d) => (d.council || '').toLowerCase() === councilName));
+        } else {
+          setDrivers(rawDrivers);
+        }
       }
     } catch {
       console.error('Failed to fetch drivers');
     } finally {
       setDriversLoading(false);
     }
-  }, []);
+  }, [council]);
 
   const fetchVehicles = useCallback(async () => {
     try {
@@ -138,7 +147,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   };
 
   const filteredVehicles = vehicles.filter(v =>
-    v.vehicleCode.toLowerCase().includes(search.toLowerCase()) ||
     v.licensePlate.toLowerCase().includes(search.toLowerCase()) ||
     v.type.toLowerCase().includes(search.toLowerCase())
   );
@@ -282,6 +290,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           onDelete={(driver) => { setShowDriversListModal(false); setDeletingDriver(driver); }}
           onCreated={() => { fetchDrivers(); fetchVehicles(); }}
           setGlobalError={setError}
+          council={council}
         />
       )}
 
@@ -299,7 +308,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <Input
-            placeholder="Search vehicles by code, license plate, or type..."
+            placeholder="Search vehicles by license plate or type..."
             className="pl-10"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -321,8 +330,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-gray-900 mb-1">{vehicle.vehicleCode}</h3>
-                    <p className="text-sm text-gray-500">{vehicle.licensePlate}</p>
+                    <h3 className="text-gray-900 mb-1">{vehicle.vehicleCode || vehicle.licensePlate}</h3>
+                    <p className="text-sm text-gray-500">{vehicle.vehicleCode ? vehicle.licensePlate : `ID: ${vehicle.id}`}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className={getStatusColor(vehicle.status)}>
@@ -422,7 +431,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-lg text-gray-900 mb-2">Delete Vehicle</h3>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to delete <strong>{deletingVehicle.vehicleCode}</strong> ({deletingVehicle.licensePlate})?
+              Are you sure you want to delete <strong>{deletingVehicle.licensePlate}</strong>?
             </p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setDeletingVehicle(null)} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
@@ -472,7 +481,7 @@ function VehicleFormModal({
   const isAdmin = userRole === 'admin';
   const defaultCouncil = council?.name || '';
   const [form, setForm] = useState({
-    vehicleCode: vehicle?.vehicleCode || '',
+
     licensePlate: vehicle?.licensePlate || '',
     type: vehicle?.type || VEHICLE_TYPES[0],
     capacity: vehicle?.capacity?.toString() || '',
@@ -497,8 +506,8 @@ function VehicleFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.vehicleCode.trim() || !form.licensePlate.trim()) {
-      setFormError('Vehicle code and license plate are required');
+    if (!form.licensePlate.trim()) {
+      setFormError('License plate is required');
       return;
     }
     setSaving(true);
@@ -511,7 +520,7 @@ function VehicleFormModal({
     }
 
     const payload = {
-      vehicleCode: form.vehicleCode,
+
       licensePlate: form.licensePlate,
       type: form.type,
       capacity: form.capacity ? parseFloat(form.capacity) : null,
@@ -554,10 +563,7 @@ function VehicleFormModal({
         {formError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Vehicle Code *</label>
-              <Input value={form.vehicleCode} onChange={e => setForm({...form, vehicleCode: e.target.value})} placeholder="VEH-001" disabled={isEditing} />
-            </div>
+
             <div>
               <label className="block text-sm text-gray-600 mb-1">License Plate *</label>
               <Input value={form.licensePlate} onChange={e => setForm({...form, licensePlate: e.target.value})} placeholder="ABC-1234" />
@@ -643,6 +649,7 @@ function DriversListModal({
   onDelete,
   onCreated,
   setGlobalError,
+  council,
 }: {
   drivers: Driver[];
   loading: boolean;
@@ -651,20 +658,21 @@ function DriversListModal({
   onDelete: (driver: Driver) => void;
   onCreated: () => void;
   setGlobalError: (msg: string) => void;
+  council?: { name?: string; id?: string } | null;
 }) {
   const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ driverCode: '', name: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '' });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.driverCode.trim() || !form.name.trim()) {
-      setFormError('Driver code and name are required');
+    if (!form.name.trim()) {
+      setFormError('Driver name is required');
       return;
     }
 
@@ -675,11 +683,16 @@ function DriversListModal({
       const res = await fetch(`${API_BASE}/api/drivers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ driverCode: form.driverCode.trim(), name: form.name.trim() }),
+        body: JSON.stringify({ 
+          name: form.name.trim(), 
+          email: form.email.trim() || null,
+          phone: form.phone.trim() || null,
+          council: council?.name || 'Unassigned' 
+        }),
       });
       const json = await res.json().catch(() => null);
       if (res.ok && json?.success) {
-        setForm({ driverCode: '', name: '' });
+        setForm({ name: '', email: '', phone: '' });
         setShowCreate(false);
         onCreated();
       } else {
@@ -713,13 +726,20 @@ function DriversListModal({
           <div className="mb-6 border border-gray-200 rounded-lg p-4">
             {formError && <div className="mb-3 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
             <form onSubmit={handleCreate} className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Driver Code *</label>
-                <Input value={form.driverCode} onChange={e => setForm({ ...form, driverCode: e.target.value })} placeholder="DRV-001" />
-              </div>
+
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
                 <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Email</label>
+                  <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="kasun@example.com" />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Phone</label>
+                  <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0771234567" />
+                </div>
               </div>
               <div className="flex gap-2 justify-end pt-1">
                 <button
@@ -751,8 +771,12 @@ function DriversListModal({
             {drivers.map((d) => (
               <div key={d.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
                 <div className="min-w-0">
-                  <div className="text-sm text-gray-900 truncate">{d.driverCode}{d.name ? ` - ${d.name}` : ''}</div>
-                  <div className="text-xs text-gray-500">#{d.id}</div>
+                  <div className="text-sm text-gray-900 truncate font-medium">{d.driverCode}{d.name ? ` - ${d.name}` : ''}</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-0.5">
+                    <div className="text-xs text-gray-400">#{d.id}</div>
+                    {d.email && <div className="text-xs text-blue-500 truncate max-w-[150px]">{d.email}</div>}
+                    {d.phone && <div className="text-xs text-gray-500">{d.phone}</div>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -800,14 +824,18 @@ function DriverEditModal({
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
-  const [form, setForm] = useState({ driverCode: driver.driverCode || '', name: driver.name || '' });
+  const [form, setForm] = useState({ 
+    name: driver.name || '',
+    email: driver.email || '',
+    phone: driver.phone || ''
+  });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.driverCode.trim() || !form.name.trim()) {
-      setFormError('Driver code and name are required');
+    if (!form.name.trim()) {
+      setFormError('Driver name is required');
       return;
     }
     setSaving(true);
@@ -817,7 +845,11 @@ function DriverEditModal({
       const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ driverCode: form.driverCode.trim(), name: form.name.trim() }),
+        body: JSON.stringify({ 
+          name: form.name.trim(),
+          email: form.email.trim() || null,
+          phone: form.phone.trim() || null
+        }),
       });
       const json = await res.json();
       if (json.success) {
@@ -841,13 +873,20 @@ function DriverEditModal({
         </div>
         {formError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Driver Code *</label>
-            <Input value={form.driverCode} onChange={e => setForm({ ...form, driverCode: e.target.value })} placeholder="DRV-001" />
-          </div>
+
           <div>
             <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
             <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Email</label>
+              <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="kasun@example.com" />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Phone</label>
+              <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0771234567" />
+            </div>
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
