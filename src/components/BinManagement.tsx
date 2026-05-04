@@ -57,8 +57,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     location: '',
     type: 'General Waste',
     zone: '',
-    status: 'notChecked',
-    coordinates: ''
+    status: 'empty',
+    coordinates: '',
   });
 
   const isAdmin = userRole === 'admin';
@@ -102,9 +102,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         return;
       }
 
-      const payload = {
+      const binDataToSubmit = {
         ...newBin,
-        zone: newBin.zone,
+        status: 'empty'
       };
 
       const response = await fetch(API_BASE, {
@@ -113,7 +113,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           'Content-Type': 'application/json',
           ...authHeaders(),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(binDataToSubmit),
       });
       const result = await response.json();
       if (result.success) {
@@ -124,8 +124,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           location: '',
           type: 'General Waste',
           zone: '',
-          status: 'notChecked',
-          coordinates: ''
+          status: 'empty',
+          coordinates: '',
         });
         fetchBins();
       } else {
@@ -209,7 +209,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             </DialogHeader>
             <form onSubmit={handleCreateBin} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Bin Code (Auto-generated)</label>
+                <label className="text-sm font-medium text-gray-700">Bin Code</label>
                 <Input 
                   value={nextBinCode}
                   disabled
@@ -236,23 +236,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Initial Fill Status</label>
-                <Select 
-                  value={newBin.status} 
-                  onValueChange={(val) => setNewBin({...newBin, status: val})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="notChecked">Not Checked</SelectItem>
-                    <SelectItem value="empty">Empty</SelectItem>
-                    <SelectItem value="half">Half</SelectItem>
-                    <SelectItem value="full">Full</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
                 Save Bin
               </Button>

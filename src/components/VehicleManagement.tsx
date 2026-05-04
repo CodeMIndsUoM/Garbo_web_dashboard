@@ -195,12 +195,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           <p className="text-gray-600">Manage collection vehicles, assignments, and availability</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowDriversListModal(true)}
-            className="px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Drivers
-          </button>
+
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -377,15 +372,29 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
-      {/* Create / Edit Modal */}
-      {(showCreateModal || editingVehicle) && (
+      {showCreateModal && (
         <VehicleFormModal
-          vehicle={editingVehicle}
-          drivers={drivers}
+          vehicle={null}
           council={council}
           userRole={userRole}
-          onClose={() => { setShowCreateModal(false); setEditingVehicle(null); }}
-          onSaved={() => { setShowCreateModal(false); setEditingVehicle(null); fetchVehicles(); }}
+          onClose={() => setShowCreateModal(false)}
+          onSaved={() => {
+            setShowCreateModal(false);
+            fetchVehicles();
+          }}
+        />
+      )}
+
+      {editingVehicle && (
+        <VehicleFormModal
+          vehicle={editingVehicle}
+          council={council}
+          userRole={userRole}
+          onClose={() => setEditingVehicle(null)}
+          onSaved={() => {
+            setEditingVehicle(null);
+            fetchVehicles();
+          }}
         />
       )}
 
@@ -413,14 +422,12 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
 function VehicleFormModal({
   vehicle,
-  drivers,
   council,
   userRole,
   onClose,
   onSaved
 }: {
   vehicle: Vehicle | null;
-  drivers: BinCollector[];
   council?: { name?: string; id?: string } | null;
   userRole?: 'admin' | 'superadmin' | null;
   onClose: () => void;
@@ -435,7 +442,6 @@ function VehicleFormModal({
     capacity: vehicle?.capacity?.toString() || '',
     status: vehicle?.status || 'available',
     assignedCouncil: vehicle?.assignedCouncil || defaultCouncil,
-    assignedDriverId: vehicle?.assignedDriverId?.toString() || '',
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -473,7 +479,6 @@ function VehicleFormModal({
       status: form.status,
       // Enforce council ownership server payload for admins.
       assignedCouncil: (isAdmin ? defaultCouncil : form.assignedCouncil) || null,
-      assignedDriverId: form.assignedDriverId ? parseInt(form.assignedDriverId) : null,
     };
 
     try {
@@ -525,49 +530,6 @@ function VehicleFormModal({
               <Input type="number" step="0.1" value={form.capacity} onChange={e => setForm({...form, capacity: e.target.value})} placeholder="5.0" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Status</label>
-              <select 
-                value={form.status} 
-                onChange={e => setForm({...form, status: e.target.value})} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50 cursor-not-allowed"
-                disabled
-              >
-                {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
-              </select>
-              <p className="text-[10px] text-gray-400 mt-1">Status is updated automatically or via card actions.</p>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Assigned Council</label>
-            <select
-              value={form.assignedCouncil}
-              onChange={e => setForm({ ...form, assignedCouncil: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                disabled={isAdmin}
-            >
-                <option value="">{isAdmin ? (defaultCouncil || 'No council found') : 'Select council'}</option>
-                {COUNCILS.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Assigned Driver (Staff)</label>
-            <select
-              value={form.assignedDriverId}
-              onChange={e => setForm({ ...form, assignedDriverId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">-- No Driver --</option>
-              {drivers.map((d) => (
-                <option key={d.empId} value={d.empId.toString()}>
-                  {d.empName || d.email} (ID: {d.empId})
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="flex gap-3 justify-end pt-4">
             <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
@@ -606,45 +568,7 @@ function DriversListModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
 
-        {showCreate && (
-          <div className="mb-6 border border-gray-200 rounded-lg p-4">
-            {formError && <div className="mb-3 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
-            <form onSubmit={handleCreate} className="space-y-3">
 
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
-                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Email</label>
-                  <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="kasun@example.com" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Phone</label>
-                  <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0771234567" />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setShowCreate(false); setFormError(''); }}
-                  className="px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm"
-                >
-                  <Check className="w-4 h-4" />
-                  {saving ? 'Saving...' : 'Create Driver'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
         {loading ? (
           <div className="text-sm text-gray-500 py-8 text-center">Loading staff members...</div>

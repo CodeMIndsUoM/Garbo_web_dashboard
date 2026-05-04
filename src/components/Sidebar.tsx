@@ -17,7 +17,7 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
       { id: 'home' as PageType, label: 'Home', icon: LayoutDashboard },
     ] : []),
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'schedule' as PageType, label: 'Collection Schedule', icon: Calendar },
+    { id: 'schedule' as PageType, label: 'Bin Collection', icon: Calendar },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
     { id: 'vehicles' as PageType, label: 'Vehicle Management', icon: Truck },
     { id: 'map' as PageType, label: 'Map', icon: MapIcon },

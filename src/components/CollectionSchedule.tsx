@@ -251,7 +251,7 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-gray-900 mb-2">Collection Schedule</h2>
+          <h2 className="text-gray-900 mb-2">Bin Collection</h2>
           <p className="text-gray-600">Manage and track waste collection schedules</p>
           {council?.name && <p className="text-sm text-gray-500 mt-1">Showing data for council: {council.name}</p>}
         </div>
@@ -400,30 +400,7 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Collector Vehicle Assignment</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loadingAssignments ? (
-              <div className="text-gray-500">Loading assignments...</div>
-            ) : collectors.length === 0 ? (
-              <div className="text-gray-500">No authenticated collectors found.</div>
-            ) : (
-              <div className="space-y-3">
-                {collectors.map((collector) => (
-                  <div key={collector.empId} className="p-3 border border-gray-200 rounded-lg flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-gray-900 font-medium">{collector.empName || collector.email}</p>
-                      <p className="text-xs text-gray-500">{collector.email}</p>
-                    </div>
-                    <Badge className="bg-blue-100 text-blue-700">Driver</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+
       </div>
 
       <Card className="mt-8">
