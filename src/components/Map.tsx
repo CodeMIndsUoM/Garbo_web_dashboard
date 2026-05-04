@@ -565,7 +565,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           zone: newBin.zone,
           fillLevel: 0,
           priority: 'medium',
-          status: 'normal'
+          status: 'empty'
         })
       });
 
@@ -720,13 +720,57 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );
       if (res.ok) {
-        const snapshot = await res.json() as RouteSessionSnapshot;
-        setActiveSessionId(snapshot.sessionId);
-        setRouteStatus(snapshot.status || '');
-        if (snapshot.status === 'READY') {
-          await visualizeRoutes(snapshot);
+        const json = await res.json();
+        const assignments = Array.isArray(json) ? json : (json.data || []);
+        if (assignments.length > 0) {
+          const first = assignments[0];
+          setActiveSessionId(first.sessionId);
+          setRouteStatus('READY');
+
+          const routeRes = await fetch(`${API_ORIGIN}/api/route-sessions/${first.sessionId}/routes`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+
+          if (routeRes.ok) {
+            const vRoutes = await routeRes.json();
+            const vehicleRoutes = Array.isArray(vRoutes) ? vRoutes : (vRoutes.data || []);
+
+            const fakeSnapshot: RouteSessionSnapshot = {
+              sessionId: first.sessionId,
+              userId,
+              version: 0,
+              status: 'READY',
+              trigger: 'INITIAL_LOAD',
+              selectedBinIds: [],
+              addedBinIds: [],
+              removedBinIds: [],
+              route: {
+                totalVehiclesUsed: vehicleRoutes.length,
+                routes: Object.fromEntries(
+                  vehicleRoutes.map((vr: any, idx: number) => [
+                    String(idx),
+                    {
+                      vehicleId: idx,
+                      capacity: vr.capacity,
+                      totalBins: vr.totalBins,
+                      estimatedDurationSeconds: vr.estimatedDurationSeconds,
+                      binSequence: (vr.binStops ?? []).map((s: any) => ({
+                        stopOrder: s.stopOrder,
+                        binId: s.binId,
+                        lat: s.lat,
+                        lng: s.lng,
+                        durationFromPrevStopSeconds: s.durationFromPrevSeconds,
+                      }))
+                    }
+                  ])
+                )
+              },
+              message: null
+            };
+            await visualizeRoutes(fakeSnapshot);
+          }
+          connectRouteSocket(first.sessionId);
         }
-        connectRouteSocket(snapshot.sessionId);
       }
     } catch (e) {
       console.error('Failed to load active session on mount', e);
@@ -745,7 +789,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           </DialogHeader>
           <form onSubmit={handleCreateBinSubmit} className="space-y-4 pt-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Bin Code (Auto-generated)</label>
+              <label className="text-sm font-medium text-gray-700">Bin Code</label>
               <Input 
                 value={nextBinCode}
                 disabled
@@ -1016,7 +1060,8 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                     );
                     if (!res.ok) throw new Error('Failed to fetch route');
 
-                    const vehicleRoutes = await res.json();
+                    const json = await res.json();
+                    const vehicleRoutes = Array.isArray(json) ? json : (json.data || []);
 
                     // Build a snapshot shape compatible with visualizeRoutes()
                     const fakeSnapshot: RouteSessionSnapshot = {
