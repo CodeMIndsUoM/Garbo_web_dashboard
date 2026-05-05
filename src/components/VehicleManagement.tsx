@@ -18,6 +18,7 @@ interface Vehicle {
   status: string;
   assignedCouncil: string;
   assignedDriverId: number | null;
+  assignedDriverName?: string | null;
   currentLocation: string;
   fuelLevel: number;
   isActive: boolean;
@@ -64,6 +65,7 @@ function getStatusLabel(status: string) {
 export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<BinCollector[]>([]);
+  const [allDrivers, setAllDrivers] = useState<BinCollector[]>([]);
   const [driversLoading, setDriversLoading] = useState(true);
   const [showDriversListModal, setShowDriversListModal] = useState(false);
   const [editingDriver, setEditingDriver] = useState<BinCollector | null>(null);
@@ -88,6 +90,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
       if (json.success) {
         const staff: any[] = Array.isArray(json.data) ? json.data : [];
         const collectors = staff.filter(s => (s.role || '').toString().toUpperCase() === 'BIN_COLLECTOR');
+        setAllDrivers(collectors);
         
         if (council?.name) {
           const councilName = council.name.toLowerCase();
@@ -130,15 +133,18 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
   const driversById = useMemo(() => {
     const map = new Map<number, BinCollector>();
-    for (const driver of drivers) map.set(driver.empId, driver);
+    for (const driver of allDrivers) map.set(driver.empId, driver);
     return map;
-  }, [drivers]);
+  }, [allDrivers]);
 
-  const getDriverLabel = useCallback((driverId: number | null) => {
-    if (!driverId) return 'Unassigned';
-    const driver = driversById.get(driverId);
-    if (!driver) return `#${driverId}`;
-    return driver.empName || `Staff #${driverId}`;
+  const getDriverLabel = useCallback((vehicle: Vehicle) => {
+    const { assignedDriverId, assignedDriverName } = vehicle;
+    if (!assignedDriverId) return 'Unassigned';
+    if (assignedDriverName) return assignedDriverName;
+    
+    const driver = driversById.get(assignedDriverId);
+    if (!driver) return `#${assignedDriverId}`;
+    return driver.empName || `Staff #${assignedDriverId}`;
   }, [driversById]);
 
   const handleDriverUpdated = () => {
@@ -333,7 +339,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 flex items-center gap-1"><User className="w-3 h-3" /> Driver</span>
-                      <span className="text-gray-900">{getDriverLabel(vehicle.assignedDriverId)}</span>
+                      <span className="text-gray-900">{getDriverLabel(vehicle)}</span>
                     </div>
                     {vehicle.currentLocation && (
                       <div className="flex items-center justify-between text-sm">

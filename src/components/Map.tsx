@@ -285,11 +285,17 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   };
 
   const visualizeRoutes = async (snapshot: RouteSessionSnapshot) => {
+    await visualizeRoutesInternal(snapshot, true);
+  };
+
+  const visualizeRoutesInternal = async (snapshot: RouteSessionSnapshot, clear = true) => {
     if (!leafletMapRef.current || !snapshot.route?.routes) {
       return;
     }
 
-    clearRouteVisualization();
+    if (clear) {
+      clearRouteVisualization();
+    }
 
     const routeEntries = Object.entries(snapshot.route.routes);
     await Promise.all(routeEntries.map(async ([vehicleKey, vehicleRoute], index) => {
@@ -723,53 +729,68 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         const json = await res.json();
         const assignments = Array.isArray(json) ? json : (json.data || []);
         if (assignments.length > 0) {
-          const first = assignments[0];
-          setActiveSessionId(first.sessionId);
+          // Track that we are showing assignments
           setRouteStatus('READY');
 
-          const routeRes = await fetch(`${API_ORIGIN}/api/route-sessions/${first.sessionId}/routes`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-          });
+          // We can clear first to avoid duplicates if re-loading
+          clearRouteVisualization();
 
-          if (routeRes.ok) {
-            const vRoutes = await routeRes.json();
-            const vehicleRoutes = Array.isArray(vRoutes) ? vRoutes : (vRoutes.data || []);
+          for (const assignment of assignments) {
+            try {
+              const routeRes = await fetch(`${API_ORIGIN}/api/route-sessions/${assignment.sessionId}/routes`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+              });
 
-            const fakeSnapshot: RouteSessionSnapshot = {
-              sessionId: first.sessionId,
-              userId,
-              version: 0,
-              status: 'READY',
-              trigger: 'INITIAL_LOAD',
-              selectedBinIds: [],
-              addedBinIds: [],
-              removedBinIds: [],
-              route: {
-                totalVehiclesUsed: vehicleRoutes.length,
-                routes: Object.fromEntries(
-                  vehicleRoutes.map((vr: any, idx: number) => [
-                    String(idx),
-                    {
-                      vehicleId: idx,
-                      capacity: vr.capacity,
-                      totalBins: vr.totalBins,
-                      estimatedDurationSeconds: vr.estimatedDurationSeconds,
-                      binSequence: (vr.binStops ?? []).map((s: any) => ({
-                        stopOrder: s.stopOrder,
-                        binId: s.binId,
-                        lat: s.lat,
-                        lng: s.lng,
-                        durationFromPrevStopSeconds: s.durationFromPrevSeconds,
-                      }))
-                    }
-                  ])
-                )
-              },
-              message: null
-            };
-            await visualizeRoutes(fakeSnapshot);
+              if (routeRes.ok) {
+                const vRoutes = await routeRes.json();
+                const vehicleRoutes = Array.isArray(vRoutes) ? vRoutes : (vRoutes.data || []);
+
+                const fakeSnapshot: RouteSessionSnapshot = {
+                  sessionId: assignment.sessionId,
+                  userId,
+                  version: 0,
+                  status: 'READY',
+                  trigger: 'INITIAL_LOAD',
+                  selectedBinIds: [],
+                  addedBinIds: [],
+                  removedBinIds: [],
+                  route: {
+                    totalVehiclesUsed: vehicleRoutes.length,
+                    routes: Object.fromEntries(
+                      vehicleRoutes.map((vr: any, idx: number) => [
+                        // Use vehicleId or licensePlate as key to avoid collisions if multiple sessions are shown
+                        vr.vehicleId ? String(vr.vehicleId) : `v-${assignment.id}-${idx}`,
+                        {
+                          vehicleId: vr.vehicleId || idx,
+                          capacity: vr.capacity,
+                          totalBins: vr.totalBins,
+                          estimatedDurationSeconds: vr.estimatedDurationSeconds,
+                          binSequence: (vr.binStops ?? []).map((s: any) => ({
+                            stopOrder: s.stopOrder,
+                            binId: s.binId,
+                            lat: s.lat,
+                            lng: s.lng,
+                            durationFromPrevStopSeconds: s.durationFromPrevSeconds,
+                          }))
+                        }
+                      ])
+                    )
+                  },
+                  message: null
+                };
+                // Don't clear for each assignment!
+                await visualizeRoutesInternal(fakeSnapshot, false);
+              }
+              // Connect to each active session's socket if desired, 
+              // but for now let's just connect to the first one for status updates
+              if (assignment === assignments[0]) {
+                setActiveSessionId(assignment.sessionId);
+                connectRouteSocket(assignment.sessionId);
+              }
+            } catch (err) {
+              console.error('Error loading assignment', assignment, err);
+            }
           }
-          connectRouteSocket(first.sessionId);
         }
       }
     } catch (e) {
