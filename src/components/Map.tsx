@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
@@ -8,6 +8,10 @@ import { Client } from '@stomp/stompjs';
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point, polygon as turfPolygon } from "@turf/helpers";
 import { MapPin, Route, Plus, Navigation } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Button } from "./ui/button";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 const BINS_API = `${API_ORIGIN}/api/bins`;
@@ -46,6 +50,7 @@ interface BinData {
   fillLevel: number;
   priority: 'low' | 'medium' | 'high';
   zone: string;
+  binCode?: string;
 }
 
 interface RouteBinStop {
@@ -83,9 +88,8 @@ interface RouteSessionSnapshot {
 }
 
 type BinMarkersMap = Map<string, { marker: L.Marker; data: BinData }>;
-const ZONE_OPTIONS = ['A', 'B', 'C', 'D', 'E'];
 
-export default function MapView() {
+export default function MapView({ council }: { council?: { name?: string } | null }) {
 
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
@@ -95,11 +99,17 @@ export default function MapView() {
 
   const [markers, setMarkers] = useState<BinMarkersMap>(new Map());
   const [addMode, setAddMode] = useState(false);
-  const [contextMenu, setContextMenu] = useState<any>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, binId: string } | null>(null);
   const [showRouteMenu, setShowRouteMenu] = useState(false);
   const [showAssignedRouteMenu, setShowAssignedRouteMenu] = useState(false);
   const [assignedRoutes, setAssignedRoutes] = useState<any[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newBin, setNewBin] = useState({
+    location: '',
+    type: 'General Waste',
+    zone: ''
+  });
 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedBins, setSelectedBins] = useState<string[]>([]);
@@ -113,6 +123,24 @@ export default function MapView() {
   const [selectedDriverId, setSelectedDriverId] = useState<string>('');
   const [selectedCollectorIds, setSelectedCollectorIds] = useState<string[]>([]);
   const selectionModeRef = useRef(false);
+
+  const nextBinCode = useMemo(() => {
+    if (!council?.name) return 'Auto-generated';
+    const prefix = `${council.name.trim()}-`.toLowerCase();
+    
+    let maxNumber = 0;
+    markers.forEach((entry) => {
+      const code = entry.data.binCode?.toLowerCase() || '';
+      if (code.startsWith(prefix)) {
+        const numStr = code.slice(prefix.length).trim();
+        if (/^\d+$/.test(numStr)) {
+          maxNumber = Math.max(maxNumber, parseInt(numStr, 10));
+        }
+      }
+    });
+    
+    return `${council.name.trim()}-${maxNumber + 1}`;
+  }, [council, markers]);
 
   useEffect(() => {
     addModeRef.current = addMode;
@@ -406,7 +434,9 @@ export default function MapView() {
         return;
       }
 
-      addBin(e.latlng.lat, e.latlng.lng);
+      setNewBin(prev => ({...prev, location: `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`}));
+      setIsCreateModalOpen(true);
+      setAddMode(false);
     });
 
     loadBins();
@@ -433,7 +463,14 @@ export default function MapView() {
     }
 
     const payload = await res.json();
-    const bins = Array.isArray(payload) ? payload : Array.isArray(payload?.value) ? payload.value : [];
+    let bins: any[] = [];
+    if (Array.isArray(payload)) {
+      bins = payload;
+    } else if (payload?.data && Array.isArray(payload.data)) {
+      bins = payload.data;
+    } else if (payload?.value && Array.isArray(payload.value)) {
+      bins = payload.value;
+    }
 
     bins.forEach((bin: any) => {
       const lat = Number(bin.lat ?? bin.latitude);
@@ -446,6 +483,7 @@ export default function MapView() {
 
       addMarker({
         id: String(bin.id),
+        binCode: bin.binCode,
         lat,
         lng,
         fillLevel: bin.fillLevel,
@@ -464,7 +502,7 @@ export default function MapView() {
   // ===============================
   const renderTooltip = (d: BinData) => `
     <div>
-      <strong>ID:</strong> ${d.id}<br/>
+      <strong>Code:</strong> ${d.binCode || d.id}<br/>
       <strong>Fill:</strong> ${d.fillLevel}%<br/>
       <strong>Priority:</strong> ${d.priority}<br/>
       <strong>Zone:</strong> ${d.zone}
@@ -488,7 +526,7 @@ export default function MapView() {
       }
     });
 
-    marker.on('contextmenu', (e: any) => {
+    marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
       const pt = leafletMapRef.current!.latLngToContainerPoint(e.latlng);
       setContextMenu({ x: pt.x, y: pt.y, binId: data.id });
     });
@@ -503,41 +541,55 @@ export default function MapView() {
   // ===============================
   // ADD BIN
   // ===============================
-  const addBin = async (lat: number, lng: number) => {
-    const res = await fetch(BINS_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        lat, lng,
-        fillLevel: Math.floor(Math.random() * 100),
-        priority: 'medium',
-        zone: 'unassigned'
-      })
-    });
+  const handleCreateBinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`Failed to create bin: ${res.status}`, errorText);
-      return;
+      const res = await fetch(BINS_API, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          location: newBin.location,
+          type: newBin.type,
+          zone: newBin.zone,
+          fillLevel: 0,
+          priority: 'medium',
+          status: 'normal'
+        })
+      });
+
+      if (!res.ok) {
+        let errMessage = 'Failed to create bin';
+        try {
+          const errData = await res.json();
+          errMessage = errData.message || errMessage;
+        } catch(e) {}
+        throw new Error(errMessage);
+      }
+
+      const responseData = await res.json();
+      const saved = responseData.data || responseData;
+
+      addMarker({
+        id: String(saved.id),
+        binCode: saved.binCode,
+        lat: saved.lat || saved.latitude,
+        lng: saved.lng || saved.longitude,
+        fillLevel: saved.fillLevel || 0,
+        priority: saved.priority || 'medium',
+        zone: saved.zone || newBin.zone
+      });
+
+      setIsCreateModalOpen(false);
+      setNewBin({ location: '', type: 'General Waste', zone: '' });
+    } catch(err) {
+      console.error(err);
+      const e = err as Error;
+      alert(e.message || "Error creating bin");
     }
-
-    const saved = await res.json();
-    const resolvedLat = Number(saved?.lat ?? saved?.latitude ?? lat);
-    const resolvedLng = Number(saved?.lng ?? saved?.longitude ?? lng);
-
-    if (!Number.isFinite(resolvedLat) || !Number.isFinite(resolvedLng)) {
-      console.error('Created bin response missing coordinates', saved);
-      return;
-    }
-
-    addMarker({
-      id: String(saved.id),
-      lat: resolvedLat,
-      lng: resolvedLng,
-      fillLevel: saved.fillLevel ?? Math.floor(Math.random() * 100),
-      priority: saved.priority || 'medium',
-      zone: saved.zone || 'unassigned'
-    });
   };
 
   // ===============================
@@ -656,6 +708,64 @@ export default function MapView() {
     <div className="w-full h-full relative">
 
       <div ref={mapRef} className="w-full h-full" />
+
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent style={{ zIndex: 10000 }} className="z-[10000] sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Waste Bin</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateBinSubmit} className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Bin Code (Auto-generated)</label>
+              <Input 
+                value={nextBinCode}
+                disabled
+                className="bg-gray-50 text-gray-500 font-semibold"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
+              <Input 
+                placeholder="lat, lng" 
+                value={newBin.location}
+                onChange={(e) => setNewBin({...newBin, location: e.target.value})}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Zone</label>
+              <Input 
+                type="number"
+                min="1"
+                placeholder="e.g. 1" 
+                value={newBin.zone}
+                onChange={(e) => setNewBin({...newBin, zone: e.target.value})}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Type</label>
+              <Select 
+                value={newBin.type} 
+                onValueChange={(val) => setNewBin({...newBin, type: val})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent style={{ zIndex: 99999 }}>
+                  <SelectItem value="General Waste">General Waste</SelectItem>
+                  <SelectItem value="Recyclables">Recyclables</SelectItem>
+                  <SelectItem value="Organic Waste">Organic Waste</SelectItem>
+                  <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
+              Save Bin
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* SELECTION OVERLAY */}
       {selectionMode && (
@@ -982,17 +1092,22 @@ export default function MapView() {
           </div>
 
           <div className="px-2 py-1">
-            <label className="text-xs text-gray-700 font-medium block mb-1">Zone</label>
-            <select
+            <label className="text-xs text-gray-700 font-medium block mb-1">Zone (Number)</label>
+            <input
+              type="number"
+              min="1"
+              placeholder="e.g. 1"
               className="w-full text-sm border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-blue-200 focus:border-blue-400 outline-none"
-              value={markers.get(contextMenu.binId)?.data.zone || 'unassigned'}
-              onChange={(e) => updateZone(contextMenu.binId, e.target.value)}
-            >
-              <option value="unassigned">Unassigned</option>
-              {ZONE_OPTIONS.map((zone) => (
-                <option key={zone} value={zone}>{zone}</option>
-              ))}
-            </select>
+              value={markers.get(contextMenu.binId)?.data.zone || ''}
+              onBlur={(e) => updateZone(contextMenu.binId, e.target.value)}
+              onChange={(e) => updateBinLocally(contextMenu.binId, { zone: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  updateZone(contextMenu.binId, e.currentTarget.value);
+                  setContextMenu(null);
+                }
+              }}
+            />
           </div>
 
           <hr className="my-1 border-gray-100" />
