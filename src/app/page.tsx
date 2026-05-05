@@ -286,7 +286,7 @@ export default function Home() {
       case 'vehicles':
         return <VehicleManagement council={getActiveCouncil()} userRole={userRole} />;
       case 'map':
-        return <MapView />;
+        return <MapView council={getActiveCouncil()} />;
       case 'analytics':
         return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} council={getActiveCouncil()} />;
       case 'citizen-management':
