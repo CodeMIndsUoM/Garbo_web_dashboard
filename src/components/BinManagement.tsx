@@ -37,6 +37,7 @@ interface Bin {
   binCode: string;
   location: string;
   zone?: string;
+  type?: string;
   council?: string;
   fillLevel: number;
   status: string;
@@ -237,6 +238,24 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                 />
               </div>
 
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Type</label>
+                <Select 
+                  value={newBin.type} 
+                  onValueChange={(val) => setNewBin({...newBin, type: val})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent style={{ zIndex: 99999 }}>
+                    <SelectItem value="General Waste">General Waste</SelectItem>
+                    <SelectItem value="Recyclables">Recyclables</SelectItem>
+                    <SelectItem value="Organic Waste">Organic Waste</SelectItem>
+                    <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
                 Save Bin
               </Button>
@@ -353,7 +372,14 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-gray-900 font-semibold mb-1">{bin.binCode}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-gray-900 font-semibold">{bin.binCode}</h3>
+                      {bin.type && (
+                        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-gray-100 text-gray-600 border-none font-medium">
+                          {bin.type}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1 text-sm text-gray-500">
                       <MapPin className="w-4 h-4" />
                       <span className="line-clamp-1">{bin.location}</span>
