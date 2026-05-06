@@ -5,6 +5,7 @@ import { Calendar, MapPin, Clock, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
@@ -16,9 +17,14 @@ interface CollectorUser {
   council?: string;
 }
 
+interface CollectorLabour {
+  id: number;
+  name: string;
+  council: string;
+}
+
 interface VehicleItem {
   id: number;
-
   licensePlate?: string;
   vehicleCode?: string;
   assignedDriverId?: number | null;
@@ -102,6 +108,9 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
   const [collectors, setCollectors] = useState<CollectorUser[]>([]);
   const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
+  const [labours, setLabours] = useState<CollectorLabour[]>([]);
+  const [newLabourName, setNewLabourName] = useState('');
+  const [creatingLabour, setCreatingLabour] = useState(false);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
   const authHeaders = (): Record<string, string> => {
@@ -132,21 +141,24 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
   const fetchAssignmentData = async () => {
     setLoadingAssignments(true);
     try {
-      const [usersRes, vehiclesRes] = await Promise.all([
+      const [usersRes, vehiclesRes, labourRes] = await Promise.all([
         fetch(`${API_BASE}/api/users`, { headers: authHeaders() }),
         fetch(`${API_BASE}/api/vehicles`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/api/collector-labours`, { headers: authHeaders() }),
       ]);
       const usersJson = await usersRes.json().catch(() => ({ data: [] }));
       const vehiclesJson = await vehiclesRes.json().catch(() => ({ data: [] }));
+      const labourJson = await labourRes.json().catch(() => ({ data: [] }));
+      
       const usersData: CollectorUser[] = Array.isArray(usersJson?.data) ? usersJson.data : [];
       const collectorUsers = usersData
-        .filter((u: CollectorUser) => (u?.role || '').toString().toUpperCase() === 'COLLECTOR');
+        .filter((u: CollectorUser) => (u?.role || '').toString().toUpperCase() === 'BIN_COLLECTOR' || (u?.role || '').toString().toUpperCase() === 'COLLECTOR');
+      
       const councilName = (council?.name || '').toLowerCase();
       const allVehicles: VehicleItem[] = Array.isArray(vehiclesJson?.data) ? vehiclesJson.data : [];
-      const hasCouncilData =
-        collectorUsers.some((u: CollectorUser) => typeof u.council === 'string') ||
-        allVehicles.some((v: VehicleItem) => typeof v.assignedCouncil === 'string');
-      setCouncilFilterUnavailable(Boolean(councilName) && !hasCouncilData && (collectorUsers.length > 0 || allVehicles.length > 0));
+      
+      setLabours(Array.isArray(labourJson?.data) ? labourJson.data : []);
+      
       const scopedCollectors = councilName
         ? collectorUsers.filter((u: CollectorUser) => (typeof u.council !== 'string' ? true : u.council.toLowerCase() === councilName))
         : collectorUsers;
@@ -192,28 +204,42 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
     }
   };
 
-  const assignVehicle = async (collectorId: string, vehicleId: string) => {
-    const selectedVehicle = vehicles.find((v) => String(v.id) === vehicleId);
-    if (!selectedVehicle) return;
+  const handleAddLabour = async () => {
+    if (!newLabourName.trim()) return;
+    setCreatingLabour(true);
     try {
-      const payload = {
-        ...selectedVehicle,
-        assignedDriverId: Number(collectorId),
-      };
-      const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
-        method: 'PUT',
+      const res = await fetch(`${API_BASE}/api/collector-labours`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ name: newLabourName.trim() }),
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json?.success === false) {
-        alert('Failed to assign vehicle to collector');
-        return;
+      if (res.ok) {
+        setNewLabourName('');
+        fetchAssignmentData();
+      } else {
+        alert('Failed to add collector labour');
       }
-      setAssignments((prev) => ({ ...prev, [collectorId]: vehicleId }));
-      fetchAssignmentData();
     } catch {
-      alert('Failed to assign vehicle to collector');
+      alert('Error adding collector labour');
+    } finally {
+      setCreatingLabour(false);
+    }
+  };
+
+  const handleDeleteLabour = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this collector?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/collector-labours/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        fetchAssignmentData();
+      } else {
+        alert('Failed to delete collector labour');
+      }
+    } catch {
+      alert('Error deleting collector labour');
     }
   };
 
@@ -225,7 +251,7 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
     <div className="p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-gray-900 mb-2">Collection Schedule</h2>
+          <h2 className="text-gray-900 mb-2">Bin Collection</h2>
           <p className="text-gray-600">Manage and track waste collection schedules</p>
           {council?.name && <p className="text-sm text-gray-500 mt-1">Showing data for council: {council.name}</p>}
         </div>
@@ -329,46 +355,53 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
         </CardContent>
       </Card>
 
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Collector Vehicle Assignment</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {councilFilterUnavailable && (
-            <div className="mb-3 p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 text-sm">
-              Council-specific assignment filtering is not available from backend fields yet, so complete lists are shown.
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Collector Labour Management</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 mb-4">
+              <Input
+                placeholder="Collector Name"
+                value={newLabourName}
+                onChange={(e) => setNewLabourName(e.target.value)}
+              />
+              <Button
+                onClick={handleAddLabour}
+                disabled={creatingLabour}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {creatingLabour ? 'Adding...' : 'Add'}
+              </Button>
             </div>
-          )}
-          {loadingAssignments ? (
-            <div className="text-gray-500">Loading collectors and vehicles...</div>
-          ) : collectors.length === 0 ? (
-            <div className="text-gray-500">No bin collectors found.</div>
-          ) : (
-            <div className="space-y-3">
-              {collectors.map((collector) => (
-                <div key={collector.empId} className="p-3 border border-gray-200 rounded-lg flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-gray-900">{collector.empName || collector.email}</p>
-                    <p className="text-xs text-gray-500">{collector.email}</p>
-                  </div>
-                  <select
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    value={assignments[String(collector.empId)] || ''}
-                    onChange={(e) => assignVehicle(String(collector.empId), e.target.value)}
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {labours.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No collectors added yet</p>
+              ) : (
+                labours.map((labour) => (
+                  <div
+                    key={labour.id}
+                    className="flex items-center justify-between p-3 border border-gray-100 rounded-lg bg-gray-50/50"
                   >
-                    <option value="">Select vehicle</option>
-                    {vehicles.map((vehicle) => (
-                      <option key={vehicle.id} value={String(vehicle.id)}>
-                        {vehicle.vehicleCode ? `${vehicle.vehicleCode} (${vehicle.licensePlate})` : vehicle.licensePlate}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+                    <span className="text-sm font-medium text-gray-700">{labour.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteLabour(labour.id)}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+
+      </div>
 
       <Card className="mt-8">
         <CardHeader>
