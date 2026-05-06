@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Truck, MapPin, Fuel, Wrench, Search, Plus, Pencil, X, Check, User, Trash2 } from 'lucide-react';
+import { Truck, MapPin, Wrench, Search, Plus, Pencil, X, Check, User, Trash2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -18,6 +18,7 @@ interface Vehicle {
   status: string;
   assignedCouncil: string;
   assignedDriverId: number | null;
+  assignedDriverName?: string | null;
   currentLocation: string;
   fuelLevel: number;
   isActive: boolean;
@@ -26,11 +27,11 @@ interface Vehicle {
   updatedAt: string;
 }
 
-interface Driver {
-  id: number;
-  driverCode: string;
-  name?: string;
-  council?: string;
+interface BinCollector {
+  empId: number;
+  empName?: string;
+  email?: string;
+  assignedCouncil?: string;
 }
 
 const COUNCILS = [
@@ -41,7 +42,7 @@ const COUNCILS = [
   'Sri Jayewardenepura Kotte',
 ];
 const VEHICLE_TYPES = ['Truck', 'Compactor', 'Mini Truck'];
-const VEHICLE_STATUSES = ['available', 'on_route', 'maintenance', 'inactive'];
+const VEHICLE_STATUSES = ['available', 'on_route', 'maintenance'];
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -63,11 +64,12 @@ function getStatusLabel(status: string) {
 
 export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [drivers, setDrivers] = useState<BinCollector[]>([]);
+  const [allDrivers, setAllDrivers] = useState<BinCollector[]>([]);
   const [driversLoading, setDriversLoading] = useState(true);
   const [showDriversListModal, setShowDriversListModal] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
-  const [deletingDriver, setDeletingDriver] = useState<Driver | null>(null);
+  const [editingDriver, setEditingDriver] = useState<BinCollector | null>(null);
+  const [deletingDriver, setDeletingDriver] = useState<BinCollector | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -82,21 +84,23 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
   const fetchDrivers = useCallback(async () => {
     try {
-      const councilQuery = council?.name || council?.id || '';
-      const url = `${API_BASE}/api/drivers${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
+      const url = `${API_BASE}/api/admins/staff`;
       const res = await fetch(url, { headers: authHeaders() });
       const json = await res.json();
       if (json.success) {
-        const rawDrivers: Driver[] = Array.isArray(json.data) ? json.data : [];
+        const staff: any[] = Array.isArray(json.data) ? json.data : [];
+        const collectors = staff.filter(s => (s.role || '').toString().toUpperCase() === 'BIN_COLLECTOR');
+        setAllDrivers(collectors);
+        
         if (council?.name) {
           const councilName = council.name.toLowerCase();
-          setDrivers(rawDrivers.filter((d) => (d.council || '').toLowerCase() === councilName));
+          setDrivers(collectors.filter((d) => (d.assignedCouncil || '').toLowerCase() === councilName));
         } else {
-          setDrivers(rawDrivers);
+          setDrivers(collectors);
         }
       }
     } catch {
-      console.error('Failed to fetch drivers');
+      console.error('Failed to fetch drivers (bin collectors)');
     } finally {
       setDriversLoading(false);
     }
@@ -128,17 +132,19 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
 
   const driversById = useMemo(() => {
-    const map = new Map<number, Driver>();
-    for (const driver of drivers) map.set(driver.id, driver);
+    const map = new Map<number, BinCollector>();
+    for (const driver of allDrivers) map.set(driver.empId, driver);
     return map;
-  }, [drivers]);
+  }, [allDrivers]);
 
-  const getDriverLabel = useCallback((driverId: number | null) => {
-    if (!driverId) return 'Unassigned';
-    const driver = driversById.get(driverId);
-    if (!driver) return `#${driverId}`;
-    if (driver.name && driver.name.trim()) return driver.name;
-    return driver.driverCode || `#${driverId}`;
+  const getDriverLabel = useCallback((vehicle: Vehicle) => {
+    const { assignedDriverId, assignedDriverName } = vehicle;
+    if (!assignedDriverId) return 'Unassigned';
+    if (assignedDriverName) return assignedDriverName;
+    
+    const driver = driversById.get(assignedDriverId);
+    if (!driver) return `#${assignedDriverId}`;
+    return driver.empName || `Staff #${assignedDriverId}`;
   }, [driversById]);
 
   const handleDriverUpdated = () => {
@@ -173,21 +179,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     }
   };
 
-  const handleDeleteDriver = async () => {
-    if (!deletingDriver) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/drivers/${deletingDriver.id}`, { method: 'DELETE', headers: authHeaders() });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json?.success) {
-        throw new Error(json?.message || 'Failed to delete driver');
-      }
-      setDeletingDriver(null);
-      fetchDrivers();
-      fetchVehicles();
-    } catch {
-      setError('Failed to delete driver');
-    }
-  };
 
   const handleStatusChange = async (vehicle: Vehicle, newStatus: string) => {
     try {
@@ -210,12 +201,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           <p className="text-gray-600">Manage collection vehicles, assignments, and availability</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowDriversListModal(true)}
-            className="px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Drivers
-          </button>
+
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -285,21 +271,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         <DriversListModal
           drivers={drivers}
           loading={driversLoading}
-          onClose={() => setShowDriversListModal(false)}
-          onEdit={(driver) => { setShowDriversListModal(false); setEditingDriver(driver); }}
-          onDelete={(driver) => { setShowDriversListModal(false); setDeletingDriver(driver); }}
-          onCreated={() => { fetchDrivers(); fetchVehicles(); }}
-          setGlobalError={setError}
           council={council}
-        />
-      )}
-
-      {editingDriver && (
-        <DriverEditModal
-          driver={editingDriver}
-          onClose={() => setEditingDriver(null)}
-          onSaved={handleDriverUpdated}
-          setGlobalError={setError}
+          onClose={() => setShowDriversListModal(false)}
         />
       )}
 
@@ -326,7 +299,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredVehicles.map((vehicle) => (
-            <Card key={vehicle.id} className="hover:shadow-lg transition-shadow">
+            <Card key={vehicle.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 overflow-hidden relative">
+              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+                vehicle.status === 'available' ? 'bg-green-500' :
+                vehicle.status === 'on_route' ? 'bg-blue-500' :
+                vehicle.status === 'maintenance' ? 'bg-amber-500' :
+                'bg-gray-400'
+              }`} />
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -347,24 +326,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
                 </div>
 
                 <div className="space-y-4">
-                  {/* Fuel Level */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-600 flex items-center gap-1">
-                        <Fuel className="w-4 h-4" />
-                        Fuel Level
-                      </span>
-                      <span className="text-sm text-gray-900">{vehicle.fuelLevel}%</span>
-                    </div>
-                    <Progress
-                      value={vehicle.fuelLevel}
-                      className={
-                        vehicle.fuelLevel < 30 ? '[&>div]:bg-red-500'
-                          : vehicle.fuelLevel < 60 ? '[&>div]:bg-orange-500'
-                          : '[&>div]:bg-green-500'
-                      }
-                    />
-                  </div>
 
                   {/* Info */}
                   <div className="pt-2 border-t border-gray-100 space-y-2">
@@ -377,12 +338,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
                       <span className="text-gray-900">{vehicle.capacity ? `${vehicle.capacity} tons` : '—'}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Council</span>
-                      <span className="text-gray-900">{vehicle.assignedCouncil || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 flex items-center gap-1"><User className="w-3 h-3" /> Driver</span>
-                      <span className="text-gray-900">{getDriverLabel(vehicle.assignedDriverId)}</span>
+                      <span className="text-gray-900">{getDriverLabel(vehicle)}</span>
                     </div>
                     {vehicle.currentLocation && (
                       <div className="flex items-center justify-between text-sm">
@@ -394,17 +351,25 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
                   {/* Status Quick Actions */}
                   <div className="pt-2 border-t border-gray-100">
-                    <div className="flex gap-1 flex-wrap">
-                      {VEHICLE_STATUSES.filter(s => s !== vehicle.status).map(s => (
-                        <button
-                          key={s}
-                          onClick={() => handleStatusChange(vehicle, s)}
-                          className={`text-xs px-2 py-1 rounded transition-colors ${getStatusColor(s)} hover:opacity-80`}
-                        >
-                          {getStatusLabel(s)}
-                        </button>
-                      ))}
-                    </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {/* Only allow manual toggle to/from Maintenance */}
+                        {vehicle.status === 'maintenance' ? (
+                          <button
+                            onClick={() => handleStatusChange(vehicle, 'available')}
+                            className={`text-xs px-2 py-1 rounded transition-colors bg-green-50 text-green-700 hover:opacity-80 border border-green-100`}
+                          >
+                            Set Available
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStatusChange(vehicle, 'maintenance')}
+                            className={`text-xs px-2 py-1 rounded transition-colors bg-amber-50 text-amber-700 hover:opacity-80 border border-amber-100`}
+                            disabled={vehicle.status === 'on_route'}
+                          >
+                            Set Maintenance
+                          </button>
+                        )}
+                      </div>
                   </div>
                 </div>
               </CardContent>
@@ -413,15 +378,29 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
-      {/* Create / Edit Modal */}
-      {(showCreateModal || editingVehicle) && (
+      {showCreateModal && (
         <VehicleFormModal
-          vehicle={editingVehicle}
-          drivers={drivers}
+          vehicle={null}
           council={council}
           userRole={userRole}
-          onClose={() => { setShowCreateModal(false); setEditingVehicle(null); }}
-          onSaved={() => { setShowCreateModal(false); setEditingVehicle(null); fetchVehicles(); }}
+          onClose={() => setShowCreateModal(false)}
+          onSaved={() => {
+            setShowCreateModal(false);
+            fetchVehicles();
+          }}
+        />
+      )}
+
+      {editingVehicle && (
+        <VehicleFormModal
+          vehicle={editingVehicle}
+          council={council}
+          userRole={userRole}
+          onClose={() => setEditingVehicle(null)}
+          onSaved={() => {
+            setEditingVehicle(null);
+            fetchVehicles();
+          }}
         />
       )}
 
@@ -441,21 +420,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
-      {/* Driver Delete Confirmation */}
-      {deletingDriver && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="text-lg text-gray-900 mb-2">Delete Driver</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete <strong>{deletingDriver.driverCode}</strong>{deletingDriver.name ? ` (${deletingDriver.name})` : ''}?
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeletingDriver(null)} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={handleDeleteDriver} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -464,14 +428,12 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
 function VehicleFormModal({
   vehicle,
-  drivers,
   council,
   userRole,
   onClose,
   onSaved
 }: {
   vehicle: Vehicle | null;
-  drivers: Driver[];
   council?: { name?: string; id?: string } | null;
   userRole?: 'admin' | 'superadmin' | null;
   onClose: () => void;
@@ -481,15 +443,11 @@ function VehicleFormModal({
   const isAdmin = userRole === 'admin';
   const defaultCouncil = council?.name || '';
   const [form, setForm] = useState({
-
     licensePlate: vehicle?.licensePlate || '',
     type: vehicle?.type || VEHICLE_TYPES[0],
     capacity: vehicle?.capacity?.toString() || '',
     status: vehicle?.status || 'available',
     assignedCouncil: vehicle?.assignedCouncil || defaultCouncil,
-    assignedDriverId: vehicle?.assignedDriverId?.toString() || '',
-    currentLocation: vehicle?.currentLocation || '',
-    fuelLevel: vehicle?.fuelLevel?.toString() || '100',
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -527,9 +485,6 @@ function VehicleFormModal({
       status: form.status,
       // Enforce council ownership server payload for admins.
       assignedCouncil: (isAdmin ? defaultCouncil : form.assignedCouncil) || null,
-      assignedDriverId: form.assignedDriverId ? parseInt(form.assignedDriverId) : null,
-      currentLocation: form.currentLocation || null,
-      fuelLevel: parseInt(form.fuelLevel) || 100,
     };
 
     try {
@@ -581,51 +536,6 @@ function VehicleFormModal({
               <Input type="number" step="0.1" value={form.capacity} onChange={e => setForm({...form, capacity: e.target.value})} placeholder="5.0" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Status</label>
-              <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                {VEHICLE_STATUSES.map(s => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Fuel Level (%)</label>
-              <Input type="number" min={0} max={100} value={form.fuelLevel} onChange={e => setForm({...form, fuelLevel: e.target.value})} />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Assigned Council</label>
-            <select
-              value={form.assignedCouncil}
-              onChange={e => setForm({ ...form, assignedCouncil: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                disabled={isAdmin}
-            >
-                <option value="">{isAdmin ? (defaultCouncil || 'No council found') : 'Select council'}</option>
-                {COUNCILS.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Driver Code</label>
-              <select
-                value={form.assignedDriverId}
-                onChange={e => setForm({ ...form, assignedDriverId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              >
-                <option value="">Unassigned</option>
-                {drivers.map(d => (
-                  <option key={d.id} value={d.id.toString()}>{d.name ? `${d.driverCode} - ${d.name}` : d.driverCode}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Current Location</label>
-              <Input value={form.currentLocation} onChange={e => setForm({...form, currentLocation: e.target.value})} placeholder="Downtown Area" />
-            </div>
-          </div>
           <div className="flex gap-3 justify-end pt-4">
             <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
@@ -645,155 +555,43 @@ function DriversListModal({
   drivers,
   loading,
   onClose,
-  onEdit,
-  onDelete,
-  onCreated,
-  setGlobalError,
   council,
 }: {
-  drivers: Driver[];
+  drivers: BinCollector[];
   loading: boolean;
   onClose: () => void;
-  onEdit: (driver: Driver) => void;
-  onDelete: (driver: Driver) => void;
-  onCreated: () => void;
-  setGlobalError: (msg: string) => void;
   council?: { name?: string; id?: string } | null;
 }) {
   const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '' });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      setFormError('Driver name is required');
-      return;
-    }
-
-    setSaving(true);
-    setFormError('');
-
-    try {
-      const res = await fetch(`${API_BASE}/api/drivers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ 
-          name: form.name.trim(), 
-          email: form.email.trim() || null,
-          phone: form.phone.trim() || null,
-          council: council?.name || 'Unassigned' 
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      if (res.ok && json?.success) {
-        setForm({ name: '', email: '', phone: '' });
-        setShowCreate(false);
-        onCreated();
-      } else {
-        setFormError(json?.message || 'Failed to add driver');
-      }
-    } catch {
-      setGlobalError('Failed to add driver');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg text-gray-900">Drivers</h3>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { setShowCreate((v) => !v); setFormError(''); }}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-            >
-              <Plus className="w-4 h-4" />
-              Add New Driver
-            </button>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-          </div>
+          <h3 className="text-lg text-gray-900 font-medium">Bin Collectors (Staff Drivers)</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
         </div>
 
-        {showCreate && (
-          <div className="mb-6 border border-gray-200 rounded-lg p-4">
-            {formError && <div className="mb-3 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
-            <form onSubmit={handleCreate} className="space-y-3">
 
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
-                <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Email</label>
-                  <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="kasun@example.com" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Phone</label>
-                  <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0771234567" />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setShowCreate(false); setFormError(''); }}
-                  className="px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm"
-                >
-                  <Check className="w-4 h-4" />
-                  {saving ? 'Saving...' : 'Create Driver'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
         {loading ? (
-          <div className="text-sm text-gray-500">Loading drivers...</div>
+          <div className="text-sm text-gray-500 py-8 text-center">Loading staff members...</div>
         ) : drivers.length === 0 ? (
-          <div className="text-sm text-gray-500">No drivers found.</div>
+          <div className="text-sm text-gray-500 py-8 text-center">No bin collectors found for {council?.name || 'this council'}.</div>
         ) : (
           <div className="space-y-2">
             {drivers.map((d) => (
-              <div key={d.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
+              <div key={d.empId} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3 bg-gray-50/50">
                 <div className="min-w-0">
-                  <div className="text-sm text-gray-900 truncate font-medium">{d.driverCode}{d.name ? ` - ${d.name}` : ''}</div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-0.5">
-                    <div className="text-xs text-gray-400">#{d.id}</div>
-                    {d.email && <div className="text-xs text-blue-500 truncate max-w-[150px]">{d.email}</div>}
-                    {d.phone && <div className="text-xs text-gray-500">{d.phone}</div>}
+                  <div className="text-sm text-gray-900 font-semibold">{d.empName || 'Unnamed Staff'}</div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                    <div className="text-xs text-gray-500 font-mono">ID: #{d.empId}</div>
+                    {d.email && <div className="text-xs text-blue-600 truncate max-w-[200px]">{d.email}</div>}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onEdit(d)}
-                    className="text-gray-500 hover:text-gray-700 px-2 py-1 rounded"
-                    title="Edit driver"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDelete(d)}
-                    className="text-gray-500 hover:text-red-600 px-2 py-1 rounded"
-                    title="Delete driver"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <Badge className="bg-green-100 text-green-700 border-green-200">Staff</Badge>
               </div>
             ))}
           </div>
@@ -807,96 +605,3 @@ function DriversListModal({
   );
 }
 
-/* ── Driver Edit Modal ─────────────────────────────────────────── */
-
-function DriverEditModal({
-  driver,
-  onClose,
-  onSaved,
-  setGlobalError,
-}: {
-  driver: Driver;
-  onClose: () => void;
-  onSaved: () => void;
-  setGlobalError: (msg: string) => void;
-}) {
-  const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-  const [form, setForm] = useState({ 
-    name: driver.name || '',
-    email: driver.email || '',
-    phone: driver.phone || ''
-  });
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      setFormError('Driver name is required');
-      return;
-    }
-    setSaving(true);
-    setFormError('');
-
-    try {
-      const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ 
-          name: form.name.trim(),
-          email: form.email.trim() || null,
-          phone: form.phone.trim() || null
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        onSaved();
-      } else {
-        setFormError(json.message || 'Failed to update driver');
-      }
-    } catch {
-      setGlobalError('Failed to update driver');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg text-gray-900">Edit Driver</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-        </div>
-        {formError && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{formError}</div>}
-        <form onSubmit={handleSubmit} className="space-y-4">
-
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Driver Name *</label>
-            <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Kasun Perera" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Email</label>
-              <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="kasun@example.com" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Phone</label>
-              <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0771234567" />
-            </div>
-          </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
-              <Check className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Update Driver'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}

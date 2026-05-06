@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+
   staticPageGenerationTimeout: 120,
   
   // Restrict backend proxying to local development only.
