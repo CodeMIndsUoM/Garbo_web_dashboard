@@ -5,7 +5,7 @@ import { ArrowLeft, Truck, CheckCircle2, MapPin, Search, Settings } from 'lucide
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Individual vehicle record from the fleet inventory.
 interface VehicleRowDTO {
   vehicleId: string;
   plate: string;
@@ -13,6 +13,7 @@ interface VehicleRowDTO {
   status: string;
 }
 
+// Aggregated fleet metrics and the full vehicle list.
 interface VehicleAnalyticsDTO {
   totalFleet: number;
   onRoute: number;
@@ -21,7 +22,14 @@ interface VehicleAnalyticsDTO {
   vehicles: VehicleRowDTO[];
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+// Optional council scope to filter analytics by municipality.
+interface Council {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+// Placeholder animation shown while KPI values load.
 function KpiSkeleton() {
   return (
     <div className="animate-pulse">
@@ -33,19 +41,25 @@ function KpiSkeleton() {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
+export function VehicleAnalytics({ onBack, council }: { onBack: () => void; council?: Council | null }) {
+  // Component state: fleet data, loading flags, and UI filters for the table.
   const [data, setData] = useState<VehicleAnalyticsDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
+  // Fetch fleet analytics on mount and whenever council changes.
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`${API_BASE}/api/admin/vehicles/analytics`);
+
+        const params = new URLSearchParams();
+        if (council?.name) params.set('councilId', council.name);
+
+        const res = await fetch(`${API_BASE}/api/admin/vehicles/analytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json: VehicleAnalyticsDTO = await res.json();
         setData(json);
@@ -58,9 +72,9 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
     };
 
     fetchAnalytics();
-  }, []);
+  }, [council?.name]);
 
-  // ── Client-side filter (search + status toggle) ───────────────────────────
+  // Apply search and status filters to the vehicle list; shown in the table below.
   const filteredVehicles = (data?.vehicles ?? []).filter(v => {
     const matchesSearch =
       v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -80,12 +94,15 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Vehicle Analytics</h1>
-            <p className="text-gray-500 text-lg">Monitoring fleet status and operational efficiency</p>
+            <p className="text-gray-500 text-lg">
+              {council?.name ? `${council.name} — fleet status and operational efficiency` : 'Monitoring fleet status and operational efficiency'}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Error banner */}
+      {/* Non-blocking error message; user can still view KPIs and table or refresh. */}
       {error && (
         <div className="mb-6 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
           ⚠ {error} — check that the backend is running on port 8081
@@ -93,6 +110,7 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
       )}
 
       {/* KPI Row */}
+      {/* High-level fleet metrics: total, on route, available, maintenance. */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
 
         <Card className="border-none bg-white shadow-sm ring-1 ring-gray-100">
@@ -164,10 +182,12 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Fleet Table */}
+      {/* Searchable, filterable inventory of all vehicles with status badges. */}
       <Card className="border-none shadow-sm ring-1 ring-gray-100 bg-white overflow-hidden">
         <CardHeader className="border-b border-gray-50 bg-gray-50/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <CardTitle className="text-lg font-bold text-gray-800">Fleet Overview & Status</CardTitle>
+            {/* Quick-filter buttons for status grouping. */}
             <div className="flex gap-2 mt-2">
               {['All', 'On Route', 'Available', 'Maintenance'].map((s) => (
                 <button
@@ -183,6 +203,7 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
               ))}
             </div>
           </div>
+          {/* Search by plate number or vehicle ID. */}
           <div className="relative w-full md:w-64">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -196,6 +217,7 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
         </CardHeader>
 
         <CardContent className="pt-0">
+          {/* Loading skeleton or rendered table with row-level status colors. */}
           {loading ? (
             <div className="animate-pulse space-y-3 p-4">
               {[...Array(5)].map((_, i) => (
@@ -214,6 +236,7 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
+                  {/* Empty state when filters exclude all vehicles. */}
                   {filteredVehicles.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-gray-400 text-sm">
