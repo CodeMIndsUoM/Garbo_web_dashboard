@@ -14,41 +14,45 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
-const zoneData = [
-  { zone: 'Zone A', collected: 245 },
-  { zone: 'Zone B', collected: 198 },
-  { zone: 'Zone C', collected: 312 },
-  { zone: 'Zone D', collected: 276 },
-  { zone: 'Zone E', collected: 189 },
-];
-
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Zone-level waste collection aggregates for the bar chart.
+interface ZonePoint {
+  zone: string;
+  collected: number;
+}
+
+// Daily bin collection summary: assigned, collected, missed counts.
 interface DaySummary {
   assigned: number;
   collected: number;
   missed: number;
 }
 
+// Staff attendance and on-duty status snapshot.
 interface StaffSummary {
   onDutyCount: number;
   attendanceRate: number;
 }
 
+// Citizen complaints today with resolution rate.
 interface ComplaintSummary {
   newCount: number;
   resolutionRate: number;
 }
 
+// Third-party collector requests and completion rate.
 interface ThirdPartySummary {
   totalRequests: number;
   completionRate: number;
 }
 
+// Bin reports and affected bins recorded today.
 interface BinReportSummary {
   totalReportsToday: number;
   affectedBinsToday: number;
 }
 
+// Fleet status snapshot: total, on route, available, maintenance.
 interface VehicleSummary {
   totalFleet: number;
   onRoute: number;
@@ -56,43 +60,90 @@ interface VehicleSummary {
   maintenance: number;
 }
 
+// Total bins deployed across all zones.
 interface BinSummary {
   totalBins: number;
 }
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: string) => void; council?: { name?: string } | null }) {
+// Safely extract council id/name for API query parameters.
+const getCouncilParam = (council?: { id?: string; name?: string } | null) => {
+  const rawValue = council?.id || council?.name;
+  return rawValue ? rawValue.trim() : '';
+};
 
-  const [summary, setSummary] = useState<DaySummary | null>(null);
-  const [staffSummary, setStaffSummary] = useState<StaffSummary | null>(null);
+export function WasteAnalytics({
+  onNavigate,
+  council,
+}: {
+  onNavigate?: (page: string) => void;
+  council?: { id?: string; name?: string } | null;
+}) {
+
+  // Zone-collection chart state with time-window filter.
+  const [zoneFilter, setZoneFilter] = useState<'Daily' | 'Weekly' | 'Monthly'>('Daily');
+  const [zoneData, setZoneData]     = useState<ZonePoint[]>([]);
+  const [zoneLoading, setZoneLoading] = useState(true);
+
+  // Independent data-fetch states for each KPI metric group.
+  const [summary, setSummary]                   = useState<DaySummary | null>(null);
+  const [staffSummary, setStaffSummary]         = useState<StaffSummary | null>(null);
   const [complaintSummary, setComplaintSummary] = useState<ComplaintSummary | null>(null);
   const [thirdPartySummary, setThirdPartySummary] = useState<ThirdPartySummary | null>(null);
   const [binReportSummary, setBinReportSummary] = useState<BinReportSummary | null>(null);
-  const [vehicleSummary, setVehicleSummary] = useState<VehicleSummary | null>(null);
-  const [binSummary, setBinSummary] = useState<BinSummary | null>(null);
+  const [vehicleSummary, setVehicleSummary]     = useState<VehicleSummary | null>(null);
+  const [binSummary, setBinSummary]             = useState<BinSummary | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [staffLoading, setStaffLoading] = useState(true);
+  const [loading, setLoading]               = useState(true);
+  const [staffLoading, setStaffLoading]     = useState(true);
   const [complaintLoading, setComplaintLoading] = useState(true);
   const [thirdPartyLoading, setThirdPartyLoading] = useState(true);
-  const [binReportLoading, setBinReportLoading] = useState(true);
+  const [binReportLoading, setBinReportLoading]   = useState(true);
   const [vehicleLoading, setVehicleLoading] = useState(true);
-  const [binLoading, setBinLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [binLoading, setBinLoading]         = useState(true);
+  const [error, setError]                   = useState<string | null>(null);
 
-  // Fetch bin collection summary
+  // Fetch collection by zone with time filter; updates whenever filter or council changes.
+  useEffect(() => {
+    const fetchZoneData = async () => {
+      setZoneLoading(true);
+      try {
+        const filterMap: Record<string, string> = {
+          Daily: 'DAILY', Weekly: 'WEEKLY', Monthly: 'MONTHLY',
+        };
+        const url = new URL(`${BASE_URL}/api/admin/analytics/zone-collection`);
+        url.searchParams.set('filter', filterMap[zoneFilter]);
+        const councilParam = getCouncilParam(council);
+        if (councilParam) url.searchParams.set('council', councilParam);
+
+        const res = await fetch(url.toString());
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const json: ZonePoint[] = await res.json();
+        setZoneData(json);
+      } catch (err: any) {
+        console.error('Zone collection fetch failed:', err);
+        setZoneData([]);
+      } finally {
+        setZoneLoading(false);
+      }
+    };
+    fetchZoneData();
+  }, [zoneFilter, council]);
+
+  // Fetch daily bin collection totals (assigned, collected, missed).
   useEffect(() => {
     const fetchDaySummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/analytics?filter=DAY`);
+        const url = new URL(`${BASE_URL}/api/admin/analytics`);
+        url.searchParams.set('filter', 'DAY');
+        const councilParam = getCouncilParam(council);
+        if (councilParam) url.searchParams.set('council', councilParam);
+
+        const res = await fetch(url.toString());
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setSummary({
-          assigned: json.assigned,
-          collected: json.collected,
-          missed: json.missed,
-        });
+        setSummary({ assigned: json.assigned, collected: json.collected, missed: json.missed });
       } catch (err: any) {
         setError(err.message ?? 'Failed to load');
       } finally {
@@ -100,103 +151,112 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
       }
     };
     fetchDaySummary();
-  }, []);
+  }, [council]);
 
-  // Fetch staff summary
+  // Fetch staff on-duty count and attendance rate.
   useEffect(() => {
     const fetchStaffSummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/staffanalytics`);
+        const params = new URLSearchParams();
+        const councilParam = getCouncilParam(council);
+        if (councilParam) params.set('councilId', councilParam);
+
+        const res = await fetch(`${BASE_URL}/api/admin/staffanalytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setStaffSummary({
-          onDutyCount: json.summary.onDutyCount,
-          attendanceRate: json.summary.attendanceRate,
-        });
-      } catch (err: any) { } finally { setStaffLoading(false); }
+        setStaffSummary({ onDutyCount: json.summary.onDutyCount, attendanceRate: json.summary.attendanceRate });
+      } catch { } finally { setStaffLoading(false); }
     };
     fetchStaffSummary();
-  }, []);
+  }, [council]);
 
-  // Fetch complaint summary
+  // Fetch today's new complaints and their resolution rate.
   useEffect(() => {
     const fetchComplaintSummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/complaintanalytics?filter=TODAY`);
+        const params = new URLSearchParams();
+        params.set('filter', 'TODAY');
+        const councilParam = getCouncilParam(council);
+        if (councilParam) params.set('councilId', councilParam);
+
+        const res = await fetch(`${BASE_URL}/api/admin/complaintanalytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setComplaintSummary({
-          newCount: json.summary.newCount,
-          resolutionRate: json.summary.resolutionRate,
-        });
-      } catch (err: any) { } finally { setComplaintLoading(false); }
+        setComplaintSummary({ newCount: json.summary.newCount, resolutionRate: json.summary.resolutionRate });
+      } catch { } finally { setComplaintLoading(false); }
     };
     fetchComplaintSummary();
-  }, []);
+  }, [council]);
 
-  // Fetch third party summary
+  // Fetch last month's third-party collector metrics: total requests and completion rate.
   useEffect(() => {
     const fetchThirdPartySummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/thirdparty/analyze?period=ALL`);
+        const params = new URLSearchParams();
+        params.set('period', 'LAST_MONTH');
+        const councilParam = getCouncilParam(council);
+        if (councilParam) params.set('councilId', councilParam);
+
+        const res = await fetch(`${BASE_URL}/api/admin/thirdparty/analyze?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setThirdPartySummary({
-          totalRequests: json.totalRequests,
-          completionRate: json.completionRate,
-        });
-      } catch (err: any) { } finally { setThirdPartyLoading(false); }
+        setThirdPartySummary({ totalRequests: json.totalRequests, completionRate: json.completionRate });
+      } catch { } finally { setThirdPartyLoading(false); }
     };
     fetchThirdPartySummary();
-  }, []);
+  }, [council]);
 
-  // Fetch bin report summary
+  // Fetch today's bin reports and affected bins count.
   useEffect(() => {
     const fetchBinReportSummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/bin-reports/analytics`);
+        const url = new URL(`${BASE_URL}/api/admin/bin-reports/analytics`);
+        if (council?.name) url.searchParams.set('council', council.name);
+
+        const res = await fetch(url.toString());
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setBinReportSummary({
-          totalReportsToday: json.totalReportsToday,
-          affectedBinsToday: json.affectedBinsToday,
-        });
-      } catch (err: any) { } finally { setBinReportLoading(false); }
+        setBinReportSummary({ totalReportsToday: json.totalReportsToday, affectedBinsToday: json.affectedBinsToday });
+      } catch { } finally { setBinReportLoading(false); }
     };
     fetchBinReportSummary();
-  }, []);
+  }, [council?.name]);
 
-  // Fetch vehicle summary
+  // Fetch fleet status: total, on route, available, and maintenance.
   useEffect(() => {
     const fetchVehicleSummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/vehicles/analytics`);
+        const params = new URLSearchParams();
+        const councilParam = getCouncilParam(council);
+        if (councilParam) params.set('councilId', councilParam);
+
+        const res = await fetch(`${BASE_URL}/api/admin/vehicles/analytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setVehicleSummary({
-          totalFleet: json.totalFleet,
-          onRoute: json.onRoute,
-          available: json.available,
-          maintenance: json.maintenance,
-        });
-      } catch (err: any) { } finally { setVehicleLoading(false); }
+        setVehicleSummary({ totalFleet: json.totalFleet, onRoute: json.onRoute, available: json.available, maintenance: json.maintenance });
+      } catch { } finally { setVehicleLoading(false); }
     };
     fetchVehicleSummary();
-  }, []);
+  }, [council?.name]);
 
-  // Fetch bin analytics (onsite)
+  // Fetch total bins deployed across all zones.
   useEffect(() => {
     const fetchBinSummary = async () => {
       try {
-        const res = await fetch(`${BASE_URL}/api/admin/bin-analytics`);
+        const params = new URLSearchParams();
+        const councilParam = getCouncilParam(council);
+        if (councilParam) params.set('councilId', councilParam);
+
+        const res = await fetch(`${BASE_URL}/api/admin/bin-analytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
         setBinSummary({ totalBins: json.totalBins });
-      } catch (err: any) { } finally { setBinLoading(false); }
+      } catch { } finally { setBinLoading(false); }
     };
     fetchBinSummary();
   }, []);
 
+  // Derived KPI: daily collection rate as percentage.
   const collectionRate = summary && summary.assigned > 0
     ? Math.round((summary.collected / summary.assigned) * 100)
     : 0;
@@ -215,6 +275,7 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
       </div>
 
       {/* KPI Cards Row 1 */}
+      {/* Top-level metrics: collection totals, bins on site, staff status, complaints. */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
 
         {/* Total Collected */}
@@ -254,6 +315,7 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
           </CardContent>
         </Card>
 
+        {/* Bins Onsite */}
         <Card
           className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-green-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
           onClick={() => onNavigate?.('bin-analytics')}
@@ -357,6 +419,7 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
       </div>
 
       {/* KPI Cards Row 2 */}
+      {/* Secondary metrics: third-party completions, vehicle fleet status, bin reports. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
         {/* Third Party */}
@@ -386,7 +449,7 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
                     <TrendingUp className="w-3.5 h-3.5" />
                     {thirdPartySummary?.completionRate ?? 0}%
                   </span>
-                  <span className="text-gray-500">completion rate</span>
+                  <span className="text-gray-500">last month</span>
                 </div>
               </>
             )}
@@ -462,48 +525,75 @@ export function WasteAnalytics({ onNavigate, council }: { onNavigate?: (page: st
                   <span className="text-gray-500 font-medium uppercase tracking-wider">Active</span>
                   <span className="text-gray-500 font-medium uppercase tracking-wider">Available</span>
                 </div>
-
               </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts Section */}
+      {/* Zone Collection Chart */}
+      {/* Bar chart showing bins collected by zone across the selected time window. */}
       <div className="grid grid-cols-1 gap-6">
         <Card className="shadow-sm border border-gray-100 overflow-hidden">
           <CardHeader className="border-b border-gray-50 bg-gray-50/30 pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0">
               <div>
                 <CardTitle className="text-lg font-semibold text-gray-800">Collection by Zone</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Distribution of total waste collected across municipal zones</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Distribution of total waste collected across municipal zones ({zoneFilter.toLowerCase()})
+                </p>
+              </div>
+              <div className="flex bg-gray-100/50 p-1 rounded-lg border border-gray-200/50">
+                {(['Daily', 'Weekly', 'Monthly'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setZoneFilter(f)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                      zoneFilter === f
+                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200/50'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
               </div>
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={zoneData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.8} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dx={-10} />
-                <Tooltip
-                  cursor={{ fill: '#f9fafb' }}
-                  contentStyle={{
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    padding: '12px'
-                  }}
-                />
-                <Bar dataKey="collected" fill="url(#colorCollected)" name="Bins Collected" radius={[6, 6, 0, 0]} barSize={48} />
-              </BarChart>
-            </ResponsiveContainer>
+            {zoneLoading ? (
+              <div className="flex items-center justify-center h-[350px]">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : zoneData.length === 0 ? (
+              <div className="flex items-center justify-center h-[350px] text-gray-400 text-sm">
+                No data available for the selected period.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={zoneData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dx={-10} />
+                  <Tooltip
+                    cursor={{ fill: '#f9fafb' }}
+                    contentStyle={{
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      padding: '12px',
+                    }}
+                  />
+                  <Bar dataKey="collected" fill="url(#colorCollected)" name="Bins Collected" radius={[6, 6, 0, 0]} barSize={48} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>

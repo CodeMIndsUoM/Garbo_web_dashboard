@@ -296,21 +296,21 @@ export default function Home() {
       case 'internal-users':
         return <InternalUsers council={getActiveCouncil()} />;
       case 'total-collection':
-        return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
+        return <TotalCollection onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'bin-analytics':
-        return <BinAnalytics onBack={() => setCurrentPage('analytics')} onNavigate={(page) => setCurrentPage(page as PageType)} />;
+        return <BinAnalytics onBack={() => setCurrentPage('analytics')} onNavigate={(page) => setCurrentPage(page as PageType)} council={getActiveCouncil()} />;
       case 'staff-analytics':
-        return <StaffAnalytics onBack={() => setCurrentPage('analytics')} />;
+        return <StaffAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'complaint-analytics':
-        return <ComplaintAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <ComplaintAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'third-party-analytics':
-        return <ThirdPartyAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <ThirdPartyAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'vehicle-analytics':
-        return <VehicleAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <VehicleAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'bin-report-analytics':
-        return <BinReportAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <BinReportAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'reports':
-        return <Reports />;
+        return <Reports council={getActiveCouncil()} />;
       case 'admin-assignment':
         return <AdminAssignment onAddNewAdmin={openCreateAdmin} onLogout={handleLogout} />;
       case 'admin-edit-password':
