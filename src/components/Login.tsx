@@ -48,7 +48,10 @@ export function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      // backend returns: { token: "...", role: "...", email: "..." }
+      // backend returns token and optionally role/email
+      // Store token and metadata in localStorage. Prefer explicit values returned by the backend,
+      // but decode the JWT as a fallback to extract role/user id when the response is partial.
+      // Note: decoding here is only for client-side metadata; the backend is the source of truth for validation.
       const token = data.token||data.accessToken||data.data?.token;
       if (!token) {
         setError('Login succeeded but no token returned');
@@ -73,6 +76,7 @@ export function Login({ onLogin }: LoginProps) {
           JSON.stringify({ username: data.email||data.data?.email, role: roleToStore, id: idFromToken || undefined })
         );
         // persist mustChangePassword flag for app-level routing (backwards compatible)
+        // This flag is used by `page.tsx` to force navigation to the password change UI on first login.
         try { localStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword))); } catch (e) {}
       } catch (e) {
         localStorage.setItem('role', data.role||data.data?.role||'admin');
@@ -82,6 +86,8 @@ export function Login({ onLogin }: LoginProps) {
         );
       }
       try {
+        // Enforce strict overwrite behavior for `council` returned by backend.
+        // Backend may return `null` to explicitly clear a previously selected council.
         const council = data?.council ?? data?.data?.council;
         if (council === null || council === undefined) {
           localStorage.removeItem('council');

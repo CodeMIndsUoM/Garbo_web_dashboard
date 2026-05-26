@@ -1,5 +1,12 @@
 'use client';
 
+// Application-level authentication and navigation controller.
+// Responsibilities:
+// - Validate JWT stored in `localStorage` with backend before restoring authenticated UI state.
+// - Restore `role`, `admin`, and `council` from `localStorage` as fallbacks when login response is partial.
+// - Enforce first-login password change by routing to `admin-edit-password` when `mustChangePassword` is set.
+// - Provide `getActiveCouncil()` helper to centralise council selection logic for admin vs superadmin views.
+
 import { useEffect, useState } from 'react';
 import { decodeJwtPayload } from '@/lib/jwt';
 import { Dashboard } from '@/components/Dashboard';

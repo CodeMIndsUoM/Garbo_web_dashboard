@@ -1,6 +1,9 @@
 export function decodeJwtPayload(token: string | null) {
   if (!token) return null;
   try {
+    // Decode JWT payload on the client to read non-sensitive metadata (role, sub, email).
+    // WARNING: This is purely for convenience and display; do not rely on this for authorization.
+    // The backend must always validate tokens and enforce access control.
     const parts = token.split('.');
     if (parts.length < 2) return null;
     const payload = parts[1];

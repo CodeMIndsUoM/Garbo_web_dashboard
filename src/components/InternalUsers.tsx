@@ -9,6 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
+// Internal users management (field mentors / bin collectors).
+// Important notes:
+// - `council` is provided by the parent and used for server-side filtering when the current
+//   user is a `superadmin`. Regular admins rely on their stored `council` in localStorage (managed at login).
+// - All requests include the bearer token when available; server enforces permissions and returns 403 when needed.
+// - Creating internal users uses different endpoints depending on selected `role` to allow backend validation
+//   and different processing (e.g., onboarding workflows, notifications).
+
 interface InternalUser {
   empId: number;
   empName?: string;

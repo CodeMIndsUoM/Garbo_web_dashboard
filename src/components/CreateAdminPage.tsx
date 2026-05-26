@@ -19,6 +19,11 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
 
   // Admin list fetching moved to AdminAssignment; CreateAdminPage only handles creation
 
+  // Admin creation flow:
+  // - Sends a POST to `/api/users` with required `fullName`, `email` and `council`.
+  // - Backend is expected to generate a temporary password and email credentials to the new admin.
+  // - UI clears the form and navigates back on success; no password handling occurs on the client.
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');

@@ -25,7 +25,10 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
     setLoading(true);
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-    // derive email from localStorage.admin or decode token
+    // Derive user's email for the change-password API.
+    // Prefer a stored `admin` object in localStorage, but fall back to decoding the JWT payload.
+    // Rationale: some login responses may not include email in a stable field; decoding is safe here
+    // because the backend performs the authoritative validation of credentials.
     let email = '';
     try {
       const adminStr = localStorage.getItem('admin');

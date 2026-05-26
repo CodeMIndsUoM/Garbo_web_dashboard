@@ -41,7 +41,8 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
     setLoading(true);
     setError('');
     try {
-      // Include token/Authorization header for GET
+      // Fetch all users for admin assignment UI.
+      // Include Authorization header because this endpoint returns sensitive role information.
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'GET',
@@ -119,59 +120,6 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
         <p className="text-gray-600">Assign and manage admins across all councils</p>
       </div>
 
-      {/* Stats (temporarily hidden)
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Users</p>
-                <p className="text-2xl text-gray-900">{stats.total}</p>
-              </div>
-              <Users className="w-10 h-10 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Superadmins</p>
-                <p className="text-2xl text-purple-600">{stats.superadmins}</p>
-              </div>
-              <Shield className="w-10 h-10 text-purple-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Admins</p>
-                <p className="text-2xl text-blue-600">{stats.admins}</p>
-              </div>
-              <Shield className="w-10 h-10 text-blue-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Regular Users</p>
-                <p className="text-2xl text-green-600">{stats.regular}</p>
-              </div>
-              <Users className="w-10 h-10 text-green-400" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      */}
-
-
       {/* Add Admin Button and Search */}
       <div className="mb-6 flex items-center gap-4">
         <Button
@@ -220,8 +168,8 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
+                  {filteredUsers.map((user, index) => (
+                    <TableRow key={user.id || `${user.email}-${index}`}>
                       <TableCell className="font-medium align-middle">
                         {user.empName ? user.empName : (user.username ? user.username : (user.email || 'N/A'))}
                       </TableCell>
