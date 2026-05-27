@@ -1,5 +1,6 @@
 'use client';
 
+// Bin fill level and priority analytics broken down by zone.
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Trash2, AlertTriangle, CheckCircle2, BarChart3, TrendingUp, Signal } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -15,6 +16,7 @@ import {
   Legend
 } from 'recharts';
 
+// Chart colors for fill level ranges: below 30%, 30–50%, 50–75%, above 75%
 const fillLevelColors = {
   below30: '#10b981',
   fill30_50: '#3b82f6',
@@ -22,9 +24,10 @@ const fillLevelColors = {
   above75: '#ef4444',
 };
 
+// Bin analytics drill-down page with zone charts and KPI cards
 export function BinAnalytics({ onBack }: { onBack: () => void }) {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
-  // ✅ STATE
+  // Per-zone fill level and priority data from the backend
   const [zoneData, setZoneData] = useState<any[]>([]);
   const [totalBins, setTotalBins] = useState(0);
   const [urgentBins, setUrgentBins] = useState(0);

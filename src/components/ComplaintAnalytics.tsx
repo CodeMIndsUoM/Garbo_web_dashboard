@@ -1,5 +1,6 @@
 'use client';
 
+// Admin analytics page for citizen complaint trends and KPIs.
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, MessageSquare, AlertCircle, Clock, CheckCircle2, Filter, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -24,6 +25,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 type FilterType = 'Today' | 'Week' | 'Month';
 
+// Today's complaint counts shown in the KPI cards
 interface ComplaintSummary {
   newCount:        number;
   inProgressCount: number;
@@ -31,6 +33,7 @@ interface ComplaintSummary {
   resolutionRate:  number;
 }
 
+// One data point on the complaint trend chart
 interface ComplaintChartPoint {
   label:      string;
   newCount:   number;
@@ -38,6 +41,7 @@ interface ComplaintChartPoint {
   resolved:   number;
 }
 
+// Full analytics response from /api/admin/complaintanalytics
 interface ComplaintAnalyticsResponse {
   period:    string;
   summary:   ComplaintSummary;
@@ -64,6 +68,7 @@ export function ComplaintAnalytics({ onBack }: { onBack: () => void }) {
       setLoading(true);
       setError(null);
       try {
+        // Loads KPI summary and chart data for the selected time range.
         const res = await fetch(
           `${BASE_URL}/api/admin/complaintanalytics?filter=${FILTER_MAP[filter]}`
         );

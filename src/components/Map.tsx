@@ -1,5 +1,6 @@
 'use client';
 
+// Interactive map showing bins, collection routes, and route optimization.
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import SockJS from 'sockjs-client';
@@ -7,17 +8,17 @@ import { Client } from '@stomp/stompjs';
 
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point, polygon as turfPolygon } from "@turf/helpers";
-import { MapPin, Route, Plus, Navigation } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { MapPin, Route, Plus, Navigation, X, Check } from "lucide-react";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Button } from "./ui/button";
+
+// Allowed waste types when creating or editing a bin on the map.
+const BIN_TYPES = ['General Waste', 'Recyclables', 'Organic Waste', 'Mixed Waste'];
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 const BINS_API = `${API_ORIGIN}/api/bins`;
 const ROUTE_SESSION_API = `${API_ORIGIN}/api/route-sessions`;
 const DEPOT_LAT = 6.775080;
-const DEPOT_LNG = 79.882289;
+const DEPOT_LNG = 79.882289; // Central collection depot
 const DEFAULT_VEHICLE_COUNT = 3;
 const DEFAULT_VEHICLE_CAPACITY = 25;
 const ROUTE_COLORS = ['#16a34a', '#2563eb', '#ea580c', '#7c3aed', '#db2777', '#0891b2'];
@@ -48,11 +49,14 @@ interface BinData {
   lat: number;
   lng: number;
   fillLevel: number;
+  status?: string;             // empty, half, full, or notChecked
   priority: 'low' | 'medium' | 'high';
   zone: string;
   binCode?: string;
+  type?: string;
 }
 
+// Ordered bin stop on a vehicle's collection route
 interface RouteBinStop {
   stopOrder: number;
   binId: number;
@@ -61,6 +65,7 @@ interface RouteBinStop {
   durationFromPrevStopSeconds: number;
 }
 
+// One vehicle's optimized collection route
 interface VehicleRoute {
   vehicleId: number;
   capacity: number;
@@ -69,11 +74,13 @@ interface VehicleRoute {
   binSequence: RouteBinStop[];
 }
 
+// Full route optimization result for all vehicles in a session
 interface RouteResponse {
   totalVehiclesUsed: number;
   routes: Record<string, VehicleRoute>;
 }
 
+// Live state of a route optimization session (from WebSocket or API)
 interface RouteSessionSnapshot {
   sessionId: string;
   userId: number;
@@ -89,7 +96,16 @@ interface RouteSessionSnapshot {
 
 type BinMarkersMap = Map<string, { marker: L.Marker; data: BinData }>;
 
-export default function MapView({ council }: { council?: { name?: string } | null }) {
+// Main map page — bins, route planning, and live route updates
+export default function MapView({
+  council,
+  startInAddMode = false,
+  onAddModeActivated,
+}: {
+  council?: { name?: string } | null;
+  startInAddMode?: boolean;
+  onAddModeActivated?: () => void;
+}) {
 
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
@@ -104,7 +120,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   const [showAssignedRouteMenu, setShowAssignedRouteMenu] = useState(false);
   const [assignedRoutes, setAssignedRoutes] = useState<any[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isBinModalOpen, setIsBinModalOpen] = useState(false);
+  // Non-null when the bin modal is editing an existing marker instead of creating one.
+  const [editingBinId, setEditingBinId] = useState<string | null>(null);
   const [newBin, setNewBin] = useState({
     location: '',
     type: 'General Waste',
@@ -124,6 +142,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   const [selectedCollectorIds, setSelectedCollectorIds] = useState<string[]>([]);
   const selectionModeRef = useRef(false);
 
+  // Preview of the next bin code for this council
   const nextBinCode = useMemo(() => {
     if (!council?.name) return 'Auto-generated';
     const prefix = `${council.name.trim()}-`.toLowerCase();
@@ -146,14 +165,23 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     addModeRef.current = addMode;
   }, [addMode]);
 
+  // Enter add-bin mode when navigated from Bin Management
+  useEffect(() => {
+    if (!startInAddMode) return;
+    setAddMode(true);
+    addModeRef.current = true;
+    onAddModeActivated?.();
+  }, [startInAddMode, onAddModeActivated]);
+
   useEffect(() => {
     selectionModeRef.current = selectionMode;
   }, [selectionMode]);
 
+  // Available vehicles, drivers, and labour for route assignment
   useEffect(() => {
     const fetchResources = async () => {
       const token = localStorage.getItem('token');
-      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
       try {
         const [vehRes, drvRes, usrRes] = await Promise.all([
           fetch(`${API_ORIGIN}/api/route-sessions/available-vehicles`, { headers: authHeaders }),
@@ -183,6 +211,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     fetchResources();
   }, [selectionMode]); // Re-fetch when entering selection mode to get latest availability
 
+  // Adds or removes a bin from the route selection
   const toggleBinSelection = (id: string) => {
     setSelectedBins(prev => {
       const isSelected = prev.includes(id);
@@ -200,6 +229,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     });
   };
 
+  // Resets selected bin markers back to the default icon
   const clearSelectedBinIcons = (ids: string[]) => {
     ids.forEach(id => {
       const entry = markers.get(id);
@@ -209,12 +239,14 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     });
   };
 
+  // Removes all route polylines from the map
   const clearRouteVisualization = () => {
     if (routeLayerRef.current) {
       routeLayerRef.current.clearLayers();
     }
   };
 
+  // Logged-in admin user ID (defaults to 1 if not found)
   const getCurrentUserId = () => {
     if (typeof window === 'undefined') {
       return 1;
@@ -234,6 +266,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  // Draws the driving route for one vehicle on the map
   const buildRoadPolyline = async (stops: RouteBinStop[], color: string, vehicleId: string) => {
     if (!routeLayerRef.current || !leafletMapRef.current || stops.length === 0) {
       return;
@@ -284,10 +317,12 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  // Renders optimized routes as colored polylines on the map
   const visualizeRoutes = async (snapshot: RouteSessionSnapshot) => {
     await visualizeRoutesInternal(snapshot, true);
   };
 
+  // Internal route renderer — optionally clears existing lines first
   const visualizeRoutesInternal = async (snapshot: RouteSessionSnapshot, clear = true) => {
     if (!leafletMapRef.current || !snapshot.route?.routes) {
       return;
@@ -311,6 +346,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  // Closes the WebSocket connection to the route session
   const disconnectRouteSocket = () => {
     if (stompClientRef.current) {
       stompClientRef.current.deactivate();
@@ -318,6 +354,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  // Live updates while route optimization is running
   const connectRouteSocket = (sessionId: string) => {
     disconnectRouteSocket();
 
@@ -364,6 +401,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   // ===============================
   // 🗺️ POLYGON
   // ===============================
+  // Moratuwa municipal council boundary
   const municipalCoords: [number, number][] = [
     [6.811952, 79.867387],
     [6.82722, 79.93127],
@@ -442,7 +480,8 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       }
 
       setNewBin(prev => ({...prev, location: `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`}));
-      setIsCreateModalOpen(true);
+      setEditingBinId(null);
+      setIsBinModalOpen(true);
       setAddMode(false);
     });
 
@@ -460,9 +499,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
   }, []);
 
-  // ===============================
-  // LOAD BINS
-  // ===============================
+  // Fetches all bins from the API and places them on the map
   const loadBins = async () => {
     const res = await fetch(BINS_API);
     if (!res.ok) {
@@ -495,8 +532,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         lat,
         lng,
         fillLevel: bin.fillLevel,
+        status: bin.status || 'notChecked',
         priority: bin.priority || 'medium',
-        zone: bin.zone || 'unassigned'
+        zone: bin.zone || 'unassigned',
+        type: bin.type || 'General Waste',
       });
     });
 
@@ -505,9 +544,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
-  // ===============================
-  // TOOLTIP
-  // ===============================
+  // Hover popup content for a bin marker
   const renderTooltip = (d: BinData) => {
     const statusLabel = d.status === 'full' ? 'Full' :
                         d.status === 'half' ? 'Half' :
@@ -517,15 +554,14 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     <div>
       <strong>Code:</strong> ${d.binCode || d.id}<br/>
       <strong>Fill Status:</strong> ${statusLabel}<br/>
+      <strong>Type:</strong> ${d.type || 'General Waste'}<br/>
       <strong>Priority:</strong> ${d.priority}<br/>
       <strong>Zone:</strong> ${d.zone}
     </div>
   `;
   };
 
-  // ===============================
-  // MARKER
-  // ===============================
+  // Places a bin marker on the Leaflet map
   const addMarker = (data: BinData) => {
     if (!leafletMapRef.current) return;
 
@@ -552,31 +588,74 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     });
   };
 
-  // ===============================
-  // ADD BIN
-  // ===============================
-  const handleCreateBinSubmit = async (e: React.FormEvent) => {
+  // Resets bin form state and closes the create/edit modal.
+  const closeBinModal = () => {
+    setIsBinModalOpen(false);
+    setEditingBinId(null);
+    setNewBin({ location: '', type: 'General Waste', zone: '' });
+  };
+
+  // Opens the edit modal with data from a bin marker (via context menu).
+  const openEditBin = (binId: string) => {
+    const entry = markers.get(binId);
+    if (!entry) return;
+    const d = entry.data;
+    setEditingBinId(binId);
+    setNewBin({
+      location: `${d.lat}, ${d.lng}`,
+      type: d.type || 'General Waste',
+      zone: d.zone === 'unassigned' ? '' : d.zone,
+    });
+    setIsBinModalOpen(true);
+    setContextMenu(null);
+  };
+
+  // Creates or updates a bin from the map modal
+  const handleBinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newBin.location.trim()) {
+      alert('Location is required');
+      return;
+    }
+    if (!newBin.zone.trim()) {
+      alert('Zone is required');
+      return;
+    }
+
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(BINS_API, {
-        method: "POST",
+      const isEditing = !!editingBinId;
+      const url = isEditing ? `${BINS_API}/${editingBinId}` : BINS_API;
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const existing = isEditing ? markers.get(editingBinId!)?.data : null;
+      const body = isEditing
+        ? {
+            location: newBin.location,
+            type: newBin.type,
+            zone: newBin.zone,
+            priority: existing?.priority || 'medium',
+          }
+        : {
+            location: newBin.location,
+            type: newBin.type,
+            zone: newBin.zone,
+            fillLevel: 0,
+            priority: 'medium',
+            status: 'empty',
+          };
+
+      const res = await fetch(url, {
+        method,
         headers,
-        body: JSON.stringify({
-          location: newBin.location,
-          type: newBin.type,
-          zone: newBin.zone,
-          fillLevel: 0,
-          priority: 'medium',
-          status: 'empty'
-        })
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        let errMessage = 'Failed to create bin';
+        let errMessage = isEditing ? 'Failed to update bin' : 'Failed to create bin';
         try {
           const errData = await res.json();
           errMessage = errData.message || errMessage;
@@ -586,29 +665,44 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
       const responseData = await res.json();
       const saved = responseData.data || responseData;
+      const lat = saved.lat ?? saved.latitude ?? parseFloat(newBin.location.split(',')[0]);
+      const lng = saved.lng ?? saved.longitude ?? parseFloat(newBin.location.split(',')[1]);
 
-      addMarker({
-        id: String(saved.id),
-        binCode: saved.binCode,
-        lat: saved.lat || saved.latitude,
-        lng: saved.lng || saved.longitude,
-        fillLevel: saved.fillLevel || 0,
-        priority: saved.priority || 'medium',
-        zone: saved.zone || newBin.zone
-      });
+      if (isEditing && editingBinId) {
+        updateBinLocally(editingBinId, {
+          lat,
+          lng,
+          type: saved.type || newBin.type,
+          zone: saved.zone || newBin.zone,
+          binCode: saved.binCode || existing?.binCode,
+        });
+        const entry = markers.get(editingBinId);
+        if (entry && leafletMapRef.current) {
+          entry.marker.setLatLng([lat, lng]);
+        }
+      } else {
+        addMarker({
+          id: String(saved.id),
+          binCode: saved.binCode,
+          lat,
+          lng,
+          fillLevel: saved.fillLevel || 0,
+          status: saved.status || 'empty',
+          priority: saved.priority || 'medium',
+          zone: saved.zone || newBin.zone,
+          type: saved.type || newBin.type,
+        });
+      }
 
-      setIsCreateModalOpen(false);
-      setNewBin({ location: '', type: 'General Waste', zone: '' });
+      closeBinModal();
     } catch(err) {
       console.error(err);
       const e = err as Error;
-      alert(e.message || "Error creating bin");
+      alert(e.message || (editingBinId ? "Error updating bin" : "Error creating bin"));
     }
   };
 
-  // ===============================
-  // REMOVE BIN
-  // ===============================
+  // Deletes a bin from the map and backend
   const removeBin = async (id: string) => {
     const res = await fetch(`${BINS_API}/${id}`, { method: "DELETE" });
     if (!res.ok) {
@@ -630,9 +724,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     setContextMenu(null);
   };
 
-  // ===============================
-  // UPDATE BIN
-  // ===============================
+  // Updates bin data in local state without an API call
   const updateBinLocally = (id: string, updates: Partial<BinData>) => {
     const entry = markers.get(id);
     if (!entry) return;
@@ -643,6 +735,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     setMarkers(new Map(markers));
   };
 
+  // Saves a new priority level for a bin
   const updatePriority = async (id: string, priority: BinData['priority']) => {
     try {
       const res = await fetch(
@@ -658,6 +751,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  // Saves a new zone assignment for a bin
   const updateZone = async (id: string, zone: string) => {
     try {
       const res = await fetch(
@@ -673,9 +767,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
-  // ===============================
-  // ROUTE ACTIONS
-  // ===============================
+  // Enters bin selection mode for route planning
   const handleSelectBins = () => {
     setSelectionMode(true);
     setSelectedBins([]);
@@ -686,14 +778,13 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     setShowRouteMenu(false);
   };
 
+  // Triggers route optimization for an entire zone (placeholder)
   const handleOptimizeZone = async () => {
     alert("Trigger route optimization for zones");
     setShowRouteMenu(false);
   };
 
-  // ===============================
-  // ASSIGNED ROUTES — CHANGE 1 & 2
-  // ===============================
+  // Shows or hides active collection routes on the map
   const handleToggleAssignedRoutes = async () => {
     setShowAssignedRouteMenu(!showAssignedRouteMenu);
     if (!showAssignedRouteMenu && assignedRoutes.length === 0) {
@@ -718,6 +809,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     }
   };
 
+  // Restore any active collection routes when the page loads
   const loadActiveSession = async () => {
     try {
       const userId = getCurrentUserId();
@@ -803,63 +895,83 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
       <div ref={mapRef} className="w-full h-full" />
 
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent style={{ zIndex: 10000 }} className="z-[10000] sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Waste Bin</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateBinSubmit} className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Bin Code</label>
-              <Input 
-                value={nextBinCode}
-                disabled
-                className="bg-gray-50 text-gray-500 font-semibold"
-              />
+      {/* Create/edit bin modal — same layout pattern as vehicle management */}
+      {isBinModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10000]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg text-gray-900">
+                {editingBinId ? 'Edit Bin' : 'Create New Bin'}
+              </h3>
+              <button onClick={closeBinModal} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
-              <Input 
-                placeholder="lat, lng" 
-                value={newBin.location}
-                onChange={(e) => setNewBin({...newBin, location: e.target.value})}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Zone</label>
-              <Input 
-                type="number"
-                min="1"
-                placeholder="e.g. 1" 
-                value={newBin.zone}
-                onChange={(e) => setNewBin({...newBin, zone: e.target.value})}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Type</label>
-              <Select 
-                value={newBin.type} 
-                onValueChange={(val) => setNewBin({...newBin, type: val})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent style={{ zIndex: 99999 }}>
-                  <SelectItem value="General Waste">General Waste</SelectItem>
-                  <SelectItem value="Recyclables">Recyclables</SelectItem>
-                  <SelectItem value="Organic Waste">Organic Waste</SelectItem>
-                  <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-              Save Bin
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+            <form onSubmit={handleBinSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Bin Code</label>
+                <Input
+                  value={
+                    editingBinId
+                      ? (markers.get(editingBinId)?.data.binCode || `Bin #${editingBinId}`)
+                      : nextBinCode
+                  }
+                  disabled
+                  className="bg-gray-50 text-gray-500"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Location (Coordinates) *</label>
+                  <Input
+                    placeholder="lat, lng"
+                    value={newBin.location}
+                    onChange={(e) => setNewBin({ ...newBin, location: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Zone *</label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 1"
+                    value={newBin.zone}
+                    onChange={(e) => setNewBin({ ...newBin, zone: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Type *</label>
+                <select
+                  value={newBin.type}
+                  onChange={(e) => setNewBin({ ...newBin, type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  {BIN_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-3 justify-end pt-4">
+                <button
+                  type="button"
+                  onClick={closeBinModal}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  {editingBinId ? 'Update Bin' : 'Create Bin'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* SELECTION OVERLAY */}
       {selectionMode && (
@@ -1213,6 +1325,14 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           </div>
 
           <hr className="my-1 border-gray-100" />
+
+          {/* Opens the same create/edit modal used when placing a new bin */}
+          <button
+            onClick={() => openEditBin(contextMenu.binId)}
+            className="text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium"
+          >
+            ✏️ Edit Bin
+          </button>
 
           <button
             onClick={() => removeBin(contextMenu.binId)}

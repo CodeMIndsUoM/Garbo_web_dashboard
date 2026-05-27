@@ -38,6 +38,7 @@ export default function Home() {
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [selectedCouncil, setSelectedCouncil] = useState<{ id: string; name: string; description?: string } | null>(null);
   const [tabCouncilFilters, setTabCouncilFilters] = useState<Record<string, string>>({});
+  const [mapStartAddMode, setMapStartAddMode] = useState(false);
 
   // Mock councils for demo; replace with API call if needed
   const COUNCILS = [
@@ -282,11 +283,26 @@ export default function Home() {
       case 'schedule':
         return <CollectionSchedule council={getActiveCouncil()} />;
       case 'bins':
-        return <BinManagement council={getActiveCouncil()} userRole={userRole} />;
+        return (
+          <BinManagement
+            council={getActiveCouncil()}
+            userRole={userRole}
+            onAddBinOnMap={() => {
+              setMapStartAddMode(true);
+              setCurrentPage('map');
+            }}
+          />
+        );
       case 'vehicles':
         return <VehicleManagement council={getActiveCouncil()} userRole={userRole} />;
       case 'map':
-        return <MapView council={getActiveCouncil()} />;
+        return (
+          <MapView
+            council={getActiveCouncil()}
+            startInAddMode={mapStartAddMode}
+            onAddModeActivated={() => setMapStartAddMode(false)}
+          />
+        );
       case 'analytics':
         return <WasteAnalytics onNavigate={(page) => setCurrentPage(page as PageType)} council={getActiveCouncil()} />;
       case 'citizen-management':

@@ -1,5 +1,6 @@
 'use client';
 
+// Fleet status overview and searchable vehicle list.
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Truck, CheckCircle2, MapPin, Search, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -21,7 +22,7 @@ interface VehicleAnalyticsDTO {
   vehicles: VehicleRowDTO[];
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
+// Loading placeholder for KPI cards
 function KpiSkeleton() {
   return (
     <div className="animate-pulse">
@@ -33,6 +34,7 @@ function KpiSkeleton() {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
+// Vehicle fleet analytics page with KPI cards and searchable table
 export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
   const [data, setData] = useState<VehicleAnalyticsDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ export function VehicleAnalytics({ onBack }: { onBack: () => void }) {
     fetchAnalytics();
   }, []);
 
-  // ── Client-side filter (search + status toggle) ───────────────────────────
+  // Fleet table rows filtered by search text and status
   const filteredVehicles = (data?.vehicles ?? []).filter(v => {
     const matchesSearch =
       v.plate.toLowerCase().includes(searchQuery.toLowerCase()) ||

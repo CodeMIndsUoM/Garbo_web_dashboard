@@ -1,23 +1,26 @@
 'use client';
 
+// Admin page for managing the waste collection fleet and driver assignments.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Truck, MapPin, Wrench, Search, Plus, Pencil, X, Check, User, Trash2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { Progress } from './ui/progress';
+import { ViewModeToggle } from './ViewModeToggle';
+import { useAdminViewMode } from '../lib/useAdminViewMode';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
+// A waste collection vehicle in the fleet
 interface Vehicle {
   id: number;
-
   licensePlate: string;
-  type: string;
-  capacity: number | null;
-  status: string;
+  vehicleCode?: string;         // Optional fleet code; falls back to license plate in UI
+  type: string;                 // Truck, Compactor, or Mini Truck
+  capacity: number | null;      // Tons of waste
+  status: string;               // available, on_route, or maintenance
   assignedCouncil: string;
-  assignedDriverId: number | null;
+  assignedDriverId: number | null;  // Bin collector staff ID
   assignedDriverName?: string | null;
   currentLocation: string;
   fuelLevel: number;
@@ -27,6 +30,7 @@ interface Vehicle {
   updatedAt: string;
 }
 
+// Staff member who drives a collection vehicle
 interface BinCollector {
   empId: number;
   empName?: string;
@@ -42,17 +46,8 @@ const COUNCILS = [
   'Sri Jayewardenepura Kotte',
 ];
 const VEHICLE_TYPES = ['Truck', 'Compactor', 'Mini Truck'];
-const VEHICLE_STATUSES = ['available', 'on_route', 'maintenance'];
 
-function getStatusColor(status: string) {
-  switch (status) {
-    case 'on_route': return 'bg-blue-100 text-blue-700';
-    case 'maintenance': return 'bg-orange-100 text-orange-700';
-    case 'inactive': return 'bg-gray-100 text-gray-500';
-    default: return 'bg-green-100 text-green-700';
-  }
-}
-
+// Label for each vehicle status
 function getStatusLabel(status: string) {
   switch (status) {
     case 'on_route': return 'On Route';
@@ -62,6 +57,21 @@ function getStatusLabel(status: string) {
   }
 }
 
+// Row/table styling and card top-bar color by vehicle status.
+function getStatusRowStyles(status: string) {
+  switch (status) {
+    case 'on_route':
+      return { row: 'bg-blue-50 hover:bg-blue-100/70', badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' };
+    case 'maintenance':
+      return { row: 'bg-amber-50 hover:bg-amber-100/70', badge: 'bg-amber-100 text-amber-700', bar: 'bg-amber-500' };
+    case 'inactive':
+      return { row: 'bg-gray-50 hover:bg-gray-100/70', badge: 'bg-gray-100 text-gray-600', bar: 'bg-gray-400' };
+    default:
+      return { row: 'bg-green-50 hover:bg-green-100/70', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' };
+  }
+}
+
+// Main fleet management screen for council admins
 export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<BinCollector[]>([]);
@@ -76,16 +86,26 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState('');
+  const { viewMode, setViewMode } = useAdminViewMode();
+  // Set when admin clicks a summary stat card to filter the vehicle list.
+  const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'on_route' | 'maintenance'>('all');
 
+  // Auth token for protected API calls
   const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  // Loads bin collector staff who can be assigned as drivers
   const fetchDrivers = useCallback(async () => {
     try {
-      const url = `${API_BASE}/api/admins/staff`;
+      const councilQuery = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
+      const url = `${API_BASE}/api/admins/staff${councilQuery}`;
       const res = await fetch(url, { headers: authHeaders() });
+      if (res.status === 401) {
+        console.warn('Staff list requires login — driver names will use vehicle data only');
+        return;
+      }
       const json = await res.json();
       if (json.success) {
         const staff: any[] = Array.isArray(json.data) ? json.data : [];
@@ -106,6 +126,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     }
   }, [council]);
 
+  // Loads fleet vehicles, scoped to the active council
   const fetchVehicles = useCallback(async () => {
     try {
       const councilQuery = council?.name || council?.id || '';
@@ -131,12 +152,14 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
   useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
 
+  // Quick lookup table: driver ID → driver record
   const driversById = useMemo(() => {
     const map = new Map<number, BinCollector>();
     for (const driver of allDrivers) map.set(driver.empId, driver);
     return map;
   }, [allDrivers]);
 
+  // Display name for the driver assigned to a vehicle
   const getDriverLabel = useCallback((vehicle: Vehicle) => {
     const { assignedDriverId, assignedDriverName } = vehicle;
     if (!assignedDriverId) return 'Unassigned';
@@ -147,16 +170,36 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     return driver.empName || `Staff #${assignedDriverId}`;
   }, [driversById]);
 
+  // Refreshes driver list after an edit
   const handleDriverUpdated = () => {
     setEditingDriver(null);
     fetchDrivers();
   };
 
-  const filteredVehicles = vehicles.filter(v =>
-    v.licensePlate.toLowerCase().includes(search.toLowerCase()) ||
-    v.type.toLowerCase().includes(search.toLowerCase())
-  );
+  // Vehicles matching search and optional status filter from stats cards
+  const displayedVehicles = useMemo(() => {
+    let list = vehicles.filter(v =>
+      v.licensePlate.toLowerCase().includes(search.toLowerCase()) ||
+      v.type.toLowerCase().includes(search.toLowerCase())
+    );
+    if (statusFilter === 'available') {
+      list = list.filter(v => v.status === 'available' || !['on_route', 'maintenance', 'inactive'].includes(v.status));
+    } else if (statusFilter !== 'all') {
+      list = list.filter(v => v.status === statusFilter);
+    }
+    return list;
+  }, [vehicles, search, statusFilter]);
 
+  // Clicking the same stat card again clears the filter.
+  const toggleStatusFilter = (filter: typeof statusFilter) => {
+    setStatusFilter((current) => (current === filter ? 'all' : filter));
+  };
+
+  // Highlights the active stat card when a status filter is applied.
+  const statCardClass = (filter: typeof statusFilter) =>
+    `cursor-pointer transition-all hover:shadow-md ${statusFilter === filter ? 'ring-2 ring-offset-2 ring-gray-900 shadow-md' : ''}`;
+
+  // Fleet summary shown in the stats cards
   const stats = {
     total: vehicles.length,
     available: vehicles.filter(v => v.status === 'available').length,
@@ -164,6 +207,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     maintenance: vehicles.filter(v => v.status === 'maintenance').length,
   };
 
+  // Permanently removes the selected vehicle
   const handleDelete = async () => {
     if (!deletingVehicle) return;
     try {
@@ -180,6 +224,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   };
 
 
+  // Toggle between available and maintenance (on_route is system-managed)
   const handleStatusChange = async (vehicle: Vehicle, newStatus: string) => {
     try {
       await fetch(`${API_BASE}/api/vehicles/${vehicle.id}/status`, {
@@ -219,9 +264,9 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
-      {/* Stats */}
+      {/* Stats — click to filter the list below */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card className={statCardClass('all')} onClick={() => toggleStatusFilter('all')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -232,7 +277,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={statCardClass('available')} onClick={() => toggleStatusFilter('available')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -243,7 +288,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={statCardClass('on_route')} onClick={() => toggleStatusFilter('on_route')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -254,7 +299,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={statCardClass('maintenance')} onClick={() => toggleStatusFilter('maintenance')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -267,6 +312,21 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </Card>
       </div>
 
+      {statusFilter !== 'all' && (
+        <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+          <span>
+            Showing <strong>{getStatusLabel(statusFilter === 'available' ? 'available' : statusFilter)}</strong> vehicles only
+          </span>
+          <button
+            type="button"
+            onClick={() => setStatusFilter('all')}
+            className="text-blue-600 hover:text-blue-700 font-medium"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
       {showDriversListModal && (
         <DriversListModal
           drivers={drivers}
@@ -276,9 +336,9 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         />
       )}
 
-      {/* Search */}
-      <div className="mb-6">
-        <div className="relative">
+      {/* Search & view mode */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <Input
             placeholder="Search vehicles by license plate or type..."
@@ -287,95 +347,192 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
       </div>
 
-      {/* Vehicles Grid */}
+      {/* Vehicles list */}
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading vehicles...</div>
-      ) : filteredVehicles.length === 0 ? (
+      ) : displayedVehicles.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
-          {search ? 'No vehicles match your search' : 'No vehicles found. Click "Add Vehicle" to create one.'}
+          {statusFilter !== 'all'
+            ? `No ${getStatusLabel(statusFilter === 'available' ? 'available' : statusFilter).toLowerCase()} vehicles found`
+            : search ? 'No vehicles match your search' : 'No vehicles found. Click "Add Vehicle" to create one.'}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredVehicles.map((vehicle) => (
-            <Card key={vehicle.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 overflow-hidden relative">
-              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
-                vehicle.status === 'available' ? 'bg-green-500' :
-                vehicle.status === 'on_route' ? 'bg-blue-500' :
-                vehicle.status === 'maintenance' ? 'bg-amber-500' :
-                'bg-gray-400'
-              }`} />
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-gray-900 mb-1">{vehicle.vehicleCode || vehicle.licensePlate}</h3>
-                    <p className="text-sm text-gray-500">{vehicle.vehicleCode ? vehicle.licensePlate : `ID: ${vehicle.id}`}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className={getStatusColor(vehicle.status)}>
+      ) : viewMode === 'card' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {displayedVehicles.map((vehicle) => {
+            const statusStyles = getStatusRowStyles(vehicle.status);
+            return (
+              <Card key={vehicle.id} className="bg-white border-none shadow-sm overflow-hidden">
+                <div className={`h-1.5 ${statusStyles.bar}`} />
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <p className="text-lg font-semibold text-gray-900">{vehicle.licensePlate}</p>
+                      {vehicle.vehicleCode && (
+                        <p className="text-xs text-gray-500 mt-0.5">{vehicle.vehicleCode}</p>
+                      )}
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${statusStyles.badge}`}>
                       {getStatusLabel(vehicle.status)}
-                    </Badge>
-                    <button onClick={() => setEditingVehicle(vehicle)} className="text-gray-400 hover:text-gray-600">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setDeletingVehicle(vehicle)} className="text-gray-400 hover:text-red-600">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    </span>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-
-                  {/* Info */}
-                  <div className="pt-2 border-t border-gray-100 space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Type</span>
-                      <span className="text-gray-900">{vehicle.type}</span>
+                  <div className="space-y-2 text-sm text-gray-700 mb-4">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Type</span>
+                      <span className="font-medium">{vehicle.type}</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Capacity</span>
-                      <span className="text-gray-900">{vehicle.capacity ? `${vehicle.capacity} tons` : '—'}</span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Capacity</span>
+                      <span className="font-medium">{vehicle.capacity ? `${vehicle.capacity} tons` : '—'}</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 flex items-center gap-1"><User className="w-3 h-3" /> Driver</span>
-                      <span className="text-gray-900">{getDriverLabel(vehicle)}</span>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 shrink-0">Driver</span>
+                      <span className="font-medium text-right flex items-center gap-1 justify-end">
+                        <User className="w-3.5 h-3.5 text-gray-400" />
+                        {getDriverLabel(vehicle)}
+                      </span>
                     </div>
                     {vehicle.currentLocation && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-600 flex items-center gap-1"><MapPin className="w-3 h-3" /> Location</span>
-                        <span className="text-gray-900 line-clamp-1">{vehicle.currentLocation}</span>
+                      <div className="flex items-start gap-1.5 pt-1">
+                        <MapPin className="w-4 h-4 shrink-0 text-gray-400 mt-0.5" />
+                        <span className="text-gray-700">{vehicle.currentLocation}</span>
                       </div>
                     )}
                   </div>
-
-                  {/* Status Quick Actions */}
-                  <div className="pt-2 border-t border-gray-100">
-                      <div className="flex gap-1 flex-wrap">
-                        {/* Only allow manual toggle to/from Maintenance */}
-                        {vehicle.status === 'maintenance' ? (
-                          <button
-                            onClick={() => handleStatusChange(vehicle, 'available')}
-                            className={`text-xs px-2 py-1 rounded transition-colors bg-green-50 text-green-700 hover:opacity-80 border border-green-100`}
-                          >
-                            Set Available
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleStatusChange(vehicle, 'maintenance')}
-                            className={`text-xs px-2 py-1 rounded transition-colors bg-amber-50 text-amber-700 hover:opacity-80 border border-amber-100`}
-                            disabled={vehicle.status === 'on_route'}
-                          >
-                            Set Maintenance
-                          </button>
-                        )}
-                      </div>
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+                    {vehicle.status === 'maintenance' ? (
+                      <button
+                        onClick={() => handleStatusChange(vehicle, 'available')}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-white/80 text-green-700 hover:bg-white border border-green-200"
+                      >
+                        Set Available
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleStatusChange(vehicle, 'maintenance')}
+                        disabled={vehicle.status === 'on_route'}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-white/80 text-amber-700 hover:bg-white border border-amber-200 disabled:opacity-50"
+                      >
+                        Maintenance
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setEditingVehicle(vehicle)}
+                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Edit vehicle"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeletingVehicle(vehicle)}
+                      className="p-2 text-gray-500 hover:text-red-600 hover:bg-gray-100 rounded-lg transition-colors"
+                      title="Delete vehicle"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
+      ) : (
+        <Card className="bg-white border-none shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-white">
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm">License Plate</th>
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Type</th>
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Capacity</th>
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Driver</th>
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Location</th>
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Status</th>
+                    <th className="px-6 py-4 font-semibold text-gray-600 text-sm text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedVehicles.map((vehicle) => {
+                    const statusStyles = getStatusRowStyles(vehicle.status);
+                    return (
+                      <tr
+                        key={vehicle.id}
+                        className={`border-b border-white/60 transition-colors ${statusStyles.row}`}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-semibold text-gray-900">{vehicle.licensePlate}</div>
+                          {vehicle.vehicleCode && (
+                            <div className="text-xs text-gray-500">{vehicle.vehicleCode}</div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">{vehicle.type}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          {vehicle.capacity ? `${vehicle.capacity} tons` : '—'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700">
+                          <div className="flex items-center gap-1.5">
+                            <User className="w-4 h-4 shrink-0 text-gray-400" />
+                            {getDriverLabel(vehicle)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
+                          {vehicle.currentLocation ? (
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-4 h-4 shrink-0 text-gray-400" />
+                              <span className="truncate">{vehicle.currentLocation}</span>
+                            </div>
+                          ) : '—'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${statusStyles.badge}`}>
+                            {getStatusLabel(vehicle.status)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            {vehicle.status === 'maintenance' ? (
+                              <button
+                                onClick={() => handleStatusChange(vehicle, 'available')}
+                                className="text-xs px-2.5 py-1 rounded-lg bg-white/80 text-green-700 hover:bg-white border border-green-200"
+                              >
+                                Set Available
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleStatusChange(vehicle, 'maintenance')}
+                                disabled={vehicle.status === 'on_route'}
+                                className="text-xs px-2.5 py-1 rounded-lg bg-white/80 text-amber-700 hover:bg-white border border-amber-200 disabled:opacity-50"
+                              >
+                                Maintenance
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setEditingVehicle(vehicle)}
+                              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-white/60 rounded-lg transition-colors"
+                              title="Edit vehicle"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingVehicle(vehicle)}
+                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-white/60 rounded-lg transition-colors"
+                              title="Delete vehicle"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {showCreateModal && (
@@ -424,8 +581,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   );
 }
 
-/* ── Create / Edit Modal ────────────────────────────────────────── */
-
+/* Create / Edit vehicle form */
 function VehicleFormModal({
   vehicle,
   council,
@@ -456,12 +612,14 @@ function VehicleFormModal({
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  // Admins cannot change their council assignment
   useEffect(() => {
     if (!isAdmin) return;
     if (!defaultCouncil) return;
     setForm((prev) => ({ ...prev, assignedCouncil: defaultCouncil }));
   }, [isAdmin, defaultCouncil]);
 
+  // Saves a new or updated vehicle to the backend
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.licensePlate.trim()) {
@@ -483,7 +641,6 @@ function VehicleFormModal({
       type: form.type,
       capacity: form.capacity ? parseFloat(form.capacity) : null,
       status: form.status,
-      // Enforce council ownership server payload for admins.
       assignedCouncil: (isAdmin ? defaultCouncil : form.assignedCouncil) || null,
     };
 
@@ -551,11 +708,12 @@ function VehicleFormModal({
 
 /* ── Drivers List Modal ────────────────────────────────────────── */
 
+// List of bin collectors available for vehicle assignment
 function DriversListModal({
   drivers,
   loading,
-  onClose,
   council,
+  onClose,
 }: {
   drivers: BinCollector[];
   loading: boolean;

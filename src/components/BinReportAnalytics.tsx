@@ -1,5 +1,6 @@
 'use client';
 
+// Analytics for field-staff bin inspection reports.
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';

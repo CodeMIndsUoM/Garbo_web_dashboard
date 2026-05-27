@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+// Admin page for reviewing citizen complaints and event suggestions.
+import { useEffect, useState, useMemo } from 'react';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -25,9 +26,12 @@ import {
 } from 'lucide-react';
 
 import { toast } from 'sonner';
+import { ViewModeToggle } from './ViewModeToggle';
+import { useAdminViewMode } from '../lib/useAdminViewMode';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
+// Shape of a complaint record from the backend API
 interface ComplaintItem {
   id: number;
   title?: string;
@@ -44,6 +48,7 @@ interface ComplaintItem {
   imageUrl?: string;
 }
 
+// Shape of an event or event suggestion from the backend API
 interface EventItem {
   id: number;
   title?: string;
@@ -57,6 +62,26 @@ interface EventItem {
   rejectionReason?: string;
 }
 
+function getComplaintStatusStyles(status?: string) {
+  const s = (status || 'PENDING').toUpperCase();
+  // row = table row tint, bar = card top accent, badge = inline status pill
+  if (s === 'ACCEPTED' || s === 'COMPLETED') {
+    return { row: 'bg-green-50 hover:bg-green-100/70', badge: 'bg-green-100 text-green-700', label: s === 'COMPLETED' ? 'Completed' : 'Accepted', bar: 'bg-green-500' };
+  }
+  if (s === 'REJECTED') {
+    return { row: 'bg-red-50 hover:bg-red-100/70', badge: 'bg-red-100 text-red-700', label: 'Rejected', bar: 'bg-red-500' };
+  }
+  return { row: 'bg-amber-50 hover:bg-amber-100/70', badge: 'bg-amber-100 text-amber-700', label: status || 'Pending', bar: 'bg-amber-500' };
+}
+
+function getUrgencyBadgeClass(urgency?: string) {
+  switch (urgency) {
+    case 'High': return 'bg-red-100 text-red-700';
+    case 'Medium': return 'bg-orange-100 text-orange-700';
+    default: return 'bg-emerald-100 text-emerald-700';
+  }
+}
+
 export function CitizenManagement({ council }: { council?: { name?: string } | null }) {
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -67,6 +92,9 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const { viewMode, setViewMode } = useAdminViewMode();
+  // Set when admin clicks a summary stat card to filter complaints or events.
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'events'>('all');
 
   const tokenHeader = (): Record<string, string> => {
     const token = localStorage.getItem('token');
@@ -77,6 +105,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     loadData();
   }, []);
 
+  // Accepts or rejects a complaint from the detail modal.
   const updateComplaint = async (id: number, status: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/complaints/${id}/status`, {
@@ -103,6 +132,51 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     c.id.toString().includes(searchQuery)
   );
 
+  // Complaints shown after search and stat-card filter are applied.
+  const displayedComplaints = useMemo(() => {
+    if (activeFilter === 'events') return [];
+    let list = filteredComplaints;
+    if (activeFilter === 'pending') {
+      list = list.filter(c => {
+        const s = (c.status || 'PENDING').toUpperCase();
+        return s === 'PENDING' || s === 'NEW';
+      });
+    } else if (activeFilter === 'accepted') {
+      list = list.filter(c => {
+        const s = (c.status || '').toUpperCase();
+        return s === 'ACCEPTED' || s === 'COMPLETED';
+      });
+    } else if (activeFilter === 'rejected') {
+      list = list.filter(c => (c.status || '').toUpperCase() === 'REJECTED');
+    }
+    return list;
+  }, [filteredComplaints, activeFilter]);
+
+  // Controls which page sections are visible for the current stat-card filter.
+  const showComplaintsSection = activeFilter !== 'events';
+  const showEventSuggestions = activeFilter === 'all' || activeFilter === 'events';
+  const showActiveEvents = activeFilter === 'all';
+
+  // Clicking the same stat card again clears the filter.
+  const toggleActiveFilter = (filter: typeof activeFilter) => {
+    setActiveFilter((current) => (current === filter ? 'all' : filter));
+  };
+
+  // Highlights the active stat card when a filter is applied.
+  const statCardClass = (filter: typeof activeFilter) =>
+    `bg-white border-none shadow-sm cursor-pointer transition-all hover:shadow-md ${activeFilter === filter ? 'ring-2 ring-offset-2 ring-gray-900 shadow-md' : ''}`;
+
+  // Human-readable label shown in the active filter banner.
+  const filterLabel = (filter: typeof activeFilter) => {
+    switch (filter) {
+      case 'pending': return 'Pending';
+      case 'accepted': return 'Accepted';
+      case 'rejected': return 'Rejected';
+      case 'events': return 'Pending Events';
+      default: return 'All';
+    }
+  };
+
   const stats = {
     total: complaints.length,
     pending: complaints.filter(c => {
@@ -121,6 +195,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     setLoading(true);
     try {
       console.log("Fetching citizen management data...");
+      // Loads complaints, pending event suggestions, and active events in parallel.
       const [complaintsRes, eventsRes, activeEventsRes] = await Promise.all([
         fetch(`${API_BASE}/api/complaints`, { headers: tokenHeader() }),
         fetch(`${API_BASE}/api/events/suggestions`, { headers: tokenHeader() }),
@@ -153,6 +228,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     }
   };
 
+  // Approves or rejects a citizen event suggestion.
   const updateEvent = async (id: number, action: 'approve' | 'reject', reason?: string) => {
     try {
       const response = await fetch(`${API_BASE}/api/events/${id}/${action}`, {
@@ -184,9 +260,9 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
         )}
       </div>
 
-      {/* Stats Summary */}
+      {/* Stats Summary — click to filter sections below */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card className="bg-white border-none shadow-sm">
+        <Card className={statCardClass('all')} onClick={() => toggleActiveFilter('all')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -199,7 +275,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-white border-none shadow-sm">
+        <Card className={statCardClass('pending')} onClick={() => toggleActiveFilter('pending')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -212,7 +288,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-white border-none shadow-sm">
+        <Card className={statCardClass('accepted')} onClick={() => toggleActiveFilter('accepted')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -225,7 +301,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-white border-none shadow-sm">
+        <Card className={statCardClass('rejected')} onClick={() => toggleActiveFilter('rejected')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -238,7 +314,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-white border-none shadow-sm">
+        <Card className={statCardClass('events')} onClick={() => toggleActiveFilter('events')}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -253,23 +329,42 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
         </Card>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <Input 
-          placeholder="Search by issue type, description or ID..." 
-          className="pl-10 h-11 bg-white border-none shadow-sm"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      {activeFilter !== 'all' && (
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span>
+            Showing <strong>{filterLabel(activeFilter)}</strong> only
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveFilter('all')}
+            className="text-emerald-600 hover:text-emerald-700 font-medium"
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
+      {/* Search & view mode */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input 
+            placeholder="Search by issue type, description or ID..." 
+            className="pl-10 h-11 bg-white border-none shadow-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
       </div>
 
+      {showComplaintsSection && (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             Citizen Complaints
             <Badge variant="secondary" className="rounded-full bg-gray-100 text-gray-600 font-semibold border-none">
-              {filteredComplaints.length}
+              {displayedComplaints.length}
             </Badge>
           </h3>
         </div>
@@ -279,77 +374,151 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
             <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mb-4" />
             <p className="text-gray-500">Fetching latest reports...</p>
           </div>
-        ) : filteredComplaints.length === 0 ? (
+        ) : displayedComplaints.length === 0 ? (
           <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
             <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 font-medium">No complaints found</p>
-            <p className="text-sm text-gray-400 mt-1">Check back later for new citizen submissions.</p>
+            <p className="text-gray-500 font-medium">
+              {activeFilter !== 'all' ? `No ${filterLabel(activeFilter).toLowerCase()} complaints found` : 'No complaints found'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              {activeFilter !== 'all' ? (
+                <button type="button" onClick={() => setActiveFilter('all')} className="text-emerald-600 hover:underline">
+                  Clear filter
+                </button>
+              ) : (
+                'Check back later for new citizen submissions.'
+              )}
+            </p>
+          </div>
+        ) : viewMode === 'card' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {displayedComplaints.map((complaint) => {
+              const statusStyles = getComplaintStatusStyles(complaint.status);
+              return (
+                <Card
+                  key={complaint.id}
+                  className="bg-white border-none shadow-sm overflow-hidden cursor-pointer"
+                  onClick={() => setSelectedComplaint(complaint)}
+                >
+                  <div className={`h-1.5 ${statusStyles.bar}`} />
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium">#{complaint.id}</p>
+                        <p className="text-base font-semibold text-gray-900 mt-0.5">
+                          {complaint.issueType || 'General'}
+                        </p>
+                      </div>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${statusStyles.badge}`}>
+                        {statusStyles.label}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 line-clamp-3 mb-3">
+                      {complaint.description || 'No description provided'}
+                    </p>
+                    <div className="flex items-center justify-between text-sm">
+                      {complaint.urgency ? (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${getUrgencyBadgeClass(complaint.urgency)}`}>
+                          {complaint.urgency}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                      <span className="text-gray-500">
+                        {complaint.createdAt ? new Date(complaint.createdAt).toLocaleDateString() : '—'}
+                      </span>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-emerald-600 font-bold hover:text-emerald-700 hover:bg-gray-100 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedComplaint(complaint);
+                        }}
+                      >
+                        {complaint.status === 'ACCEPTED' ? 'View' : 'Review'}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredComplaints.map((complaint) => (
-              <Card 
-                key={complaint.id} 
-                className="hover:shadow-md transition-all duration-300 border-none group cursor-pointer relative overflow-hidden"
-                onClick={() => setSelectedComplaint(complaint)}
-              >
-                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-                  complaint.urgency === 'High' ? 'bg-red-500' :
-                  complaint.urgency === 'Medium' ? 'bg-orange-400' :
-                  'bg-emerald-500'
-                }`} />
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <h4 className="text-gray-900 font-bold truncate">
-                          {complaint.issueType || `Complaint #${complaint.id}`}
-                        </h4>
-                        {complaint.urgency && (
-                          <Badge 
-                            className={`text-[10px] py-0 px-1.5 border-none font-bold uppercase tracking-tight ${
-                              complaint.urgency === 'High' ? 'bg-red-50 text-red-600' :
-                              complaint.urgency === 'Medium' ? 'bg-orange-50 text-orange-600' :
-                              'bg-emerald-50 text-emerald-600'
-                            }`}
-                            variant="outline"
-                          >
-                            {complaint.urgency}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[12px] text-gray-500">
-                        <Clock className="w-3.5 h-3.5" />
-                        {complaint.createdAt ? new Date(complaint.createdAt).toLocaleDateString() : 'Just now'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-4 h-10">
-                    {complaint.description || 'No description provided'}
-                  </p>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                    <Badge 
-                      className={`font-semibold rounded-lg ${
-                        complaint.status === 'ACCEPTED' ? 'bg-emerald-50 text-emerald-700' :
-                        complaint.status === 'REJECTED' ? 'bg-red-50 text-red-700' :
-                        'bg-blue-50 text-blue-700'
-                      }`}
-                      variant="secondary"
-                    >
-                      {complaint.status === 'ACCEPTED' ? 'ACCEPTED' : (complaint.status || 'PENDING')}
-                    </Badge>
-                    <Button variant="ghost" size="sm" className="text-emerald-600 font-bold hover:text-emerald-700 hover:bg-emerald-50 text-xs">
-                      {complaint.status === 'ACCEPTED' ? 'View Details' : 'Review Issue'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card className="bg-white border-none shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-white">
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">ID</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Issue Type</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Urgency</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Description</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Date</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Status</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedComplaints.map((complaint) => {
+                      const statusStyles = getComplaintStatusStyles(complaint.status);
+                      return (
+                        <tr
+                          key={complaint.id}
+                          className={`border-b border-white/60 transition-colors cursor-pointer ${statusStyles.row}`}
+                          onClick={() => setSelectedComplaint(complaint)}
+                        >
+                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">#{complaint.id}</td>
+                          <td className="px-6 py-4 text-sm text-gray-800">
+                            {complaint.issueType || 'General'}
+                          </td>
+                          <td className="px-6 py-4">
+                            {complaint.urgency ? (
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${getUrgencyBadgeClass(complaint.urgency)}`}>
+                                {complaint.urgency}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-gray-500">—</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
+                            {complaint.description || 'No description provided'}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
+                            {complaint.createdAt ? new Date(complaint.createdAt).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${statusStyles.badge}`}>
+                              {statusStyles.label}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-emerald-600 font-bold hover:text-emerald-700 hover:bg-white/60 text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedComplaint(complaint);
+                              }}
+                            >
+                              {complaint.status === 'ACCEPTED' ? 'View' : 'Review'}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
+      )}
 
       {/* Detail Modal */}
       <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
@@ -473,6 +642,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
       </Dialog>
 
       {/* Event Suggestions */}
+      {showEventSuggestions && (
       <div className="space-y-4">
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           Event Suggestions
@@ -485,59 +655,116 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           <div className="text-center py-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
             <p className="text-gray-400">No pending event suggestions.</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        ) : viewMode === 'card' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {events.map((event) => (
-              <Card key={event.id} className="hover:shadow-md transition-all duration-300 border-none group relative overflow-hidden">
-                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500" />
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h4 className="text-gray-900 font-bold truncate">{event.title}</h4>
-                      <div className="flex items-center gap-1.5 text-[12px] text-gray-500 mt-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {event.eventDate || 'N/A'}
-                      </div>
-                    </div>
+              <Card key={event.id} className="bg-white border-none shadow-sm overflow-hidden">
+                <div className="h-1.5 bg-blue-500" />
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <p className="text-base font-semibold text-gray-900">{event.title || 'Untitled'}</p>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 shrink-0">
+                      Pending
+                    </span>
                   </div>
-
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-4 h-10">
+                  <p className="text-sm text-gray-700 line-clamp-3 mb-3">
                     {event.description || 'No description provided'}
                   </p>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                    <Badge className="bg-blue-50 text-blue-700 font-semibold rounded-lg" variant="secondary">
-                      PENDING
-                    </Badge>
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
-                        onClick={() => updateEvent(event.id, 'approve')}
-                      >
-                        Approve
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs"
-                        onClick={() => {
-                          setSelectedEvent(event);
-                          setIsRejectModalOpen(true);
-                        }}
-                      >
-                        Reject
-                      </Button>
-                    </div>
+                  <div className="flex items-center gap-1.5 text-sm text-gray-600 mb-4">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    {event.eventDate || 'N/A'}
+                  </div>
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                      onClick={() => updateEvent(event.id, 'approve')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs bg-white/80"
+                      onClick={() => {
+                        setSelectedEvent(event);
+                        setIsRejectModalOpen(true);
+                      }}
+                    >
+                      Reject
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
+        ) : (
+          <Card className="bg-white border-none shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-white">
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Title</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Event Date</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Description</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Status</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {events.map((event) => (
+                      <tr key={event.id} className="border-b border-white/60 transition-colors bg-blue-50 hover:bg-blue-100/70">
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{event.title || 'Untitled'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            {event.eventDate || 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
+                          {event.description || 'No description provided'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                            Pending
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                              onClick={() => updateEvent(event.id, 'approve')}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs bg-white/80"
+                              onClick={() => {
+                                setSelectedEvent(event);
+                                setIsRejectModalOpen(true);
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
+      )}
 
       {/* Active & Approved Events */}
+      {showActiveEvents && (
       <div className="space-y-4">
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           Approved & Active Events
@@ -550,40 +777,75 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           <div className="text-center py-10 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
             <p className="text-gray-400">No active events yet.</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        ) : viewMode === 'card' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {activeEvents.map((event) => (
-              <Card key={event.id} className="hover:shadow-md transition-all duration-300 border-none group relative overflow-hidden">
-                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500" />
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h4 className="text-gray-900 font-bold truncate">{event.title}</h4>
-                      <div className="flex items-center gap-1.5 text-[12px] text-gray-500 mt-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {event.eventDate || 'N/A'}
-                      </div>
-                    </div>
+              <Card key={event.id} className="bg-white border-none shadow-sm overflow-hidden">
+                <div className="h-1.5 bg-green-500" />
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <p className="text-base font-semibold text-gray-900">{event.title || 'Untitled'}</p>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 shrink-0">
+                      Active
+                    </span>
                   </div>
-
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-4 h-10">
+                  <p className="text-sm text-gray-700 line-clamp-3 mb-3">
                     {event.description || 'No description provided'}
                   </p>
-
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                    <Badge className="bg-emerald-50 text-emerald-700 font-semibold rounded-lg" variant="secondary">
-                      ACTIVE
-                    </Badge>
-                    <div className="text-[10px] text-gray-400 font-medium">
-                      ID: #{event.id}
+                  <div className="flex items-center justify-between text-sm text-gray-600">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      {event.eventDate || 'N/A'}
                     </div>
+                    <span className="text-gray-500">#{event.id}</span>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
+        ) : (
+          <Card className="bg-white border-none shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-white">
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Title</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Event Date</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Description</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">Status</th>
+                      <th className="px-6 py-4 font-semibold text-gray-600 text-sm">ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeEvents.map((event) => (
+                      <tr key={event.id} className="border-b border-white/60 transition-colors bg-green-50 hover:bg-green-100/70">
+                        <td className="px-6 py-4 text-sm font-semibold text-gray-900">{event.title || 'Untitled'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            {event.eventDate || 'N/A'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
+                          {event.description || 'No description provided'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                            Active
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">#{event.id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
+      )}
 
       {/* Rejection Modal for Events */}
       <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
