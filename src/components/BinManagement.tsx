@@ -9,6 +9,7 @@ import { Input } from './ui/input';
 import { toast } from "sonner";
 import { ViewModeToggle } from './ViewModeToggle';
 import { useAdminViewMode } from '../lib/useAdminViewMode';
+import type { MapFocusBin } from '../lib/mapFocus';
 
 const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'}/api/bins`;
 const BIN_TYPES = ['General Waste', 'Recyclables', 'Organic Waste', 'Mixed Waste'];
@@ -35,10 +36,12 @@ export function BinManagement({
   council,
   userRole,
   onAddBinOnMap,
+  onViewBinOnMap,
 }: {
   council?: { name?: string } | null;
   userRole?: 'admin' | 'superadmin' | null;
   onAddBinOnMap?: () => void;
+  onViewBinOnMap?: (bin: MapFocusBin & { location?: string; coordinates?: string }) => void;
 }) {
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,6 +179,38 @@ export function BinManagement({
     } catch (error) {
       toast.error("Failed to delete bin");
     }
+  };
+
+  // Opens the map tab centered on this bin's coordinates.
+  const handleViewOnMap = (bin: Bin) => {
+    if (!onViewBinOnMap) return;
+    if (!bin.location && !bin.coordinates) {
+      toast.error('This bin has no location coordinates');
+      return;
+    }
+    onViewBinOnMap({
+      id: bin.id,
+      binCode: bin.binCode,
+      location: bin.location,
+      coordinates: bin.coordinates,
+    });
+  };
+
+  const BinLocationButton = ({ bin }: { bin: Bin }) => {
+    if (!bin.location && !bin.coordinates) {
+      return <span className="text-gray-400">—</span>;
+    }
+    return (
+      <button
+        type="button"
+        onClick={() => handleViewOnMap(bin)}
+        className="flex items-center gap-1.5 text-left text-blue-600 hover:text-blue-800 hover:underline transition-colors max-w-full"
+        title="View on map"
+      >
+        <MapPin className="w-4 h-4 shrink-0" />
+        <span className="truncate line-clamp-2">{bin.location || bin.coordinates}</span>
+      </button>
+    );
   };
 
   return (
@@ -334,8 +369,7 @@ export function BinManagement({
                   </div>
                   <div className="space-y-2 text-sm text-gray-700 mb-4">
                     <div className="flex items-start gap-1.5">
-                      <MapPin className="w-4 h-4 shrink-0 text-gray-400 mt-0.5" />
-                      <span className="line-clamp-2">{bin.location || '—'}</span>
+                      <BinLocationButton bin={bin} />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">Type</span>
@@ -403,10 +437,7 @@ export function BinManagement({
                           {bin.binCode || `Bin #${bin.id}`}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="w-4 h-4 shrink-0 text-gray-400" />
-                            <span className="truncate">{bin.location || '—'}</span>
-                          </div>
+                          <BinLocationButton bin={bin} />
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-700">
                           {bin.type || 'General Waste'}

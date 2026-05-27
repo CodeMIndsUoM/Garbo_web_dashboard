@@ -10,6 +10,7 @@ import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point, polygon as turfPolygon } from "@turf/helpers";
 import { MapPin, Route, Plus, Navigation, X, Check } from "lucide-react";
 import { Input } from "./ui/input";
+import type { MapFocusBin } from "../lib/mapFocus";
 
 // Allowed waste types when creating or editing a bin on the map.
 const BIN_TYPES = ['General Waste', 'Recyclables', 'Organic Waste', 'Mixed Waste'];
@@ -42,6 +43,14 @@ const selectedBinIcon = L.divIcon({
   className: '',
   iconSize: [24, 24],
   iconAnchor: [12, 12],
+});
+
+// Distinct marker when a bin is opened from Bin Management.
+const focusedBinIcon = L.divIcon({
+  html: `<div style="width:28px;height:28px;background-color:#2563eb;border:3px solid #fbbf24;border-radius:50%;box-shadow:0 0 0 8px rgba(37,99,235,0.35);"></div>`,
+  className: '',
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
 });
 
 interface BinData {
@@ -101,10 +110,14 @@ export default function MapView({
   council,
   startInAddMode = false,
   onAddModeActivated,
+  focusBin = null,
+  onFocusHandled,
 }: {
   council?: { name?: string } | null;
   startInAddMode?: boolean;
   onAddModeActivated?: () => void;
+  focusBin?: MapFocusBin | null;
+  onFocusHandled?: () => void;
 }) {
 
   const mapRef = useRef<HTMLDivElement | null>(null);
@@ -112,6 +125,8 @@ export default function MapView({
   const addModeRef = useRef(false);
   const routeLayerRef = useRef<L.FeatureGroup | null>(null);
   const stompClientRef = useRef<Client | null>(null);
+  const highlightedBinIdRef = useRef<string | null>(null);
+  const markersRef = useRef<BinMarkersMap>(new Map());
 
   const [markers, setMarkers] = useState<BinMarkersMap>(new Map());
   const [addMode, setAddMode] = useState(false);
@@ -176,6 +191,55 @@ export default function MapView({
   useEffect(() => {
     selectionModeRef.current = selectionMode;
   }, [selectionMode]);
+
+  // Keep a ref in sync so focus logic can run before the next markers state update.
+  useEffect(() => {
+    markersRef.current = markers;
+  }, [markers]);
+
+  // Pan to and highlight a bin opened from Bin Management.
+  useEffect(() => {
+    if (!focusBin) return;
+
+    const binId = String(focusBin.id);
+    const applyFocus = (): boolean => {
+      const map = leafletMapRef.current;
+      if (!map) return false;
+
+      const entry = markersRef.current.get(binId);
+      if (entry) {
+        if (highlightedBinIdRef.current && highlightedBinIdRef.current !== binId) {
+          const prev = markersRef.current.get(highlightedBinIdRef.current);
+          if (prev) prev.marker.setIcon(binIcon);
+        }
+        entry.marker.setIcon(focusedBinIcon);
+        map.flyTo([entry.data.lat, entry.data.lng], 17, { duration: 1 });
+        entry.marker.openTooltip();
+        highlightedBinIdRef.current = binId;
+        onFocusHandled?.();
+        return true;
+      }
+
+      if (focusBin.lat != null && focusBin.lng != null) {
+        map.flyTo([focusBin.lat, focusBin.lng], 17, { duration: 1 });
+      }
+      return false;
+    };
+
+    if (applyFocus()) return;
+
+    const interval = window.setInterval(() => {
+      if (applyFocus()) {
+        window.clearInterval(interval);
+      }
+    }, 250);
+
+    const timeout = window.setTimeout(() => window.clearInterval(interval), 6000);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timeout);
+    };
+  }, [focusBin, markers, onFocusHandled]);
 
   // Available vehicles, drivers, and labour for route assignment
   useEffect(() => {

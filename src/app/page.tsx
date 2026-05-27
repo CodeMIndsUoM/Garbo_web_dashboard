@@ -25,6 +25,8 @@ import { CitizenManagement } from '@/components/CitizenManagement';
 import { ThirdPartyCollectors } from '@/components/ThirdPartyCollectors';
 import { InternalUsers } from '@/components/InternalUsers';
 import dynamic from 'next/dynamic';
+import type { MapFocusBin } from '@/lib/mapFocus';
+import { parseBinCoordinates } from '@/lib/mapFocus';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
@@ -39,6 +41,7 @@ export default function Home() {
   const [selectedCouncil, setSelectedCouncil] = useState<{ id: string; name: string; description?: string } | null>(null);
   const [tabCouncilFilters, setTabCouncilFilters] = useState<Record<string, string>>({});
   const [mapStartAddMode, setMapStartAddMode] = useState(false);
+  const [mapFocusBin, setMapFocusBin] = useState<MapFocusBin | null>(null);
 
   // Mock councils for demo; replace with API call if needed
   const COUNCILS = [
@@ -289,6 +292,18 @@ export default function Home() {
             userRole={userRole}
             onAddBinOnMap={() => {
               setMapStartAddMode(true);
+              setMapFocusBin(null);
+              setCurrentPage('map');
+            }}
+            onViewBinOnMap={(bin) => {
+              const coords = parseBinCoordinates(bin);
+              setMapFocusBin({
+                id: bin.id,
+                lat: coords?.lat,
+                lng: coords?.lng,
+                binCode: bin.binCode,
+              });
+              setMapStartAddMode(false);
               setCurrentPage('map');
             }}
           />
@@ -301,6 +316,8 @@ export default function Home() {
             council={getActiveCouncil()}
             startInAddMode={mapStartAddMode}
             onAddModeActivated={() => setMapStartAddMode(false)}
+            focusBin={mapFocusBin}
+            onFocusHandled={() => setMapFocusBin(null)}
           />
         );
       case 'analytics':
