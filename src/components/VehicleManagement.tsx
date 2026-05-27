@@ -73,19 +73,26 @@ function getStatusRowStyles(status: string) {
 
 // Main fleet management screen for council admins
 export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
+  // --- Fleet data ---
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // --- Driver lookup (bin collectors assigned to vehicles) ---
   const [drivers, setDrivers] = useState<BinCollector[]>([]);
   const [allDrivers, setAllDrivers] = useState<BinCollector[]>([]);
   const [driversLoading, setDriversLoading] = useState(true);
   const [showDriversListModal, setShowDriversListModal] = useState(false);
   const [editingDriver, setEditingDriver] = useState<BinCollector | null>(null);
   const [deletingDriver, setDeletingDriver] = useState<BinCollector | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // --- Modals: create, edit, and delete vehicle ---
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
-  const [error, setError] = useState('');
+
+  // --- List display: table/card toggle and stat-card filter ---
   const { viewMode, setViewMode } = useAdminViewMode();
   // Set when admin clicks a summary stat card to filter the vehicle list.
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'on_route' | 'maintenance'>('all');
@@ -240,6 +247,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
   return (
     <div className="p-8">
+      {/* Page header and Add Vehicle button */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-gray-900 mb-2">Vehicle Management</h2>
@@ -312,6 +320,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </Card>
       </div>
 
+      {/* Active stat-card filter banner */}
       {statusFilter !== 'all' && (
         <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
           <span>
@@ -327,6 +336,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
+      {/* Drivers list modal (optional picker for assignments) */}
       {showDriversListModal && (
         <DriversListModal
           drivers={drivers}
@@ -350,7 +360,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
       </div>
 
-      {/* Vehicles list */}
+      {/* Vehicles list — card grid or table; switches with ViewModeToggle */}
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading vehicles...</div>
       ) : displayedVehicles.length === 0 ? (
@@ -361,6 +371,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {/* Card grid view */}
           {displayedVehicles.map((vehicle) => {
             const statusStyles = getStatusRowStyles(vehicle.status);
             return (
@@ -440,6 +451,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       ) : (
         <Card className="bg-white border-none shadow-sm overflow-hidden">
+          {/* Table view */}
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -535,6 +547,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </Card>
       )}
 
+      {/* Create new vehicle modal */}
       {showCreateModal && (
         <VehicleFormModal
           vehicle={null}
@@ -548,6 +561,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         />
       )}
 
+      {/* Edit existing vehicle modal */}
       {editingVehicle && (
         <VehicleFormModal
           vehicle={editingVehicle}

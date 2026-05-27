@@ -62,6 +62,7 @@ interface EventItem {
   rejectionReason?: string;
 }
 
+// Row, card bar, and badge colors for complaint status.
 function getComplaintStatusStyles(status?: string) {
   const s = (status || 'PENDING').toUpperCase();
   // row = table row tint, bar = card top accent, badge = inline status pill
@@ -74,6 +75,7 @@ function getComplaintStatusStyles(status?: string) {
   return { row: 'bg-amber-50 hover:bg-amber-100/70', badge: 'bg-amber-100 text-amber-700', label: status || 'Pending', bar: 'bg-amber-500' };
 }
 
+// Urgency pill colors on complaint rows and cards.
 function getUrgencyBadgeClass(urgency?: string) {
   switch (urgency) {
     case 'High': return 'bg-red-100 text-red-700';
@@ -83,19 +85,25 @@ function getUrgencyBadgeClass(urgency?: string) {
 }
 
 export function CitizenManagement({ council }: { council?: { name?: string } | null }) {
+  // --- Complaints, event suggestions, and approved events ---
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [activeEvents, setActiveEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+
+  // --- Complaint detail and event reject modals ---
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintItem | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+
+  // --- Search, table/card toggle, and stat-card filter ---
+  const [searchQuery, setSearchQuery] = useState("");
   const { viewMode, setViewMode } = useAdminViewMode();
   // Set when admin clicks a summary stat card to filter complaints or events.
   const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'events'>('all');
 
+  // Auth token for protected API calls
   const tokenHeader = (): Record<string, string> => {
     const token = localStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -126,6 +134,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     }
   };
 
+  // Complaints matching the search box (by type, description, or ID).
   const filteredComplaints = complaints.filter(c => 
     (c.issueType?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
     (c.description?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
@@ -177,6 +186,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     }
   };
 
+  // Counts shown on the summary stat cards at the top.
   const stats = {
     total: complaints.length,
     pending: complaints.filter(c => {
@@ -191,6 +201,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
     eventSuggestions: events.length
   };
 
+  // Fetches complaints, pending event suggestions, and active events from the API.
   const loadData = async () => {
     setLoading(true);
     try {
@@ -250,6 +261,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
 
   return (
     <div className="p-8 space-y-8">
+      {/* Page title and council badge */}
       <div>
         <h2 className="text-gray-900 mb-2 font-bold text-2xl">Citizen Management</h2>
         <p className="text-gray-600">Review citizen complaints and event submissions</p>
@@ -329,6 +341,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
         </Card>
       </div>
 
+      {/* Active stat-card filter banner */}
       {activeFilter !== 'all' && (
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span>
@@ -360,6 +373,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
 
       {showComplaintsSection && (
       <div className="space-y-4">
+        {/* Citizen complaints section header */}
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             Citizen Complaints
@@ -369,6 +383,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </h3>
         </div>
 
+        {/* Complaints list — card grid or table; switches with ViewModeToggle */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mb-4" />
@@ -392,6 +407,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </div>
         ) : viewMode === 'card' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {/* Card grid view */}
             {displayedComplaints.map((complaint) => {
               const statusStyles = getComplaintStatusStyles(complaint.status);
               return (
@@ -448,6 +464,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </div>
         ) : (
           <Card className="bg-white border-none shadow-sm overflow-hidden">
+            {/* Table view */}
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -520,7 +537,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
       </div>
       )}
 
-      {/* Detail Modal */}
+      {/* Complaint detail modal — review, accept, or reject */}
       <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {selectedComplaint && (
@@ -641,9 +658,10 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
         </DialogContent>
       </Dialog>
 
-      {/* Event Suggestions */}
+      {/* Event suggestions awaiting admin approval */}
       {showEventSuggestions && (
       <div className="space-y-4">
+        {/* Pending event suggestions section header */}
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           Event Suggestions
           <Badge variant="secondary" className="rounded-full bg-gray-100 text-gray-600 font-semibold border-none">
@@ -657,6 +675,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </div>
         ) : viewMode === 'card' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {/* Card grid view */}
             {events.map((event) => (
               <Card key={event.id} className="bg-white border-none shadow-sm overflow-hidden">
                 <div className="h-1.5 bg-blue-500" />
@@ -700,6 +719,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </div>
         ) : (
           <Card className="bg-white border-none shadow-sm overflow-hidden">
+            {/* Table view */}
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -763,9 +783,10 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
       </div>
       )}
 
-      {/* Active & Approved Events */}
+      {/* Approved and active events (read-only list) */}
       {showActiveEvents && (
       <div className="space-y-4">
+        {/* Active events section header */}
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
           Approved & Active Events
           <Badge variant="secondary" className="rounded-full bg-emerald-100 text-emerald-700 font-semibold border-none">
@@ -779,6 +800,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </div>
         ) : viewMode === 'card' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {/* Card grid view */}
             {activeEvents.map((event) => (
               <Card key={event.id} className="bg-white border-none shadow-sm overflow-hidden">
                 <div className="h-1.5 bg-green-500" />
@@ -805,6 +827,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
           </div>
         ) : (
           <Card className="bg-white border-none shadow-sm overflow-hidden">
+            {/* Table view */}
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -847,7 +870,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
       </div>
       )}
 
-      {/* Rejection Modal for Events */}
+      {/* Event rejection modal — reason required before rejecting a suggestion */}
       <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
         <DialogContent>
           <DialogHeader>

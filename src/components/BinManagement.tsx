@@ -35,20 +35,25 @@ interface Bin {
 export function BinManagement({
   council,
   userRole,
-  onAddBinOnMap,
-  onViewBinOnMap,
+  onAddBinOnMap,   // Navigates to map tab in add-bin mode
+  onViewBinOnMap,  // Navigates to map tab and highlights a bin by location click
 }: {
   council?: { name?: string } | null;
   userRole?: 'admin' | 'superadmin' | null;
   onAddBinOnMap?: () => void;
   onViewBinOnMap?: (bin: MapFocusBin & { location?: string; coordinates?: string }) => void;
 }) {
+  // --- Bin list data ---
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
+
+  // --- Modals: edit and delete bin ---
   const [deletingBin, setDeletingBin] = useState<Bin | null>(null);
   const [editingBin, setEditingBin] = useState<Bin | null>(null);
+
+  // --- Search, table/card toggle, and stat-card filter ---
+  const [searchQuery, setSearchQuery] = useState("");
   const { viewMode, setViewMode } = useAdminViewMode();
   // Set when admin clicks a summary stat card to filter by fill status.
   const [statusFilter, setStatusFilter] = useState<'all' | 'full' | 'half' | 'empty'>('all');
@@ -196,6 +201,7 @@ export function BinManagement({
     });
   };
 
+  // Clickable location link — opens the map tab and highlights this bin.
   const BinLocationButton = ({ bin }: { bin: Bin }) => {
     if (!bin.location && !bin.coordinates) {
       return <span className="text-gray-400">—</span>;
@@ -215,6 +221,7 @@ export function BinManagement({
 
   return (
     <div className="p-8">
+      {/* Page header and Add Bin button (redirects to map) */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-gray-900 mb-2">Bin Management</h2>
@@ -295,6 +302,7 @@ export function BinManagement({
         </Card>
       </div>
 
+      {/* Active stat-card filter banner */}
       {statusFilter !== 'all' && (
         <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
           <span>
@@ -310,7 +318,7 @@ export function BinManagement({
         </div>
       )}
 
-      {/* Search and Filters */}
+      {/* Search bar, council warning, and table/card toggle */}
       {councilFilterUnavailable && (
         <div className="mb-4 p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 text-sm">
           Council-specific bin filtering is not available from backend data yet, so all bins are shown for this section.
@@ -329,7 +337,7 @@ export function BinManagement({
         <ViewModeToggle viewMode={viewMode} onChange={setViewMode} />
       </div>
 
-      {/* Bins list */}
+      {/* Bins list — card grid or table; switches with ViewModeToggle */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
@@ -353,6 +361,7 @@ export function BinManagement({
         </div>
       ) : viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {/* Card grid view */}
           {councilScopedBins.map((bin) => {
             const statusStyles = getStatusRowStyles(bin.status);
             return (
@@ -412,6 +421,7 @@ export function BinManagement({
         </div>
       ) : (
         <Card className="bg-white border-none shadow-sm overflow-hidden">
+          {/* Table view */}
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -487,6 +497,7 @@ export function BinManagement({
         </Card>
       )}
 
+      {/* Edit bin modal (location, zone, waste type) */}
       {editingBin && (
         <BinFormModal
           bin={editingBin}
