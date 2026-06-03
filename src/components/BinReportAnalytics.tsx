@@ -271,7 +271,7 @@ export function BinReportAnalytics({
                       border: 'none',
                       boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
                     }}
-                    formatter={(value: number) => [value, 'Reports']}
+                    formatter={(value: any) => [value, 'Reports']}
                     labelFormatter={(label) => `Time: ${label}`}
                   />
                   <Area
@@ -312,7 +312,7 @@ export function BinReportAnalytics({
                       border: 'none',
                       boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
                     }}
-                    formatter={(value: number) => [value, 'Reports']}
+                    formatter={(value: any) => [value, 'Reports']}
                     labelFormatter={(label) => `Day: ${label}`}
                     cursor={{ fill: '#f1f5f9' }}
                   />
