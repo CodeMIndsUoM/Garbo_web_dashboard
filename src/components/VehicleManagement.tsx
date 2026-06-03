@@ -13,6 +13,7 @@ interface Vehicle {
   id: number;
 
   licensePlate: string;
+  vehicleCode?: string | null;
   type: string;
   capacity: number | null;
   status: string;
