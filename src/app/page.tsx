@@ -108,24 +108,6 @@ export default function Home() {
   }, [API_BASE]);
 
   const handleLogout = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      if (token) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        await fetch(`${API_BASE}/api/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-      }
-    } catch (err) {
-      // ignore network errors on logout
-    }
-
     localStorage.removeItem('token');
     localStorage.removeItem('admin');
     localStorage.removeItem('role');

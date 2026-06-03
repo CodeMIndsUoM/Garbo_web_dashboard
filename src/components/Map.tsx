@@ -71,6 +71,7 @@ interface BinData {
   lat: number;
   lng: number;
   fillLevel: number;
+  council?: string;
   status?: 'full' | 'half' | 'empty' | 'not_checked';
   priority: 'low' | 'medium' | 'high';
   zone: string;
@@ -98,6 +99,7 @@ interface RouteResponse {
   routes: Record<string, VehicleRoute>; // Keyed by vehicle identifier string
 }
 
+
 interface RouteSessionSnapshot {
   sessionId: string;
   userId: number;
@@ -119,6 +121,7 @@ interface CouncilBoundaryDTO {
 }
 
 type BinMarkersMap = Map<string, { marker: L.Marker; data: BinData }>; // Maps bin ID → Leaflet marker + domain data
+type LatLngTuple = [number, number];
 
 export default function MapView({ council }: { council?: { name?: string } | null }) {
 
@@ -156,6 +159,20 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   const [selectedDriverId, setSelectedDriverId]     = useState<string>(''); // Selected driver ID in the route setup panel
   const [selectedCollectorIds, setSelectedCollectorIds] = useState<string[]>([]); // Multi-selected collector IDs
   const selectionModeRef = useRef(false); // Ref mirror of selectionMode — used inside Leaflet click closures
+
+  const canManageBin = (binId: string) => {
+    const entry = markers.get(binId);
+    if (!entry) return false;
+
+    const role = typeof window !== 'undefined' ? localStorage.getItem('role') : null;
+    if (role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'role_superadmin') {
+      return true;
+    }
+
+    const activeCouncil = council?.name?.trim().toLowerCase();
+    const binCouncil = entry.data.council?.trim().toLowerCase();
+    return !activeCouncil || !binCouncil || activeCouncil === binCouncil;
+  };
 
   // ── Fetch council boundary from API ────────────────────────────────────────
   useEffect(() => {
@@ -256,6 +273,114 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     if (routeLayerRef.current) routeLayerRef.current.clearLayers();
   };
 
+  const isPointInsideCouncil = (lat: number, lng: number) => {
+    if (!turfPolyRef.current) return true;
+    return booleanPointInPolygon(point([lng, lat]), turfPolyRef.current);
+  };
+
+  const clipRouteSegmentToCouncil = (start: LatLngTuple, end: LatLngTuple): LatLngTuple[] => {
+    if (!turfPolyRef.current) return [start, end];
+
+    const polygonRing = boundaryData?.boundaryPoints ?? [];
+    if (polygonRing.length < 3) return [start, end];
+
+    const points: LatLngTuple[] = [start];
+    const intersections = new Set<number>([0, 1]);
+
+    const segmentIntersection = (
+      a: LatLngTuple,
+      b: LatLngTuple,
+      c: LatLngTuple,
+      d: LatLngTuple
+    ): { t: number; u: number } | null => {
+      const x1 = a[1], y1 = a[0];
+      const x2 = b[1], y2 = b[0];
+      const x3 = c[1], y3 = c[0];
+      const x4 = d[1], y4 = d[0];
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(denom) < 1e-12) return null;
+
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      const u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom;
+      if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+      return { t, u };
+    };
+
+    const pointAt = (t: number): LatLngTuple => [
+      start[0] + (end[0] - start[0]) * t,
+      start[1] + (end[1] - start[1]) * t,
+    ];
+
+    const polygonPoints = polygonRing.map(p => [p.lat, p.lng] as LatLngTuple);
+    for (let i = 0; i < polygonPoints.length; i++) {
+      const edgeStart = polygonPoints[i];
+      const edgeEnd = polygonPoints[(i + 1) % polygonPoints.length];
+      const hit = segmentIntersection(start, end, edgeStart, edgeEnd);
+      if (hit) intersections.add(hit.t);
+    }
+
+    const sortedT = Array.from(intersections).sort((a, b) => a - b);
+    const clipped: LatLngTuple[] = [];
+
+    for (let i = 0; i < sortedT.length - 1; i++) {
+      const t0 = sortedT[i];
+      const t1 = sortedT[i + 1];
+      if (t1 - t0 < 1e-6) continue;
+      const mid = pointAt((t0 + t1) / 2);
+      if (!isPointInsideCouncil(mid[0], mid[1])) continue;
+
+      const segStart = pointAt(t0);
+      const segEnd = pointAt(t1);
+      if (clipped.length === 0) {
+        clipped.push(segStart, segEnd);
+      } else {
+        const last = clipped[clipped.length - 1];
+        if (last[0] !== segStart[0] || last[1] !== segStart[1]) clipped.push(segStart);
+        clipped.push(segEnd);
+      }
+    }
+
+    return clipped;
+  };
+
+  const clipPolylineToCouncil = (latLngs: LatLngTuple[]) => {
+    if (latLngs.length < 2) return [] as LatLngTuple[][];
+
+    const segments: LatLngTuple[][] = [];
+    let currentSegment: LatLngTuple[] = [];
+
+    for (let i = 0; i < latLngs.length - 1; i++) {
+      const clipped = clipRouteSegmentToCouncil(latLngs[i], latLngs[i + 1]);
+      if (clipped.length < 2) {
+        if (currentSegment.length >= 2) {
+          segments.push(currentSegment);
+        }
+        currentSegment = [];
+        continue;
+      }
+
+      if (currentSegment.length === 0) {
+        currentSegment = [...clipped];
+        continue;
+      }
+
+      const last = currentSegment[currentSegment.length - 1];
+      const first = clipped[0];
+      if (last[0] !== first[0] || last[1] !== first[1]) {
+        segments.push(currentSegment);
+        currentSegment = [...clipped];
+      } else {
+        currentSegment.push(...clipped.slice(1));
+      }
+    }
+
+    if (currentSegment.length >= 2) {
+      segments.push(currentSegment);
+    }
+
+    return segments;
+  };
+
   // Extracts the current user's ID from the persisted admin object in localStorage
   const getCurrentUserId = () => {
     if (typeof window === 'undefined') return 1; // SSR safety — default to a placeholder ID
@@ -295,14 +420,25 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       const coords = osrmJson?.routes?.[0]?.geometry?.coordinates;
       if (!coords || !Array.isArray(coords) || coords.length === 0) throw new Error('No geometry from OSRM');
       const latLngs: [number, number][] = coords.map((c: [number, number]) => [c[1], c[0]]); // Convert GeoJSON [lng,lat] → Leaflet [lat,lng]
-      L.polyline(latLngs, { color, weight: 5, opacity: 0.85 })
-        .bindTooltip(`Vehicle ${vehicleId}`)
-        .addTo(routeLayerRef.current);
+
+      const clippedSegments = clipPolylineToCouncil(latLngs);
+      if (clippedSegments.length === 0) return;
+
+      clippedSegments.forEach((segment, index) => {
+        L.polyline(segment, { color, weight: 5, opacity: 0.85 })
+          .bindTooltip(`Vehicle ${vehicleId}${index > 0 ? ' (continued)' : ''}`)
+          .addTo(routeLayerRef.current!);
+      });
     } catch {
       // Fallback: draw a straight-line polyline with a dashed style to indicate it's approximate
-      L.polyline(pathCoordinates, { color, weight: 3, opacity: 0.6, dashArray: '8, 6' })
-        .bindTooltip(`Vehicle ${vehicleId} (fallback)`)
-        .addTo(routeLayerRef.current);
+      const clippedSegments = clipPolylineToCouncil(pathCoordinates);
+      if (clippedSegments.length === 0) return;
+
+      clippedSegments.forEach((segment, index) => {
+        L.polyline(segment, { color, weight: 3, opacity: 0.6, dashArray: '8, 6' })
+          .bindTooltip(`Vehicle ${vehicleId} (fallback${index > 0 ? ' continued' : ''})`)
+          .addTo(routeLayerRef.current!);
+      });
     }
   };
 
@@ -311,6 +447,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     await visualizeRoutesInternal(snapshot, true);
   };
 
+
+
+  
+  //draw all polylines parrelly
   // Core visualisation logic; `clear` flag allows incremental drawing when loading multiple sessions
   const visualizeRoutesInternal = async (snapshot: RouteSessionSnapshot, clear = true) => {
     if (!leafletMapRef.current || !snapshot.route?.routes) return;
@@ -464,6 +604,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       addMarker({
         id: String(bin.id), binCode: bin.binCode,
         lat, lng, fillLevel: bin.fillLevel,
+        council: bin.council,
         priority: bin.priority || 'medium',
         zone: bin.zone || 'unassigned',
         status: bin.status || 'not_checked'
@@ -533,12 +674,38 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
   // Sends a DELETE request for the given bin and removes its marker from the map
   const removeBin = async (id: string) => {
-    const res = await fetch(`${BINS_API}/${id}`, { method: "DELETE", headers: getAuthHeaders() });
-    if (!res.ok) { console.error(`Failed to delete bin ${id}`); return; }
-    const entry = markers.get(id);
-    if (entry && leafletMapRef.current) leafletMapRef.current.removeLayer(entry.marker);
-    setMarkers(prev => { const m = new Map(prev); m.delete(id); return m; });
-    setContextMenu(null); // Dismiss the context menu after deletion
+    if (!canManageBin(id)) {
+      alert('You can only manage bins from your assigned council.');
+      setContextMenu(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${BINS_API}/${id}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (!res.ok) {
+        let message = `Failed to delete bin ${id}`;
+        try {
+          const responseText = await res.text();
+          if (responseText) {
+            try {
+              const parsed = JSON.parse(responseText);
+              message = parsed?.message || parsed?.error || parsed?.data?.message || message;
+            } catch {
+              message = responseText;
+            }
+          }
+        } catch {}
+        throw new Error(message);
+      }
+
+      const entry = markers.get(id);
+      if (entry && leafletMapRef.current) leafletMapRef.current.removeLayer(entry.marker);
+      setMarkers(prev => { const m = new Map(prev); m.delete(id); return m; });
+      setContextMenu(null); // Dismiss the context menu after deletion
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Failed to delete bin ${id}`;
+      alert(message);
+    }
   };
 
   // Applies partial updates to a bin's in-memory data and refreshes its tooltip; avoids a full reload
@@ -556,6 +723,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   // PUTs the new priority value to the API and updates the local marker on success
   const updatePriority = async (id: string, priority: BinData['priority']) => {
     try {
+      if (!canManageBin(id)) {
+        alert('You can only manage bins from your assigned council.');
+        return;
+      }
       const res = await fetch(`${BINS_API}/${id}/priority?priority=${encodeURIComponent(priority)}`,
         { method: "PUT", headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`Priority update failed: ${res.status}`);
@@ -566,6 +737,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   // PUTs the new zone value to the API and updates the local marker on success
   const updateZone = async (id: string, zone: string) => {
     try {
+      if (!canManageBin(id)) {
+        alert('You can only manage bins from your assigned council.');
+        return;
+      }
       const res = await fetch(`${BINS_API}/${id}/zone?zone=${encodeURIComponent(zone)}`,
         { method: "PUT", headers: getAuthHeaders() });
       if (!res.ok) throw new Error(`Zone update failed: ${res.status}`);
@@ -956,7 +1131,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           </div>
           <hr className="my-1 border-gray-100" />
           <button onClick={() => removeBin(contextMenu.binId)}
-            className="text-left px-2 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md transition-colors font-medium flex items-center gap-2">
+            disabled={!canManageBin(contextMenu.binId)}
+            title={!canManageBin(contextMenu.binId) ? 'You can only delete bins from your assigned council' : 'Delete this bin'}
+            className="text-left px-2 py-2 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md transition-colors font-medium flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50">
             🗑 Remove Bin
           </button>
         </div>
