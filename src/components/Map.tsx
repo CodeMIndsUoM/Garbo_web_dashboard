@@ -154,10 +154,8 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   const [routeError, setRouteError]             = useState<string>(''); // Error message displayed in the status banner
   const [vehicles, setVehicles]                 = useState<any[]>([]); // Available vehicles fetched for the route form
   const [drivers, setDrivers]                   = useState<any[]>([]); // Available drivers fetched for the route form
-  const [collectors, setCollectors]             = useState<any[]>([]); // Available collectors fetched for the route form
   const [selectedVehicleId, setSelectedVehicleId]   = useState<string>(''); // Selected vehicle ID in the route setup panel
   const [selectedDriverId, setSelectedDriverId]     = useState<string>(''); // Selected driver ID in the route setup panel
-  const [selectedCollectorIds, setSelectedCollectorIds] = useState<string[]>([]); // Multi-selected collector IDs
   const selectionModeRef = useRef(false); // Ref mirror of selectionMode — used inside Leaflet click closures
 
   const canManageBin = (binId: string) => {
@@ -222,21 +220,19 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   useEffect(() => { addModeRef.current = addMode; }, [addMode]);
   useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
 
-  // Fetches vehicles, drivers, and collectors whenever selection mode opens or the council changes
+  // Fetches vehicles and drivers whenever selection mode opens or the council changes
   useEffect(() => {
     const fetchResources = async () => {
       const token = localStorage.getItem('token');
       const authHeaders = (token ? { Authorization: `Bearer ${token}` } : {}) as Record<string, string>;
       const councilQuery = council?.name ? `?council=${encodeURIComponent(council.name)}` : ''; // Scope resources to the active council
       try {
-        const [vehRes, drvRes, usrRes] = await Promise.all([
+        const [vehRes, drvRes] = await Promise.all([
           fetch(`${API_ORIGIN}/api/route-sessions/available-vehicles${councilQuery}`, { headers: authHeaders }),
-          fetch(`${API_ORIGIN}/api/route-sessions/available-drivers${councilQuery}`,  { headers: authHeaders }),
-          fetch(`${API_ORIGIN}/api/route-sessions/available-collectors${councilQuery}`, { headers: authHeaders })
+          fetch(`${API_ORIGIN}/api/route-sessions/available-drivers${councilQuery}`,  { headers: authHeaders })
         ]);
         if (vehRes.ok) { const j = await vehRes.json(); if (j.success) setVehicles(j.data); }
         if (drvRes.ok) { const j = await drvRes.json(); if (j.success) setDrivers(j.data); }
-        if (usrRes.ok) { const j = await usrRes.json(); if (j.data) setCollectors(j.data); }
       } catch (e) { console.error('Failed to fetch routing resources', e); }
     };
     fetchResources();
@@ -918,30 +914,6 @@ export default function MapView({ council }: { council?: { name?: string } | nul
             </div>
           </div>
 
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            <label className="block text-gray-500 mb-2 text-xs font-semibold uppercase tracking-wider shrink-0">Collectors (Select 2+)</label>
-            <div className="flex flex-col gap-2 overflow-y-auto p-1 -mx-1 flex-1">
-              {collectors.length === 0 ? (
-                <span className="text-gray-500 text-xs italic px-2">No collectors available</span>
-              ) : (
-                collectors.map(c => (
-                  <label key={c.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors border select-none w-full ${selectedCollectorIds.includes(String(c.id)) ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
-                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      checked={selectedCollectorIds.includes(String(c.id))}
-                      onChange={(e) => {
-                        // Add or remove the collector ID from the multi-selection list
-                        if (e.target.checked) setSelectedCollectorIds([...selectedCollectorIds, String(c.id)]);
-                        else setSelectedCollectorIds(selectedCollectorIds.filter(id => id !== String(c.id)));
-                      }} />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{c.name}</span>
-                    </div>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-
           <div className="mt-auto pt-4 border-t border-gray-100 shrink-0">
             <button
               onClick={async () => {
@@ -949,7 +921,6 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                 if (selectedBins.length === 0) { alert("Please select at least one bin"); return; }
                 if (!selectedVehicleId) { alert("Please select a vehicle"); return; }
                 if (!selectedDriverId) { alert("Please select a driver"); return; }
-                if (selectedCollectorIds.length < 2) { alert("Please select at least two collectors"); return; }
                 const vehicle = vehicles.find(v => String(v.id) === selectedVehicleId);
                 const capacity = vehicle?.capacity || DEFAULT_VEHICLE_CAPACITY; // Use API capacity or fall back to default
                 try {
@@ -964,8 +935,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                       depotLng: boundaryData?.depotLng ?? 79.882289,
                       selectedBinIds,
                       vehicleId: Number(selectedVehicleId),
-                      driverId: Number(selectedDriverId),
-                      collectorIds: selectedCollectorIds.map(Number)
+                      driverId: Number(selectedDriverId)
                     })
                   });
                   if (!res.ok) { const errorText = await res.text(); throw new Error(errorText || 'Failed to create route session'); }
