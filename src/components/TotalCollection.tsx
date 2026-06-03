@@ -36,6 +36,17 @@ interface DashboardData {
   chartData: ChartPoint[];
 }
 
+interface Council {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+const getCouncilParam = (council?: Council | null) => {
+  const rawValue = council?.id || council?.name;
+  return rawValue ? rawValue.trim() : '';
+};
+
 // ─── Filter → backend param map ───────────────────────────────────────────────
 const FILTER_MAP: Record<FilterType, string> = {
   'Day':        'DAY',
@@ -46,21 +57,31 @@ const FILTER_MAP: Record<FilterType, string> = {
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export function TotalCollection({ onBack }: { onBack: () => void }) {
+export function TotalCollection({
+  onBack,
+  council,
+}: {
+  onBack: () => void;
+  council?: Council | null;
+}) {
   const [filter, setFilter]   = useState<FilterType>('Day');
   const [data, setData]       = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
-  // Fetch from backend whenever filter changes
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const param    = FILTER_MAP[filter];
-        const response = await fetch(`${BASE_URL}/api/admin/analytics?filter=${param}`);
+        const param = FILTER_MAP[filter];
+        const url   = new URL(`${BASE_URL}/api/admin/analytics`);
+        url.searchParams.set('filter', param);
+        const councilParam = getCouncilParam(council);
+        if (councilParam) url.searchParams.set('council', councilParam);
+
+        const response = await fetch(url.toString());
 
         if (!response.ok) {
           throw new Error(`Server error: ${response.status}`);
@@ -68,8 +89,6 @@ export function TotalCollection({ onBack }: { onBack: () => void }) {
 
         const json = await response.json();
 
-        // Map backend shape → component shape
-        // Backend: { assigned, collected, missed, chartData: [{ time, assigned, collected, missed }] }
         setData({
           assigned:  json.assigned,
           collected: json.collected,
@@ -89,9 +108,9 @@ export function TotalCollection({ onBack }: { onBack: () => void }) {
     };
 
     fetchData();
-  }, [filter]);
+  }, [filter, council]);
 
-  // ─── Rates (safe against division by zero) ──────────────────────────────────
+  // ─── Rates ──────────────────────────────────────────────────────────────────
   const collectionRate = data && data.assigned > 0
     ? Math.round((data.collected / data.assigned) * 100)
     : 0;
@@ -112,7 +131,9 @@ export function TotalCollection({ onBack }: { onBack: () => void }) {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Total Collection</h1>
-            <p className="text-gray-500 text-lg">Detailed breakdown of bin collections</p>
+            <p className="text-gray-500 text-lg">
+              {council?.name ? `${council.name} — ` : ''}Detailed breakdown of bin collections
+            </p>
           </div>
         </div>
 

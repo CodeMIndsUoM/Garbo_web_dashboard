@@ -108,24 +108,6 @@ export default function Home() {
   }, [API_BASE]);
 
   const handleLogout = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      if (token) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        await fetch(`${API_BASE}/api/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-      }
-    } catch (err) {
-      // ignore network errors on logout
-    }
-
     localStorage.removeItem('token');
     localStorage.removeItem('admin');
     localStorage.removeItem('role');
@@ -296,21 +278,21 @@ export default function Home() {
       case 'internal-users':
         return <InternalUsers council={getActiveCouncil()} />;
       case 'total-collection':
-        return <TotalCollection onBack={() => setCurrentPage('analytics')} />;
+        return <TotalCollection onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'bin-analytics':
-        return <BinAnalytics onBack={() => setCurrentPage('analytics')} onNavigate={(page) => setCurrentPage(page as PageType)} />;
+        return <BinAnalytics onBack={() => setCurrentPage('analytics')} onNavigate={(page) => setCurrentPage(page as PageType)} council={getActiveCouncil()} />;
       case 'staff-analytics':
-        return <StaffAnalytics onBack={() => setCurrentPage('analytics')} />;
+        return <StaffAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'complaint-analytics':
-        return <ComplaintAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <ComplaintAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'third-party-analytics':
-        return <ThirdPartyAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <ThirdPartyAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'vehicle-analytics':
-        return <VehicleAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <VehicleAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'bin-report-analytics':
-        return <BinReportAnalytics onBack={() => setCurrentPage('analytics')} />;
+      return <BinReportAnalytics onBack={() => setCurrentPage('analytics')} council={getActiveCouncil()} />;
       case 'reports':
-        return <Reports />;
+        return <Reports council={getActiveCouncil()} />;
       case 'admin-assignment':
         return <AdminAssignment onAddNewAdmin={openCreateAdmin} onLogout={handleLogout} />;
       case 'admin-edit-password':
