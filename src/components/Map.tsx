@@ -7,20 +7,21 @@ import { Client } from '@stomp/stompjs';
 
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point, polygon as turfPolygon } from "@turf/helpers";
-import { 
-  MapPin, 
-  Route as RouteIcon, 
-  Plus, 
-  Navigation, 
-  Clock, 
-  Info, 
-  Layers, 
-  Eye, 
-  EyeOff, 
-  ChevronUp, 
-  ChevronDown, 
-  Trash2, 
-  X 
+import allBoundariesData from '../data/council_boundaries.json';
+import {
+  MapPin,
+  Route as RouteIcon,
+  Plus,
+  Navigation,
+  Clock,
+  Info,
+  Layers,
+  Eye,
+  EyeOff,
+  ChevronUp,
+  ChevronDown,
+  Trash2,
+  X
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -28,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Switch } from "./ui/switch";
+import { GarboLoader } from "./GarboLoader";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'; // Base URL for all API calls; overridable via env
 const BINS_API = `${API_ORIGIN}/api/bins`; // REST endpoint for bin CRUD operations
@@ -54,7 +56,7 @@ const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel
     else if (status === 'empty') fillPercent = 10;
     else fillPercent = 25;
   }
-  
+
   return `
     <div class="relative flex items-center justify-center transition-transform hover:scale-110" style="width: 28px; height: 34px; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.25));">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -151,52 +153,71 @@ interface RouteSessionSnapshot {
 }
 
 interface CouncilBoundaryDTO {
-  council:        string;
-  depotLat:       number;
-  depotLng:       number;
+  council: string;
+  depotLat: number;
+  depotLng: number;
   boundaryPoints: { lat: number; lng: number }[]; // Ordered polygon vertices defining the municipal boundary
 }
 
 type BinMarkersMap = Map<string, { marker: L.Marker; data: BinData }>; // Maps bin ID → Leaflet marker + domain data
 type LatLngTuple = [number, number];
 
-export default function MapView({ council }: { council?: { name?: string } | null }) {
+export default function MapView({ council: initialCouncil }: { council?: { name?: string } | null }) {
 
-  const mapRef           = useRef<HTMLDivElement | null>(null);   // DOM node that Leaflet mounts into
-  const leafletMapRef    = useRef<L.Map | null>(null);            // Leaflet map instance; null before initialisation
-  const addModeRef       = useRef(false);                         // Ref mirror of addMode — readable inside map event closures without stale state
-  const routeLayerRef    = useRef<L.FeatureGroup | null>(null);   // FeatureGroup holding all route polylines; cleared between optimisations
-  const stompClientRef   = useRef<Client | null>(null);           // Active STOMP client for the route WebSocket subscription
-  const depotMarkerRef   = useRef<L.Marker | null>(null);         // Reference to the depot marker for potential repositioning
-  const turfPolyRef      = useRef<ReturnType<typeof turfPolygon> | null>(null); // Turf polygon used for point-in-polygon boundary checks
+  const mapRef = useRef<HTMLDivElement | null>(null);   // DOM node that Leaflet mounts into
+  const leafletMapRef = useRef<L.Map | null>(null);            // Leaflet map instance; null before initialisation
+  const addModeRef = useRef(false);                         // Ref mirror of addMode — readable inside map event closures without stale state
+  const routeLayerRef = useRef<L.FeatureGroup | null>(null);   // FeatureGroup holding all route polylines; cleared between optimisations
+  const stompClientRef = useRef<Client | null>(null);           // Active STOMP client for the route WebSocket subscription
+  const depotMarkerRef = useRef<L.Marker | null>(null);         // Reference to the depot marker for potential repositioning
+  const turfPolyRef = useRef<ReturnType<typeof turfPolygon> | null>(null); // Turf polygon used for point-in-polygon boundary checks
+  const boundaryLayerRef = useRef<L.FeatureGroup | null>(null);   // Holds the boundary outline polygons
+  const maskLayerRef = useRef<L.Polygon | null>(null);        // Holds the inverted dimming mask polygon
+  const prevCouncilRef = useRef<string | null>(null);           // Tracks the previously selected council name for animated transitions
+  const allBoundsRef = useRef<L.LatLngBounds | null>(null);   // Cached combined bounds of all councils for zoom-out transitions
+
+  const [council, setCouncil] = useState(initialCouncil);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    setCouncil(initialCouncil);
+  }, [initialCouncil]);
+
+  useEffect(() => {
+    const role = typeof window !== 'undefined' ? localStorage.getItem('role') : null;
+    setIsSuperAdmin(role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'role_superadmin');
+  }, []);
+
+  const [focusMode, setFocusMode] = useState(true);               // Toggle visual dimming mask on/off
 
   // Council boundary state
   const [boundaryData, setBoundaryData] = useState<CouncilBoundaryDTO | null>(null); // API response for the council's boundary + depot
   const [boundaryLoading, setBoundaryLoading] = useState(true); // Prevents map initialisation before boundary is resolved
 
-  const [markers, setMarkers]                   = useState<BinMarkersMap>(new Map()); // All rendered bin markers indexed by bin ID
-  const [addMode, setAddMode]                   = useState(false); // When true, map clicks trigger new-bin placement
-  const [contextMenu, setContextMenu]           = useState<{ x: number, y: number, binId: string } | null>(null); // Right-click context menu state for a specific bin
-  const [assignedRoutes, setAssignedRoutes]     = useState<any[]>([]); // Routes previously assigned to the current user
-  const [loadingRoutes, setLoadingRoutes]       = useState(false); // Loading indicator for the assigned routes fetch
+  const [markers, setMarkers] = useState<BinMarkersMap>(new Map()); // All rendered bin markers indexed by bin ID
+  const [addMode, setAddMode] = useState(false); // When true, map clicks trigger new-bin placement
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, binId: string } | null>(null); // Right-click context menu state for a specific bin
+  const [assignedRoutes, setAssignedRoutes] = useState<any[]>([]); // Routes previously assigned to the current user
+  const [loadingRoutes, setLoadingRoutes] = useState(false); // Loading indicator for the assigned routes fetch
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false); // Controls the new-bin creation dialog
-  const [newBin, setNewBin]                     = useState({ location: '', type: 'General Waste', zone: '' }); // Form state for the new bin dialog
+  const [newBin, setNewBin] = useState({ location: '', type: 'General Waste', zone: '' }); // Form state for the new bin dialog
 
-  const [selectionMode, setSelectionMode]       = useState(false); // When true, map markers are tappable for route bin selection
-  const [selectedBins, setSelectedBins]         = useState<string[]>([]); // IDs of bins chosen for the next route optimisation
-  const [activeSessionId, setActiveSessionId]   = useState<string | null>(null); // WebSocket session being monitored
-  const [routeStatus, setRouteStatus]           = useState<string>(''); // Latest status string received from the WebSocket
-  const [routeError, setRouteError]             = useState<string>(''); // Error message displayed in the status banner
-  const [vehicles, setVehicles]                 = useState<any[]>([]); // Available vehicles fetched for the route form
-  const [drivers, setDrivers]                   = useState<any[]>([]); // Available drivers fetched for the route form
-  const [selectedVehicleId, setSelectedVehicleId]   = useState<string>(''); // Selected vehicle ID in the route setup panel
-  const [selectedDriverId, setSelectedDriverId]     = useState<string>(''); // Selected driver ID in the route setup panel
+  const [selectionMode, setSelectionMode] = useState(false); // When true, map markers are tappable for route bin selection
+  const [selectedBins, setSelectedBins] = useState<string[]>([]); // IDs of bins chosen for the next route optimisation
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null); // WebSocket session being monitored
+  const [routeStatus, setRouteStatus] = useState<string>(''); // Latest status string received from the WebSocket
+  const [routeError, setRouteError] = useState<string>(''); // Error message displayed in the status banner
+  const [vehicles, setVehicles] = useState<any[]>([]); // Available vehicles fetched for the route form
+  const [drivers, setDrivers] = useState<any[]>([]); // Available drivers fetched for the route form
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(''); // Selected vehicle ID in the route setup panel
+  const [selectedDriverId, setSelectedDriverId] = useState<string>(''); // Selected driver ID in the route setup panel
   const selectionModeRef = useRef(false); // Ref mirror of selectionMode — used inside Leaflet click closures
 
   // Overhaul custom UI states
   const [isPlannerExpanded, setIsPlannerExpanded] = useState(false);
   const [showHistorySheet, setShowHistorySheet] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
+  const [councilTransitioning, setCouncilTransitioning] = useState(false);
   const [historyTab, setHistoryTab] = useState<'all' | 'active' | 'completed'>('all');
   const [hoverPreview, setHoverPreview] = useState(false);
 
@@ -271,7 +292,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       try {
         const [vehRes, drvRes] = await Promise.all([
           fetch(`${API_ORIGIN}/api/route-sessions/available-vehicles${councilQuery}`, { headers: authHeaders }),
-          fetch(`${API_ORIGIN}/api/route-sessions/available-drivers${councilQuery}`,  { headers: authHeaders })
+          fetch(`${API_ORIGIN}/api/route-sessions/available-drivers${councilQuery}`, { headers: authHeaders })
         ]);
         if (vehRes.ok) { const j = await vehRes.json(); if (j.success) setVehicles(j.data); }
         if (drvRes.ok) { const j = await drvRes.json(); if (j.success) setDrivers(j.data); }
@@ -468,9 +489,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       if (clippedSegments.length === 0) return;
 
       clippedSegments.forEach((segment, index) => {
-        L.polyline(segment, { 
-          color: routeColor, 
-          weight: 5, 
+        L.polyline(segment, {
+          color: routeColor,
+          weight: 5,
           opacity: 0.85,
           className,
           dashArray
@@ -484,10 +505,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       if (clippedSegments.length === 0) return;
 
       clippedSegments.forEach((segment, index) => {
-        L.polyline(segment, { 
-          color: routeColor, 
-          weight: 3, 
-          opacity: 0.6, 
+        L.polyline(segment, {
+          color: routeColor,
+          weight: 3,
+          opacity: 0.6,
           dashArray: isCompleted ? '8, 6' : '10, 10',
           className
         })
@@ -507,10 +528,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     if (!leafletMapRef.current || !snapshot.route?.routes) return;
     if (clear) clearRouteVisualization();
     const routeEntries = Object.entries(snapshot.route.routes);
-    
+
     // Determine route completed status
     const isCompleted = snapshot.status === 'COMPLETED';
-    
+
     // Draw all vehicle polylines in parallel for faster rendering
     await Promise.all(routeEntries.map(async ([vehicleKey, vehicleRoute], index) => {
       const color = ROUTE_COLORS[index % ROUTE_COLORS.length]; // Cycle through the colour palette
@@ -533,10 +554,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         const json = await res.json();
         setAssignedRoutes(Array.isArray(json) ? json : (json.data || []));
       }
-    } catch (e) { 
-      console.error('Failed to fetch assigned routes', e); 
-    } finally { 
-      setLoadingRoutes(false); 
+    } catch (e) {
+      console.error('Failed to fetch assigned routes', e);
+    } finally {
+      setLoadingRoutes(false);
     }
   };
 
@@ -548,7 +569,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       if (!res.ok) throw new Error('Failed to fetch routes');
       const json = await res.json();
       const vehicleRoutes = Array.isArray(json) ? json : (json.data || []);
-      
+
       const fakeSnapshot: RouteSessionSnapshot = {
         sessionId, userId: 0, version: 0, status: 'READY',
         trigger: 'HISTORY_VIEW', selectedBinIds: [], addedBinIds: [], removedBinIds: [],
@@ -556,15 +577,15 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           totalVehiclesUsed: vehicleRoutes.length,
           routes: Object.fromEntries(vehicleRoutes.map((vr: any, idx: number) => [
             vr.vehicleId ? String(vr.vehicleId) : `v-${sessionId}-${idx}`,
-            { 
-              vehicleId: vr.vehicleId || idx, 
-              capacity: vr.capacity, 
+            {
+              vehicleId: vr.vehicleId || idx,
+              capacity: vr.capacity,
               totalBins: vr.totalBins,
               estimatedDurationSeconds: vr.estimatedDurationSeconds,
               binSequence: (vr.binStops ?? []).map((s: any) => ({
-                stopOrder: s.stopOrder, 
-                binId: s.binId, 
-                lat: s.lat, 
+                stopOrder: s.stopOrder,
+                binId: s.binId,
+                lat: s.lat,
                 lng: s.lng,
                 durationFromPrevStopSeconds: s.durationFromPrevSeconds || s.durationFromPrevStopSeconds || 0,
               }))
@@ -574,8 +595,8 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         message: null
       };
       await visualizeRoutesInternal(fakeSnapshot, clear);
-    } catch (e) { 
-      console.error('Failed to visualize session', sessionId, e); 
+    } catch (e) {
+      console.error('Failed to visualize session', sessionId, e);
     }
   };
 
@@ -593,7 +614,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     const client = new Client({
       webSocketFactory: () => new SockJS(`${API_ORIGIN}/ws`),
       reconnectDelay: 2000, // Automatically attempt reconnection after 2 seconds on drop
-      debug: () => {}       // Suppress verbose STOMP debug output in production
+      debug: () => { }       // Suppress verbose STOMP debug output in production
     });
     client.onConnect = () => {
       client.subscribe(`/topic/route-sessions/${sessionId}`, async (message) => {
@@ -635,34 +656,11 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     if (mapRef.current && leafletMapRef.current) return; // Prevent double-initialisation (React StrictMode)
     if (!mapRef.current) return;
 
-    // Use boundary from API or fall back to Moratuwa defaults
-    const municipalCoords: [number, number][] = boundaryData?.boundaryPoints?.length
-      ? boundaryData.boundaryPoints.map(p => [p.lat, p.lng])
-      : [
-          [6.811952, 79.867387],
-          [6.82722,  79.93127],
-          [6.76338,  79.9669],
-          [6.716461, 79.901547],
-        ];
-
-    const depotLat = boundaryData?.depotLat ?? 6.775080;
-    const depotLng = boundaryData?.depotLng ?? 79.882289;
-
-    // Build a Turf polygon (GeoJSON) for point-in-polygon checks when placing new bins
-    const coords = municipalCoords.map(([lat, lng]) => [lng, lat]); // Turf uses [lng, lat] order
-    coords.push(coords[0]); // Close the ring as required by the GeoJSON Polygon spec
-    turfPolyRef.current = turfPolygon([coords]);
-
-    const leafletPoly = L.polygon(municipalCoords);
-    const bounds = leafletPoly.getBounds();
-
     // Enable completely free map interaction and zoom
     const map = L.map(mapRef.current, {
       zoomControl: false           // Zoom controls added manually at bottom-right
     });
 
-    map.fitBounds(bounds);
-    map.setMaxZoom(19);          // Detailed street level zoom
     leafletMapRef.current = map;
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { noWrap: true }).addTo(map);
@@ -670,38 +668,40 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     // Add zoom controls to the top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Draw the municipal boundary as a thin green outline
-    leafletPoly.addTo(map).setStyle({ color: "#16a34a", weight: 2.5, fillOpacity: 0 });
-
-    // Create an inverted polygon mask to shade regions outside the municipal council
-    const worldOuterRing: [number, number][] = [
-      [90, -180],
-      [90, 180],
-      [-90, 180],
-      [-90, -180]
-    ];
-    L.polygon([worldOuterRing, municipalCoords], {
-      stroke: false,
-      fillColor: "#0f172a", // Sleek dark slate mask
-      fillOpacity: 0.45,    // 45% opacity to dim surrounding regions
-      interactive: false    // Ensure clicks pass through to map layers below
-    }).addTo(map);
-
-    // Place depot marker
-    const dm = L.marker([depotLat, depotLng], { icon: depotIcon }).addTo(map);
-    dm.bindTooltip("<div class='font-bold text-sm'>Central Depot</div>", {
-      direction: 'top', permanent: false, offset: [0, -10]
-    });
-    depotMarkerRef.current = dm;
+    // Initialize boundary and route layers
+    boundaryLayerRef.current = L.featureGroup().addTo(map);
+    routeLayerRef.current = L.featureGroup().addTo(map);
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       setContextMenu(null); // Dismiss any open context menu on map click
       if (!addModeRef.current) return; // Ignore clicks when not in add mode
       const pt = point([e.latlng.lng, e.latlng.lat]); // Turf point uses [lng, lat]
-      if (!turfPolyRef.current || !booleanPointInPolygon(pt, turfPolyRef.current)) {
-        alert("Outside municipal area!"); // Reject clicks outside the boundary
+
+      // Detect which council this click falls inside
+      let detectedCouncil: string | null = null;
+
+      if (turfPolyRef.current) {
+        if (booleanPointInPolygon(pt, turfPolyRef.current)) {
+          detectedCouncil = council?.name || null;
+        }
+      } else {
+        // Iterate through all 5 councils in allBoundariesData
+        for (const [cName, cData] of Object.entries(allBoundariesData)) {
+          const coords = cData.boundaryPoints.map((p: any) => [p.lng, p.lat]);
+          coords.push(coords[0]);
+          const poly = turfPolygon([coords]);
+          if (booleanPointInPolygon(pt, poly)) {
+            detectedCouncil = cName;
+            break;
+          }
+        }
+      }
+
+      if (!detectedCouncil) {
+        alert("Outside municipal area! Please click inside one of the council boundaries.");
         return;
       }
+
       // Pre-populate the form with the clicked coordinates and open the creation dialog
       setNewBin(prev => ({ ...prev, location: `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}` }));
       setIsCreateModalOpen(true);
@@ -710,13 +710,188 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
     loadBins();          // Fetch and render existing bins from the API
     loadActiveSession(); // Restore any previously active route session for this user
-    routeLayerRef.current = L.featureGroup().addTo(map); // Initialise the layer group that holds route polylines
 
     return () => {
       disconnectRouteSocket(); // Clean up WebSocket on component unmount
       if (routeLayerRef.current) routeLayerRef.current.clearLayers();
+      if (boundaryLayerRef.current) boundaryLayerRef.current.clearLayers();
     };
   }, [boundaryLoading, boundaryData]);
+
+  // ── Helper: compute combined bounds of all councils (cached) ──
+  const getAllCouncilBounds = (): L.LatLngBounds | null => {
+    if (allBoundsRef.current) return allBoundsRef.current;
+    const boundsList: L.LatLngBounds[] = [];
+    Object.entries(allBoundariesData).forEach(([, cData]: [string, any]) => {
+      const coords: [number, number][] = cData.boundaryPoints.map((p: any) => [p.lat, p.lng]);
+      if (coords.length > 0) boundsList.push(L.latLngBounds(coords));
+    });
+    if (boundsList.length === 0) return null;
+    let combined = boundsList[0];
+    for (let i = 1; i < boundsList.length; i++) combined.extend(boundsList[i]);
+    allBoundsRef.current = combined;
+    return combined;
+  };
+
+  // ── Helper: draw layers and mask for a specific council, then fly to it ──
+  const renderSingleCouncil = (map: L.Map, skipZoom = false) => {
+    if (!boundaryData?.boundaryPoints?.length) return;
+
+    const municipalCoords: [number, number][] = boundaryData.boundaryPoints.map(p => [p.lat, p.lng]);
+    const depotLat = boundaryData.depotLat ?? 6.775080;
+    const depotLng = boundaryData.depotLng ?? 79.882289;
+
+    // Update Turf polygon reference
+    const coords = municipalCoords.map(([lat, lng]) => [lng, lat]);
+    coords.push(coords[0]);
+    turfPolyRef.current = turfPolygon([coords]);
+
+    // Draw boundary outline
+    const poly = L.polygon(municipalCoords, {
+      color: "#16a34a", weight: 2.5, fillOpacity: 0, interactive: false
+    }).addTo(boundaryLayerRef.current!);
+
+    // Smooth fly into the council bounds
+    if (!skipZoom) {
+      const bounds = poly.getBounds();
+      if (bounds.isValid()) {
+        map.flyToBounds(bounds.pad(0.05), { duration: 1.5, easeLinearity: 0.2 });
+      }
+    }
+
+    // Dimming mask
+    if (focusMode) {
+      const worldOuterRing: [number, number][] = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
+      maskLayerRef.current = L.polygon([worldOuterRing, municipalCoords], {
+        stroke: false, fillColor: "#0f172a", fillOpacity: 0.45, interactive: false
+      }).addTo(map);
+    }
+
+    // Depot marker
+    if (depotMarkerRef.current) {
+      depotMarkerRef.current.setLatLng([depotLat, depotLng]).addTo(map);
+    } else {
+      depotMarkerRef.current = L.marker([depotLat, depotLng], { icon: depotIcon })
+        .bindTooltip("<div class='font-bold text-sm'>Central Depot</div>")
+        .addTo(map);
+    }
+  };
+
+  // ── Helper: draw all council boundaries and fly to combined bounds ──
+  const renderAllCouncils = (map: L.Map, skipZoom = false) => {
+    turfPolyRef.current = null;
+    if (depotMarkerRef.current) { depotMarkerRef.current.remove(); depotMarkerRef.current = null; }
+
+    Object.entries(allBoundariesData).forEach(([cName, cData]: [string, any]) => {
+      const coords: [number, number][] = cData.boundaryPoints.map((p: any) => [p.lat, p.lng]);
+      if (coords.length > 0) {
+        const poly = L.polygon(coords, {
+          color: "#16a34a", weight: 2, fillOpacity: 0.02, fillColor: "#16a34a", interactive: false
+        }).addTo(boundaryLayerRef.current!);
+        poly.bindTooltip(`<div class="font-semibold text-xs text-green-700">${cName}</div>`, {
+          permanent: true, direction: 'center',
+          className: 'bg-white/80 border border-green-500/30 rounded px-1.5 py-0.5 shadow-sm font-semibold'
+        });
+        L.marker([cData.depotLat, cData.depotLng], { icon: depotIcon })
+          .bindTooltip(`<div class='font-bold text-sm'>Depot: ${cName}</div>`)
+          .addTo(boundaryLayerRef.current!);
+      }
+    });
+
+    if (!skipZoom) {
+      const allBounds = getAllCouncilBounds();
+      if (allBounds?.isValid()) {
+        map.flyToBounds(allBounds.pad(0.1), { duration: 1.0, easeLinearity: 0.25 });
+      }
+    }
+  };
+
+  // ── UPDATE MAP BOUNDARIES, MASKS, AND DEPOTS ON COUNCIL OR FOCUS MODE CHANGE ──
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    // Initialize or clear layers
+    if (!boundaryLayerRef.current) {
+      boundaryLayerRef.current = L.featureGroup().addTo(map);
+    } else {
+      boundaryLayerRef.current.clearLayers();
+    }
+    if (maskLayerRef.current) { maskLayerRef.current.remove(); maskLayerRef.current = null; }
+
+    const currentCouncilName = council?.name || null;
+    const prevCouncilName = prevCouncilRef.current;
+    const isCouncilSwitch = prevCouncilName !== null && currentCouncilName !== null && prevCouncilName !== currentCouncilName;
+    const isZoomingOut = prevCouncilName !== null && currentCouncilName === null;
+    const isZoomingIn = prevCouncilName === null && currentCouncilName !== null;
+
+    // Update the ref for next render
+    prevCouncilRef.current = currentCouncilName;
+
+    if (council?.name) {
+      // Avoid rendering stale boundary data
+      if (!boundaryData || boundaryData.council.trim().toLowerCase() !== council.name.trim().toLowerCase()) {
+        return;
+      }
+
+      if (isCouncilSwitch) {
+        // ── Loader-first council transition ──
+        // Show the loading overlay immediately to cover the map
+        setCouncilTransitioning(true);
+
+        // Use requestAnimationFrame to ensure the loader renders before we mutate the map
+        requestAnimationFrame(() => {
+          // Clear previous layers behind the loader
+          if (boundaryLayerRef.current) boundaryLayerRef.current.clearLayers();
+          if (maskLayerRef.current) { maskLayerRef.current.remove(); maskLayerRef.current = null; }
+
+          // Render the new council boundary and position the map instantly (no animation)
+          renderSingleCouncil(map, true); // skipZoom = true, we'll position manually
+          const polyBounds = boundaryLayerRef.current?.getBounds();
+          if (polyBounds?.isValid()) {
+            map.fitBounds(polyBounds.pad(0.05), { animate: false });
+          }
+
+          // Keep the loader visible for a minimum time so it feels intentional, then reveal
+          setTimeout(() => {
+            setCouncilTransitioning(false);
+          }, 900);
+        });
+      } else {
+        // First load or focus-mode toggle — render directly
+        renderSingleCouncil(map, !isZoomingIn);
+        if (isZoomingIn) {
+          // Already handled by renderSingleCouncil flyToBounds
+        } else {
+          // Focus mode toggle — just re-fit without animation
+          const polyBounds = boundaryLayerRef.current?.getBounds();
+          if (polyBounds?.isValid()) map.fitBounds(polyBounds);
+        }
+      }
+    } else {
+      // "All Councils" view
+      renderAllCouncils(map, !isZoomingOut);
+    }
+  }, [council, boundaryData, focusMode]);
+
+  // ── UPDATE MARKER VISIBILITY ON COUNCIL FILTER CHANGE ──
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map || markers.size === 0) return;
+
+    markers.forEach(({ marker, data }) => {
+      const isMatching = !council?.name || (data.council && data.council.trim().toLowerCase() === council.name.trim().toLowerCase());
+      if (isMatching) {
+        if (!map.hasLayer(marker)) {
+          marker.addTo(map);
+        }
+      } else {
+        if (map.hasLayer(marker)) {
+          map.removeLayer(marker);
+        }
+      }
+    });
+  }, [council, markers]);
 
   // ── LOAD BINS ────────────────────────────────────────────────────────────
   const loadBins = async () => {
@@ -746,7 +921,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   // Builds the HTML tooltip content shown when hovering over a bin marker
   const renderTooltip = (d: BinData) => {
     const statusLabel = d.status === 'full' ? 'Full' : d.status === 'half' ? 'Half' :
-                        d.status === 'empty' ? 'Empty' : 'Not Checked';
+      d.status === 'empty' ? 'Empty' : 'Not Checked';
     return `<div>
       <strong>Code:</strong> ${d.binCode || d.id}<br/>
       <strong>Fill Status:</strong> ${statusLabel}<br/>
@@ -783,7 +958,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       });
       if (!res.ok) {
         let errMessage = 'Failed to create bin';
-        try { const errData = await res.json(); errMessage = errData.message || errMessage; } catch(e) {}
+        try { const errData = await res.json(); errMessage = errData.message || errMessage; } catch (e) { }
         throw new Error(errMessage);
       }
       const responseData = await res.json();
@@ -794,11 +969,12 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         fillLevel: saved.fillLevel || 0,
         priority: saved.priority || 'medium',
         zone: saved.zone || newBin.zone,
-        status: saved.status || 'not_checked'
+        status: saved.status || 'not_checked',
+        council: saved.council
       });
       setIsCreateModalOpen(false);
       setNewBin({ location: '', type: 'General Waste', zone: '' });
-    } catch(err) {
+    } catch (err) {
       const e = err as Error;
       alert(e.message || "Error creating bin");
     }
@@ -826,7 +1002,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               message = responseText;
             }
           }
-        } catch {}
+        } catch { }
         throw new Error(message);
       }
 
@@ -937,10 +1113,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
   if (boundaryLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
-          <p className="text-gray-500 text-sm font-medium">Loading map...</p>
-        </div>
+        <GarboLoader variant="inline" message="Loading map..." size="lg" />
       </div>
     );
   }
@@ -963,10 +1136,51 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       {/* Map DOM Element */}
       <div ref={mapRef} className="w-full h-full" />
 
-      {/* HORIZONTAL TOOLBAR */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/60 backdrop-blur-md border border-white/20 rounded-xl shadow-lg p-1.5 gap-1.5 transition-all">
-        {/* Add Bin Trigger */}
-        <button 
+      {/* Council transition loading overlay */}
+      {councilTransitioning && (
+        <GarboLoader variant="overlay" message="Switching council..." size="md" />
+      )}
+
+      {/* HORIZONTAL TOOLBAR — responsive, compact, consistent */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/70 backdrop-blur-xl border border-white/30 rounded-2xl shadow-xl px-2 py-1.5 gap-1 transition-all w-max max-w-[calc(100vw-2rem)]">
+        {/* Council Filter Dropdown or Static Badge */}
+        {isSuperAdmin ? (
+          <div className="flex items-center gap-1.5 bg-white/30 hover:bg-white/50 border border-white/20 rounded-xl px-2.5 py-1.5 transition-all shrink-0">
+            <Layers className="w-3.5 h-3.5 text-green-600 shrink-0" />
+            <select
+              value={council?.name || 'all'}
+              onChange={(e) => {
+                const selectedName = e.target.value;
+                if (selectedName === 'all') {
+                  setCouncil(null);
+                } else {
+                  setCouncil({ name: selectedName });
+                }
+              }}
+              className="bg-transparent border-none text-[11px] font-semibold text-slate-700 outline-none cursor-pointer min-w-0 max-w-[160px] truncate"
+            >
+              <option value="all">All Councils</option>
+              <option value="Colombo">Colombo</option>
+              <option value="Dehiwala-Mt. Lavinia">Dehiwala-Mt. Lavinia</option>
+              <option value="Kaduwela">Kaduwela</option>
+              <option value="Moratuwa">Moratuwa</option>
+              <option value="Sri Jayewardenepura Kotte">Sri J. Kotte</option>
+            </select>
+          </div>
+        ) : (
+          council?.name && (
+            <div className="flex items-center gap-1.5 px-2 py-1.5 bg-emerald-50/80 text-emerald-700 border border-emerald-200/40 rounded-xl text-[11px] font-semibold shrink-0">
+              <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate max-w-[120px]">{council.name}</span>
+            </div>
+          )
+        )}
+
+        {(isSuperAdmin || council?.name) && <div className="w-px h-5 bg-gray-300/40 shrink-0" />}
+
+        {/* Add Bin */}
+        <button
+          title={addMode ? 'Click map to place bin' : 'Add Bin'}
           onClick={() => {
             const nextAdd = !addMode;
             setAddMode(nextAdd);
@@ -977,20 +1191,20 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               setShowHistorySheet(false);
             }
           }}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
-            addMode 
-              ? 'bg-amber-500 text-white shadow-sm hover:bg-amber-600' 
-              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
-          }`}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${addMode
+            ? 'bg-amber-500 text-white shadow-sm hover:bg-amber-600'
+            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            }`}
         >
-          <Plus className={`w-4 h-4 transition-transform duration-200 ${addMode ? 'rotate-45' : ''}`} />
-          <span>{addMode ? 'Click Map to Place' : 'Add Bin'}</span>
+          <Plus className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${addMode ? 'rotate-45' : ''}`} />
+          <span className="hidden sm:inline">{addMode ? 'Place Bin' : 'Add Bin'}</span>
         </button>
 
-        <div className="w-px h-5 bg-gray-200/50" />
+        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
 
-        {/* Create Route Trigger */}
-        <button 
+        {/* Create Route */}
+        <button
+          title={selectionMode ? 'Selecting bins for route' : 'Create Route'}
           onClick={() => {
             const nextSelect = !selectionMode;
             setSelectionMode(nextSelect);
@@ -1008,20 +1222,20 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               setIsPlannerExpanded(false);
             }
           }}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
-            selectionMode 
-              ? 'bg-green-600 text-white shadow-sm hover:bg-green-700' 
-              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
-          }`}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${selectionMode
+            ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
+            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            }`}
         >
-          <Navigation className="w-4 h-4" />
-          <span>{selectionMode ? 'Selecting Bins...' : 'Create Route'}</span>
+          <Navigation className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">{selectionMode ? 'Selecting...' : 'Route'}</span>
         </button>
 
-        <div className="w-px h-5 bg-gray-200/50" />
+        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
 
-        {/* Route History Trigger */}
-        <button 
+        {/* Route History */}
+        <button
+          title="Route History"
           onClick={() => {
             const nextShow = !showHistorySheet;
             setShowHistorySheet(nextShow);
@@ -1033,29 +1247,46 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               loadRouteHistory();
             }
           }}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
-            showHistorySheet 
-              ? 'bg-green-600 text-white shadow-sm hover:bg-green-700' 
-              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
-          }`}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showHistorySheet
+            ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
+            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            }`}
         >
-          <Clock className="w-4 h-4" />
-          <span>Route History</span>
+          <Clock className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">History</span>
         </button>
 
-        <div className="w-px h-5 bg-gray-200/50" />
+        {/* Focus Mode — only when a single council is active */}
+        {council?.name && (
+          <>
+            <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+            <button
+              title={focusMode ? 'Disable focus mask' : 'Enable focus mask'}
+              onClick={() => setFocusMode(!focusMode)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${focusMode
+                ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
+                : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+                }`}
+            >
+              {focusMode ? <Eye className="w-3.5 h-3.5 shrink-0" /> : <EyeOff className="w-3.5 h-3.5 shrink-0" />}
+              <span className="hidden sm:inline">{focusMode ? 'Focus' : 'Unfocused'}</span>
+            </button>
+          </>
+        )}
 
-        {/* Legend Panel Trigger */}
-        <button 
+        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+
+        {/* Legend */}
+        <button
+          title="Map Legend"
           onClick={() => setShowLegend(!showLegend)}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
-            showLegend 
-              ? 'bg-slate-800 text-white shadow-sm hover:bg-slate-900' 
-              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
-          }`}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showLegend
+            ? 'bg-slate-800 text-white shadow-sm hover:bg-slate-900'
+            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            }`}
         >
-          <Info className="w-4 h-4" />
-          <span>Legend</span>
+          <Info className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">Legend</span>
         </button>
       </div>
 
@@ -1066,7 +1297,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
             <span className="font-semibold text-gray-800 text-sm">Map Legend</span>
             <button onClick={() => setShowLegend(false)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
           </div>
-          
+
           <div className="flex flex-col gap-3">
             {/* Bin Status colors */}
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bin Fill Status</span>
@@ -1124,16 +1355,16 @@ export default function MapView({ council }: { council?: { name?: string } | nul
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
               <Input placeholder="lat, lng" value={newBin.location}
-                onChange={(e) => setNewBin({...newBin, location: e.target.value})} required />
+                onChange={(e) => setNewBin({ ...newBin, location: e.target.value })} required />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Zone</label>
               <Input type="number" min="1" placeholder="e.g. 1" value={newBin.zone}
-                onChange={(e) => setNewBin({...newBin, zone: e.target.value})} required />
+                onChange={(e) => setNewBin({ ...newBin, zone: e.target.value })} required />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Type</label>
-              <Select value={newBin.type} onValueChange={(val) => setNewBin({...newBin, type: val})}>
+              <Select value={newBin.type} onValueChange={(val) => setNewBin({ ...newBin, type: val })}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent style={{ zIndex: 99999 }}>
                   <SelectItem value="General Waste">General Waste</SelectItem>
@@ -1150,14 +1381,13 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
       {/* COLLAPSIBLE ROUTE PLANNER BOTTOM DRAWER */}
       {selectionMode && (
-        <div 
-          style={{ zIndex: 999 }} 
-          className={`absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] transition-all duration-300 ease-in-out flex flex-col ${
-            isPlannerExpanded ? 'h-[280px]' : 'h-14'
-          }`}
+        <div
+          style={{ zIndex: 999 }}
+          className={`absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] transition-all duration-300 ease-in-out flex flex-col ${isPlannerExpanded ? 'h-[280px]' : 'h-14'
+            }`}
         >
           {/* Header/Collapsed Panel Bar */}
-          <div 
+          <div
             className="flex items-center justify-between px-6 h-14 border-b border-gray-100 shrink-0 cursor-pointer select-none bg-gray-50/50 hover:bg-gray-50/80 transition-colors"
             onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
           >
@@ -1174,22 +1404,22 @@ export default function MapView({ council }: { council?: { name?: string } | nul
             </div>
             <div className="flex items-center gap-4" onClick={e => e.stopPropagation()}>
               {!isPlannerExpanded && (
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="h-8 text-xs font-semibold"
-                  onClick={() => { 
-                    setSelectionMode(false); 
-                    clearSelectedBinIcons(selectedBins); 
-                    setSelectedBins([]); 
+                  onClick={() => {
+                    setSelectionMode(false);
+                    clearSelectedBinIcons(selectedBins);
+                    setSelectedBins([]);
                     setIsPlannerExpanded(false);
                   }}
                 >
                   Cancel
                 </Button>
               )}
-              <button 
-                onClick={() => setIsPlannerExpanded(!isPlannerExpanded)} 
+              <button
+                onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
                 className="text-xs font-bold text-green-700 hover:text-green-800 transition-colors"
               >
                 {isPlannerExpanded ? "Collapse" : "Expand Configuration"}
@@ -1216,9 +1446,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                         <div key={id} className="flex items-center gap-1.5 bg-white text-gray-800 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 shadow-sm shrink-0">
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}></span>
                           <span>{entry?.data.binCode || id}</span>
-                          <button 
-                            type="button" 
-                            onClick={() => toggleBinSelection(id)} 
+                          <button
+                            type="button"
+                            onClick={() => toggleBinSelection(id)}
                             className="text-gray-400 hover:text-red-500 font-bold ml-1 transition-colors"
                           >
                             ✕
@@ -1252,12 +1482,12 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                 </div>
 
                 <div className="flex gap-3 mt-auto">
-                  <Button 
-                    variant="outline" 
-                    className="flex-1 text-xs h-10 border-gray-200" 
-                    onClick={() => { 
-                      clearSelectedBinIcons(selectedBins); 
-                      setSelectedBins([]); 
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-xs h-10 border-gray-200"
+                    onClick={() => {
+                      clearSelectedBinIcons(selectedBins);
+                      setSelectedBins([]);
                     }}
                   >
                     Clear All
@@ -1310,20 +1540,19 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       )}
 
       {/* ROUTE HISTORY SIDE FLOATING PANEL */}
-      <div 
+      <div
         style={{ zIndex: 999 }}
-        className={`absolute right-4 top-20 bottom-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl transition-all duration-300 transform ${
-          showHistorySheet 
-            ? 'translate-x-0 opacity-100' 
-            : 'translate-x-[110%] opacity-0 pointer-events-none'
-        }`}
+        className={`absolute right-4 top-20 bottom-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl transition-all duration-300 transform ${showHistorySheet
+          ? 'translate-x-0 opacity-100'
+          : 'translate-x-[110%] opacity-0 pointer-events-none'
+          }`}
       >
         <div className="p-5 border-b border-white/20 shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-green-600" />
             <h3 className="text-sm font-bold text-slate-800">Route History & Active Sessions</h3>
           </div>
-          <button 
+          <button
             onClick={() => setShowHistorySheet(false)}
             className="p-1 rounded-lg hover:bg-slate-200/50 text-slate-500 hover:text-slate-700 transition-colors"
           >
@@ -1337,11 +1566,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
             <button
               key={tab}
               onClick={() => setHistoryTab(tab)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
-                historyTab === tab 
-                  ? 'bg-green-600 text-white shadow-sm' 
-                  : 'bg-white/55 text-slate-600 border border-slate-200/50 hover:bg-white/80'
-              }`}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${historyTab === tab
+                ? 'bg-green-600 text-white shadow-sm'
+                : 'bg-white/55 text-slate-600 border border-slate-200/50 hover:bg-white/80'
+                }`}
             >
               {tab}
             </button>
@@ -1385,11 +1613,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
                   <div className="flex justify-between items-start mb-2.5">
                     <span className="font-semibold text-slate-800 text-sm">Session #{r.id || i + 1}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
-                      isActive 
-                        ? 'bg-emerald-50/70 text-emerald-700 border-emerald-100/50' 
-                        : 'bg-slate-50/70 text-slate-700 border-slate-200/50'
-                    }`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${isActive
+                      ? 'bg-emerald-50/70 text-emerald-700 border-emerald-100/50'
+                      : 'bg-slate-50/70 text-slate-700 border-slate-200/50'
+                      }`}>
                       {isActive ? 'Active' : 'Completed'}
                     </span>
                   </div>
@@ -1414,9 +1641,9 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                   </div>
 
                   {!hoverPreview && (
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                    <Button
+                      size="sm"
+                      variant="outline"
                       className="w-full text-xs font-semibold h-8 bg-white/80 border-slate-200/50 hover:bg-white"
                       onClick={(e) => { e.stopPropagation(); visualizeSession(r.sessionId); }}
                     >
@@ -1433,11 +1660,10 @@ export default function MapView({ council }: { council?: { name?: string } | nul
 
       {/* ROUTE SESSION STATUS FLOATING BANNER */}
       {(routeStatus || routeError || activeSessionId) && (
-        <div 
-          style={{ zIndex: 999 }} 
-          className={`absolute ${
-            selectionMode ? 'bottom-20' : 'bottom-4'
-          } left-4 bg-white/95 border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-xs max-w-sm transition-all duration-300`}
+        <div
+          style={{ zIndex: 999 }}
+          className={`absolute ${selectionMode ? 'bottom-20' : 'bottom-4'
+            } left-4 bg-white/95 border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-xs max-w-sm transition-all duration-300`}
         >
           <div className="font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
