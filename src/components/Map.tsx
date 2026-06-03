@@ -670,8 +670,22 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     // Add zoom controls to the top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Draw the municipal boundary as a thin blue outline
-    leafletPoly.addTo(map).setStyle({ color: "#3b82f6", weight: 2.5, fillOpacity: 0 });
+    // Draw the municipal boundary as a thin green outline
+    leafletPoly.addTo(map).setStyle({ color: "#16a34a", weight: 2.5, fillOpacity: 0 });
+
+    // Create an inverted polygon mask to shade regions outside the municipal council
+    const worldOuterRing: [number, number][] = [
+      [90, -180],
+      [90, 180],
+      [-90, 180],
+      [-90, -180]
+    ];
+    L.polygon([worldOuterRing, municipalCoords], {
+      stroke: false,
+      fillColor: "#0f172a", // Sleek dark slate mask
+      fillOpacity: 0.45,    // 45% opacity to dim surrounding regions
+      interactive: false    // Ensure clicks pass through to map layers below
+    }).addTo(map);
 
     // Place depot marker
     const dm = L.marker([depotLat, depotLng], { icon: depotIcon }).addTo(map);
