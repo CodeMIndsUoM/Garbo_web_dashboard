@@ -57,22 +57,19 @@ const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel
   
   return `
     <div class="relative flex items-center justify-center transition-transform hover:scale-110" style="width: 28px; height: 34px; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.25));">
-      <svg width="24" height="28" viewBox="0 0 24 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="fillGrad-${id}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="${100 - fillPercent}%" stop-color="#f8fafc" stop-opacity="0.9" />
+            <stop offset="${100 - fillPercent}%" stop-color="#f1f5f9" stop-opacity="0.9" />
             <stop offset="${100 - fillPercent}%" stop-color="${color}" />
           </linearGradient>
         </defs>
-        <!-- Bin lid -->
-        <path d="M3 7h18" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" />
-        <path d="M8 7V5c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2" stroke="#1e293b" stroke-width="2.2" stroke-linecap="round" />
-        <!-- Bin body filled with gradient -->
-        <path d="M5 7h14v16c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V7z" fill="url(#fillGrad-${id})" stroke="#1e293b" stroke-width="2.2" stroke-linejoin="round" />
-        <!-- Inner design grooves -->
-        <line x1="9" y1="11" x2="9" y2="21" stroke="#1e293b" stroke-width="1.2" stroke-linecap="round" opacity="0.25" />
-        <line x1="12" y1="11" x2="12" y2="21" stroke="#1e293b" stroke-width="1.2" stroke-linecap="round" opacity="0.25" />
-        <line x1="15" y1="11" x2="15" y2="21" stroke="#1e293b" stroke-width="1.2" stroke-linecap="round" opacity="0.25" />
+        <!-- Background fill for the inside of the bin -->
+        <rect x="8" y="9" width="8" height="10" fill="url(#fillGrad-${id})" />
+        
+        <!-- Custom Bin body and lid paths -->
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M15.5 4L14.5 3H9.5L8.5 4H5V6H19V4H15.5ZM6 19C6 20.1 6.9 21 8 21H16C17.1 21 18 20.1 18 19V7H6V19ZM16 9H8V19H16V9Z" fill="#1e293b"/>
+        <path d="M10 13H14V15H10V13Z" fill="#1e293b"/>
       </svg>
       ${isSelected ? `
       <div class="absolute -top-1.5 -right-1.5 bg-green-500 text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg" style="width: 17px; height: 17px; z-index: 10;">
@@ -453,7 +450,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     const osrmCoordString = pathCoordinates.map(([lat, lng]) => `${lng},${lat}`).join(';');
 
     // Visual configurations based on completed vs active routes
-    const routeColor = isCompleted ? '#22c55e' : '#3b82f6';
+    const routeColor = isCompleted ? '#16a34a' : '#10b981';
     const className = isCompleted ? '' : 'animate-route-flow';
     const dashArray = isCompleted ? undefined : '10, 10';
 
@@ -927,7 +924,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600" />
           <p className="text-gray-500 text-sm font-medium">Loading map...</p>
         </div>
       </div>
@@ -953,7 +950,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
       <div ref={mapRef} className="w-full h-full" />
 
       {/* HORIZONTAL TOOLBAR */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl shadow-lg p-1.5 gap-1.5 transition-all">
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/60 backdrop-blur-md border border-white/20 rounded-xl shadow-lg p-1.5 gap-1.5 transition-all">
         {/* Add Bin Trigger */}
         <button 
           onClick={() => {
@@ -969,14 +966,14 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
             addMode 
               ? 'bg-amber-500 text-white shadow-sm hover:bg-amber-600' 
-              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
           }`}
         >
           <Plus className={`w-4 h-4 transition-transform duration-200 ${addMode ? 'rotate-45' : ''}`} />
           <span>{addMode ? 'Click Map to Place' : 'Add Bin'}</span>
         </button>
 
-        <div className="w-px h-5 bg-gray-200" />
+        <div className="w-px h-5 bg-gray-200/50" />
 
         {/* Create Route Trigger */}
         <button 
@@ -1000,14 +997,14 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
             selectionMode 
               ? 'bg-green-600 text-white shadow-sm hover:bg-green-700' 
-              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
           }`}
         >
           <Navigation className="w-4 h-4" />
           <span>{selectionMode ? 'Selecting Bins...' : 'Create Route'}</span>
         </button>
 
-        <div className="w-px h-5 bg-gray-200" />
+        <div className="w-px h-5 bg-gray-200/50" />
 
         {/* Route History Trigger */}
         <button 
@@ -1024,15 +1021,15 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           }}
           className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
             showHistorySheet 
-              ? 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-700' 
-              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+              ? 'bg-green-600 text-white shadow-sm hover:bg-green-700' 
+              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
           }`}
         >
           <Clock className="w-4 h-4" />
           <span>Route History</span>
         </button>
 
-        <div className="w-px h-5 bg-gray-200" />
+        <div className="w-px h-5 bg-gray-200/50" />
 
         {/* Legend Panel Trigger */}
         <button 
@@ -1040,7 +1037,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-xs transition-all active:scale-95 ${
             showLegend 
               ? 'bg-slate-800 text-white shadow-sm hover:bg-slate-900' 
-              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+              : 'text-gray-700 hover:bg-white/40 hover:text-gray-900'
           }`}
         >
           <Info className="w-4 h-4" />
@@ -1084,14 +1081,14 @@ export default function MapView({ council }: { council?: { name?: string } | nul
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Route Status</span>
             <div className="flex flex-col gap-2 text-xs">
               <div className="flex items-center gap-3">
-                <span className="w-8 h-1 bg-green-500 rounded"></span>
+                <span className="w-8 h-1 bg-green-600 rounded"></span>
                 <span className="text-gray-700 font-medium">Completed Route</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="w-8 h-1 bg-blue-500 rounded border-t border-dashed"></span>
+                <span className="w-8 h-1 bg-emerald-500 rounded border-t border-dashed"></span>
                 <span className="text-gray-700 font-medium flex items-center gap-1.5">
                   Active/In Progress
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 </span>
               </div>
             </div>
@@ -1132,7 +1129,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium">Save Bin</Button>
+            <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-medium">Save Bin</Button>
           </form>
         </DialogContent>
       </Dialog>
@@ -1157,7 +1154,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                 <ChevronUp className="w-5 h-5 text-gray-500 animate-bounce" />
               )}
               <span className="font-semibold text-gray-800 text-sm">Route Planner & Setup</span>
-              <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-0.5 rounded-full font-semibold">
+              <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full font-semibold">
                 {selectedBins.length} Bins Selected
               </span>
             </div>
@@ -1179,7 +1176,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
               )}
               <button 
                 onClick={() => setIsPlannerExpanded(!isPlannerExpanded)} 
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                className="text-xs font-bold text-green-700 hover:text-green-800 transition-colors"
               >
                 {isPlannerExpanded ? "Collapse" : "Expand Configuration"}
               </button>
@@ -1225,7 +1222,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                   <div>
                     <label className="block text-gray-500 mb-1 text-[10px] font-bold uppercase tracking-wider">Select Vehicle</label>
                     <select value={selectedVehicleId} onChange={e => setSelectedVehicleId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm transition-colors">
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 shadow-sm transition-colors">
                       <option value="">-- Vehicle --</option>
                       {vehicles.map(v => <option key={v.id} value={v.id}>{v.licensePlate || v.vehicleCode} (Cap: {v.capacity || 25})</option>)}
                     </select>
@@ -1233,7 +1230,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                   <div>
                     <label className="block text-gray-500 mb-1 text-[10px] font-bold uppercase tracking-wider">Select Driver</label>
                     <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm transition-colors">
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 shadow-sm transition-colors">
                       <option value="">-- Driver --</option>
                       {drivers.map(d => <option key={d.empId} value={d.empId}>{d.empName || 'Unnamed'}</option>)}
                     </select>
@@ -1252,7 +1249,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
                     Clear All
                   </Button>
                   <Button
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-10 transition-all shadow-md"
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold h-10 transition-all shadow-md"
                     onClick={async () => {
                       if (selectedBins.length === 0) { alert("Please select at least one bin"); return; }
                       if (!selectedVehicleId) { alert("Please select a vehicle"); return; }
@@ -1298,116 +1295,127 @@ export default function MapView({ council }: { council?: { name?: string } | nul
         </div>
       )}
 
-      {/* ROUTE HISTORY SIDE DRAWER SHEET */}
-      <Sheet open={showHistorySheet} onOpenChange={setShowHistorySheet}>
-        <SheetContent className="w-[400px] sm:max-w-md p-0 flex flex-col bg-white border-l border-gray-100 shadow-2xl">
-          <SheetHeader className="p-6 border-b border-gray-100 shrink-0">
-            <SheetTitle className="text-lg font-bold flex items-center gap-2 text-slate-800">
-              <Clock className="w-5 h-5 text-indigo-600" />
-              Route History & Active Sessions
-            </SheetTitle>
-          </SheetHeader>
-
-          {/* History filter tabs */}
-          <div className="px-6 py-3 border-b border-gray-50 bg-slate-50/50 flex gap-2 shrink-0">
-            {(['all', 'active', 'completed'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setHistoryTab(tab)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
-                  historyTab === tab 
-                    ? 'bg-indigo-600 text-white shadow-sm' 
-                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
+      {/* ROUTE HISTORY SIDE FLOATING PANEL */}
+      <div 
+        style={{ zIndex: 999 }}
+        className={`absolute right-4 top-20 bottom-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl transition-all duration-300 transform ${
+          showHistorySheet 
+            ? 'translate-x-0 opacity-100' 
+            : 'translate-x-[110%] opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="p-5 border-b border-white/20 shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-green-600" />
+            <h3 className="text-sm font-bold text-slate-800">Route History & Active Sessions</h3>
           </div>
+          <button 
+            onClick={() => setShowHistorySheet(false)}
+            className="p-1 rounded-lg hover:bg-slate-200/50 text-slate-500 hover:text-slate-700 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-          {/* Hover Preview toggle switch */}
-          <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between text-xs font-medium text-slate-700 bg-indigo-50/20 shrink-0">
-            <span className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-500" />
-              Hover Cards to Preview on Map
-            </span>
-            <Switch checked={hoverPreview} onCheckedChange={setHoverPreview} />
-          </div>
+        {/* History filter tabs */}
+        <div className="px-5 py-3 border-b border-white/20 bg-slate-50/20 flex gap-2 shrink-0">
+          {(['all', 'active', 'completed'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setHistoryTab(tab)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
+                historyTab === tab 
+                  ? 'bg-green-600 text-white shadow-sm' 
+                  : 'bg-white/55 text-slate-600 border border-slate-200/50 hover:bg-white/80'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
-          {/* List content container */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {loadingRoutes ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
-                <p className="text-gray-400 text-xs font-medium">Loading history...</p>
-              </div>
-            ) : filteredRoutes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-2 text-center text-slate-400">
-                <RouteIcon className="w-8 h-8 opacity-25" />
-                <p className="text-xs">No {historyTab !== 'all' ? historyTab : ''} routes found</p>
-              </div>
-            ) : (
-              filteredRoutes.map((r, i) => {
-                const isActive = r.status !== 'COMPLETED' && r.status !== 'CANCELLED';
-                return (
-                  <div
-                    key={r.sessionId || r.id || i}
-                    onMouseEnter={() => { if (hoverPreview) visualizeSession(r.sessionId); }}
-                    onMouseLeave={() => { if (hoverPreview) clearRouteVisualization(); }}
-                    onClick={() => { if (!hoverPreview) visualizeSession(r.sessionId); }}
-                    className="border border-slate-100 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-slate-200 transition-all bg-white relative overflow-hidden group cursor-pointer"
-                  >
-                    {/* Visual left bar color strip */}
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isActive ? 'bg-blue-500' : 'bg-green-500'}`} />
+        {/* Hover Preview toggle switch */}
+        <div className="px-5 py-3 border-b border-white/20 flex items-center justify-between text-xs font-medium text-slate-700 bg-green-50/10 shrink-0">
+          <span className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-green-600" />
+            Hover Cards to Preview on Map
+          </span>
+          <Switch checked={hoverPreview} onCheckedChange={setHoverPreview} />
+        </div>
 
-                    <div className="flex justify-between items-start mb-2.5">
-                      <span className="font-semibold text-slate-800 text-sm">Session #{r.id || i + 1}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
-                        isActive 
-                          ? 'bg-blue-50 text-blue-700 border-blue-100' 
-                          : 'bg-green-50 text-green-700 border-green-100'
-                      }`}>
-                        {isActive ? 'Active' : 'Completed'}
-                      </span>
+        {/* List content container */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {loadingRoutes ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
+              <p className="text-gray-400 text-xs font-medium">Loading history...</p>
+            </div>
+          ) : filteredRoutes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-center text-slate-400">
+              <RouteIcon className="w-8 h-8 opacity-25" />
+              <p className="text-xs">No {historyTab !== 'all' ? historyTab : ''} routes found</p>
+            </div>
+          ) : (
+            filteredRoutes.map((r, i) => {
+              const isActive = r.status !== 'COMPLETED' && r.status !== 'CANCELLED';
+              return (
+                <div
+                  key={r.sessionId || r.id || i}
+                  onMouseEnter={() => { if (hoverPreview) visualizeSession(r.sessionId); }}
+                  onMouseLeave={() => { if (hoverPreview) clearRouteVisualization(); }}
+                  onClick={() => { if (!hoverPreview) visualizeSession(r.sessionId); }}
+                  className="border border-white/30 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-white/50 transition-all bg-white/60 hover:bg-white/85 relative overflow-hidden group cursor-pointer"
+                >
+                  {/* Visual left bar color strip */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+
+                  <div className="flex justify-between items-start mb-2.5">
+                    <span className="font-semibold text-slate-800 text-sm">Session #{r.id || i + 1}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                      isActive 
+                        ? 'bg-emerald-50/70 text-emerald-700 border-emerald-100/50' 
+                        : 'bg-slate-50/70 text-slate-700 border-slate-200/50'
+                    }`}>
+                      {isActive ? 'Active' : 'Completed'}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 space-y-1.5 mb-3">
+                    <div className="flex justify-between">
+                      <span>Vehicle Code:</span>
+                      <span className="font-medium text-slate-800">{r.vehicleCode || 'N/A'}</span>
                     </div>
-
-                    <div className="text-[11px] text-slate-500 space-y-1.5 mb-3">
+                    {r.driverName && (
                       <div className="flex justify-between">
-                        <span>Vehicle Code:</span>
-                        <span className="font-medium text-slate-800">{r.vehicleCode || 'N/A'}</span>
+                        <span>Driver Name:</span>
+                        <span className="font-medium text-slate-800">{r.driverName}</span>
                       </div>
-                      {r.driverName && (
-                        <div className="flex justify-between">
-                          <span>Driver Name:</span>
-                          <span className="font-medium text-slate-800">{r.driverName}</span>
-                        </div>
-                      )}
-                      {r.createdDate && (
-                        <div className="flex justify-between">
-                          <span>Date Created:</span>
-                          <span className="font-medium text-slate-800">{new Date(r.createdDate).toLocaleDateString()}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {!hoverPreview && (
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="w-full text-xs font-semibold h-8"
-                        onClick={(e) => { e.stopPropagation(); visualizeSession(r.sessionId); }}
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                        Show on Map
-                      </Button>
+                    )}
+                    {r.createdDate && (
+                      <div className="flex justify-between">
+                        <span>Date Created:</span>
+                        <span className="font-medium text-slate-800">{new Date(r.createdDate).toLocaleDateString()}</span>
+                      </div>
                     )}
                   </div>
-                );
-              })
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+
+                  {!hoverPreview && (
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="w-full text-xs font-semibold h-8 bg-white/80 border-slate-200/50 hover:bg-white"
+                      onClick={(e) => { e.stopPropagation(); visualizeSession(r.sessionId); }}
+                    >
+                      <Eye className="w-3.5 h-3.5 mr-1 text-slate-500" />
+                      Show on Map
+                    </Button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
 
       {/* ROUTE SESSION STATUS FLOATING BANNER */}
       {(routeStatus || routeError || activeSessionId) && (
@@ -1418,11 +1426,11 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           } left-4 bg-white/95 border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-xs max-w-sm transition-all duration-300`}
         >
           <div className="font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             Active Route Session
           </div>
           {activeSessionId && <div className="text-[10px] text-slate-500 font-mono">ID: {activeSessionId}</div>}
-          {routeStatus && <div className="mt-1">Status: <span className="font-semibold text-blue-700 uppercase">{routeStatus}</span></div>}
+          {routeStatus && <div className="mt-1">Status: <span className="font-semibold text-emerald-700 uppercase">{routeStatus}</span></div>}
           {routeError && <div className="mt-1 text-red-600 font-medium">{routeError}</div>}
         </div>
       )}
@@ -1437,7 +1445,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           </div>
           <div className="px-2 py-0.5">
             <label className="text-[10px] text-gray-500 font-bold block mb-1 uppercase tracking-wider">Priority</label>
-            <select className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-blue-200 outline-none"
+            <select className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-green-200 outline-none"
               value={markers.get(contextMenu.binId)?.data.priority || 'medium'}
               onChange={(e) => updatePriority(contextMenu.binId, e.target.value as BinData['priority'])}>
               <option value="low">Low</option>
@@ -1448,7 +1456,7 @@ export default function MapView({ council }: { council?: { name?: string } | nul
           <div className="px-2 py-0.5">
             <label className="text-[10px] text-gray-500 font-bold block mb-1 uppercase tracking-wider">Zone (Number)</label>
             <input type="number" min="1" placeholder="e.g. 1"
-              className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-blue-200 outline-none"
+              className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-green-200 outline-none"
               value={markers.get(contextMenu.binId)?.data.zone || ''}
               onBlur={(e) => updateZone(contextMenu.binId, e.target.value)} // Persist on blur for a smoother UX
               onChange={(e) => updateBinLocally(contextMenu.binId, { zone: e.target.value })} // Update locally on each keystroke
