@@ -1,38 +1,45 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Download, Calendar, Filter, Loader2, RefreshCw } from 'lucide-react';
+import { FileText, Download, Loader2, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ReportPrintView } from './Reportprintview';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
+// Summary rows returned from the reports list endpoint.
 interface ReportSummary {
-  id: number;
-  title: string;
-  periodStart: string;
-  periodEnd: string;
-  status: string;
-  createdAt: string;
-  fileSizeKb: number;
-  periodLabel: string;
+  id:              number;
+  title:           string;
+  periodStart:     string;
+  periodEnd:       string;
+  status:          string;
+  createdAt:       string;
+  fileSizeKb:      number;
+  periodLabel:     string;
   fileSizeDisplay: string;
 }
 
+// Full report payload returned when opening one report by id.
 interface ReportDetail {
-  id: number;
-  title: string;
+  id:          number;
+  title:       string;
   periodLabel: string;
-  snapshot: any;
+  snapshot:    any;
 }
 
-const API_BASE = '/api/admin/reports';
+// Council context provided by parent views for scoped report generation.
+interface Council {
+  id:           string;
+  name:         string;
+  description?: string;
+}
 
-// ── Component ─────────────────────────────────────────────────────────────────
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-export function Reports() {
+export function Reports({ council }: { council?: Council | null }) {
+
+  // Main view state: list, loading flags, selected report, and UI error text.
   const [reports, setReports]             = useState<ReportSummary[]>([]);
   const [loading, setLoading]             = useState(true);
   const [generating, setGenerating]       = useState(false);
@@ -40,14 +47,15 @@ export function Reports() {
   const [loadingReport, setLoadingReport] = useState<number | null>(null);
   const [error, setError]                 = useState<string | null>(null);
 
-  // ── Fetch report list on mount ──────────────────────────────────────────────
+  // Fetch report list on first mount so the table is populated immediately.
   useEffect(() => { fetchReports(); }, []);
 
+  // Loads all generated reports for the current admin scope.
   async function fetchReports() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(API_BASE);
+      const res = await fetch(`${API_BASE}/api/admin/reports`);
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data: ReportSummary[] = await res.json();
       setReports(data);
@@ -58,17 +66,23 @@ export function Reports() {
     }
   }
 
-  // ── Generate a new report ───────────────────────────────────────────────────
+  // Creates a new report on the backend, then refreshes the list.
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/generate`, { method: 'POST' });
+      const params = new URLSearchParams();
+      if (council?.name) params.set('councilId', council.name);
+
+      const res = await fetch(
+        `${API_BASE}/api/admin/reports/generate?${params.toString()}`,
+        { method: 'POST' }
+      );
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.message ?? `Server error: ${res.status}`);
       }
-      await fetchReports();   // refresh list
+      await fetchReports();
     } catch (e: any) {
       setError(e.message ?? 'Failed to generate report');
     } finally {
@@ -76,12 +90,12 @@ export function Reports() {
     }
   }
 
-  // ── Open a report for preview / print ──────────────────────────────────────
+  // Fetches one report snapshot and opens the print/view modal.
   async function handleOpen(id: number) {
     setLoadingReport(id);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/${id}`);
+      const res = await fetch(`${API_BASE}/api/admin/reports/${id}`);
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const detail: ReportDetail = await res.json();
       setOpenReport(detail);
@@ -92,35 +106,40 @@ export function Reports() {
     }
   }
 
-  // ── Download raw JSON snapshot ──────────────────────────────────────────────
+  // Triggers a browser download for the raw JSON snapshot file.
   function handleDownload(id: number, title: string) {
     const a = document.createElement('a');
-    a.href = `${API_BASE}/${id}/download`;
+    a.href = `${API_BASE}/api/admin/reports/${id}/download`;
     a.download = `${title.replace(/\s+/g, '_')}.json`;
     a.click();
   }
 
-  // ── Derived stats ───────────────────────────────────────────────────────────
-  const completed     = reports.filter(r => r.status === 'COMPLETED').length;
-  const totalSizeKb   = reports.reduce((s, r) => s + (r.fileSizeKb ?? 0), 0);
-  const avgSizeKb     = reports.length > 0 ? Math.round(totalSizeKb / reports.length) : 0;
-  const formatKb      = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
+  // Derived dashboard stats shown in the top card row.
+  const completed   = reports.filter(r => r.status === 'COMPLETED').length;
+  const totalSizeKb = reports.reduce((s, r) => s + (r.fileSizeKb ?? 0), 0);
+  const avgSizeKb   = reports.length > 0 ? Math.round(totalSizeKb / reports.length) : 0;
+  const formatKb    = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
 
+  // Static descriptors for the stat cards, fed by derived values above.
   const statCards = [
-    { label: 'Total Reports',        value: reports.length },
-    { label: 'Avg Report Size',      value: avgSizeKb > 0 ? formatKb(avgSizeKb) : '—' },
-    { label: 'Completed This Year',  value: completed },
-    { label: 'Storage Used',         value: totalSizeKb > 0 ? formatKb(totalSizeKb) : '—' },
+    { label: 'Total Reports',       value: reports.length },
+    { label: 'Avg Report Size',     value: avgSizeKb > 0 ? formatKb(avgSizeKb) : '—' },
+    { label: 'Completed This Year', value: completed },
+    { label: 'Storage Used',        value: totalSizeKb > 0 ? formatKb(totalSizeKb) : '—' },
   ];
 
   return (
     <div className="p-8">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h2 className="text-gray-900 mb-2">Monthly Reports</h2>
-          <p className="text-gray-600">Generate and download monthly analytics summaries</p>
+          <p className="text-gray-600">
+            {council?.name
+              ? `${council.name} — generate and download monthly analytics summaries`
+              : 'Generate and download monthly analytics summaries'}
+          </p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={fetchReports} disabled={loading}>
@@ -140,14 +159,14 @@ export function Reports() {
         </div>
       </div>
 
-      {/* ── Error banner ────────────────────────────────────────────────────── */}
+      {/* Error banner */}
       {error && (
         <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
           {error}
         </div>
       )}
 
-      {/* ── Stat cards ──────────────────────────────────────────────────────── */}
+      {/* Stat cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         {statCards.map(s => (
           <Card key={s.label}>
@@ -166,12 +185,13 @@ export function Reports() {
         ))}
       </div>
 
-      {/* ── Reports list ────────────────────────────────────────────────────── */}
+      {/* Reports list */}
       <Card>
         <CardHeader>
           <CardTitle>Available Reports</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Loading, empty, and populated states keep list UX predictable. */}
           {loading ? (
             <div className="flex items-center justify-center py-12 text-gray-400">
               <Loader2 className="w-6 h-6 animate-spin mr-2" />
@@ -209,6 +229,7 @@ export function Reports() {
                   </div>
 
                   <div className="flex items-center gap-3">
+                    {/* Only completed reports are printable/downloadable. */}
                     <Badge
                       variant="secondary"
                       className={report.status === 'COMPLETED'
@@ -249,7 +270,7 @@ export function Reports() {
         </CardContent>
       </Card>
 
-      {/* ── Print preview modal ──────────────────────────────────────────────── */}
+      {/* Print preview modal */}
       {openReport && (
         <ReportPrintView
           snapshot={openReport.snapshot}
@@ -260,3 +281,7 @@ export function Reports() {
     </div>
   );
 }
+
+
+
+

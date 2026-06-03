@@ -17,16 +17,19 @@ import {
   Cell,
 } from 'recharts';
 
+// Report count aggregated by hour for today's breakdown.
 interface HourlyCount {
   time: string;
   count: number;
 }
 
+// Report count aggregated by day for the last 7 days.
 interface DailyCount {
   day: string;
   count: number;
 }
 
+// Response model: today's metrics and historical frequency data for charts.
 interface BinReportAnalyticsDTO {
   totalReportsToday: number;
   affectedBinsToday: number;
@@ -35,6 +38,14 @@ interface BinReportAnalyticsDTO {
   reportFrequencyLastWeek: DailyCount[];
 }
 
+// Optional council scope to filter analytics by municipality.
+interface Council {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+// Placeholder animation shown while KPI values load.
 function KpiSkeleton() {
   return (
     <div className="animate-pulse">
@@ -46,22 +57,35 @@ function KpiSkeleton() {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
+export function BinReportAnalytics({
+  onBack,
+  council,
+}: {
+  onBack: () => void;
+  council?: Council | null;
+}) {
+  // Format today's date for display in the subtitle.
   const today = new Date().toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
   });
 
+  // Component state: analytics data from backend, loading/error flags, and chart filter toggle.
   const [data, setData]       = useState<BinReportAnalyticsDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [filter, setFilter]   = useState<'TODAY' | 'WEEK'>('TODAY');
 
+  // Fetch bin report analytics on mount and whenever council changes.
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`${API_BASE}/api/admin/bin-reports/analytics`);
+
+        const url = new URL(`${API_BASE}/api/admin/bin-reports/analytics`);
+        if (council?.name) url.searchParams.set('council', council.name);
+
+        const res = await fetch(url.toString());
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json: BinReportAnalyticsDTO = await res.json();
         setData(json);
@@ -74,13 +98,11 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
     };
 
     fetchAnalytics();
-  }, []);
+  }, [council]);
 
-  const todayData  = data?.reportFrequencyToday      ?? [];
-  const weekData   = data?.reportFrequencyLastWeek   ?? [];
-
-  // Highlight "Today" bar differently in the weekly chart
-  const maxWeekCount = Math.max(...weekData.map(d => d.count), 0);
+  // Extract chart data arrays; default to empty if not yet loaded.
+  const todayData = data?.reportFrequencyToday    ?? [];
+  const weekData  = data?.reportFrequencyLastWeek ?? [];
 
   return (
     <div className="p-8 bg-gray-50/30 min-h-screen">
@@ -94,7 +116,7 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Bin Reports</h1>
             <p className="text-gray-500 text-lg">
-              Detailed analysis of citizen and sensor reports for {today}
+              {council?.name ? `${council.name} — ` : ''}Detailed analysis of citizen and sensor reports for {today}
             </p>
           </div>
         </div>
@@ -103,11 +125,12 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
       {/* Error banner */}
       {error && (
         <div className="mb-6 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          ⚠ {error} — check that the backend is running on port 8080
+          ⚠ {error} — check that the backend is running on port 8081
         </div>
       )}
 
       {/* KPI Row */}
+      {/* High-level metrics: total reports today, affected bins, unique reporters. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
         <Card className="border-none bg-white shadow-sm ring-1 ring-gray-100">
@@ -176,10 +199,10 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Chart Card */}
+      {/* Time series visualization of report submissions with filter toggle between today and week views. */}
       <div className="grid grid-cols-1 gap-6 mb-8">
         <Card className="border-none shadow-sm ring-1 ring-gray-100 bg-white">
 
-          {/* Chart Header with toggle */}
           <CardHeader className="border-b border-gray-50 bg-gray-50/50">
             <div className="flex flex-row items-center justify-between">
               <div>
@@ -192,6 +215,7 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
                     : 'Daily breakdown for the last 7 days'}
                 </p>
               </div>
+              {/* Toggle between today hourly view and last week daily view. */}
               <div className="flex gap-2">
                 <Button
                   variant={filter === 'TODAY' ? 'default' : 'outline'}
@@ -217,8 +241,7 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
             {loading ? (
               <div className="animate-pulse h-[400px] bg-gray-100 rounded-lg" />
             ) : filter === 'TODAY' ? (
-
-              /* ── Area chart — hourly today ── */
+              // Area chart showing hourly report distribution for today.
               <ResponsiveContainer width="100%" height={400}>
                 <AreaChart data={todayData}>
                   <defs>
@@ -234,7 +257,6 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
                     tickLine={false}
                     tick={{ fill: '#64748b', fontSize: 12 }}
                     dy={10}
-                    // show every 2 hours to avoid crowding
                     interval={1}
                   />
                   <YAxis
@@ -267,8 +289,7 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
               </ResponsiveContainer>
 
             ) : (
-
-              /* ── Bar chart — daily last 7 days ── */
+              // Bar chart showing daily report distribution for the last 7 days.
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={weekData} barSize={40}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -299,7 +320,6 @@ export function BinReportAnalytics({ onBack }: { onBack: () => void }) {
                     {weekData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
-                        // "Today" bar is solid blue, past days are lighter
                         fill={entry.day === 'Today' ? '#3b82f6' : '#bfdbfe'}
                       />
                     ))}
