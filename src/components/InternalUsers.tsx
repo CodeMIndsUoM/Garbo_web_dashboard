@@ -41,11 +41,11 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
   const [success, setSuccess] = useState('');
 
   const tokenHeader = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
-  const storedRole = (typeof window !== 'undefined' ? localStorage.getItem('role') : null) || '';
+  const storedRole = (typeof window !== 'undefined' ? sessionStorage.getItem('role') : null) || '';
   const isSuperadmin = storedRole.toString().toLowerCase() === 'superadmin';
 
   const loadData = async () => {

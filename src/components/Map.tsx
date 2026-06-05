@@ -100,9 +100,9 @@ const depotIcon = L.divIcon({
   className: '', iconSize: [36, 36], iconAnchor: [18, 36],
 });
 
-// Retrieves the JWT from localStorage and constructs Authorization headers for authenticated API calls
+// Retrieves the JWT from sessionStorage and constructs Authorization headers for authenticated API calls
 const getAuthHeaders = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
   return (token ? { Authorization: `Bearer ${token}` } : {}) as Record<string, string>;
 };
 
@@ -184,7 +184,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   }, [initialCouncil]);
 
   useEffect(() => {
-    const role = typeof window !== 'undefined' ? localStorage.getItem('role') : null;
+    const role = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null;
     setIsSuperAdmin(role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'role_superadmin');
   }, []);
 
@@ -225,7 +225,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     const entry = markers.get(binId);
     if (!entry) return false;
 
-    const role = typeof window !== 'undefined' ? localStorage.getItem('role') : null;
+    const role = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null;
     if (role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'role_superadmin') {
       return true;
     }
@@ -294,7 +294,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   // Fetches vehicles and drivers whenever selection mode opens or the council changes
   useEffect(() => {
     const fetchResources = async () => {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const authHeaders = (token ? { Authorization: `Bearer ${token}` } : {}) as Record<string, string>;
       const councilQuery = council?.name ? `?council=${encodeURIComponent(council.name)}` : ''; // Scope resources to the active council
       try {
@@ -309,17 +309,35 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     fetchResources();
   }, [selectionMode, council?.name]);
 
+  // Reset bin selection and routing states when the council context changes
+  useEffect(() => {
+    if (selectedBins.length > 0) {
+      clearSelectedBinIcons(selectedBins);
+      setSelectedBins([]);
+    }
+    setSelectionMode(false);
+    clearRouteVisualization();
+  }, [council?.name]);
+
   // Toggles a bin's selection state and swaps its marker icon between status-based and the green checkmark
   const toggleBinSelection = (id: string) => {
+    const entry = markers.get(id);
+    if (!entry) return;
+
+    // Guard: Prevent selecting bins that do not match the current council context
+    if (council?.name && entry.data.council && entry.data.council.trim().toLowerCase() !== council.name.trim().toLowerCase()) {
+      return;
+    }
+
     setSelectedBins(prev => {
       const isSelected = prev.includes(id);
       const newSelected = isSelected ? prev.filter(b => b !== id) : [...prev, id];
       setMarkers(currentMarkers => {
         const m = new Map(currentMarkers);
-        const entry = m.get(id);
-        if (entry) {
+        const item = m.get(id);
+        if (item) {
           // Revert to fill-status icon if deselecting, otherwise apply the selection checkmark
-          entry.marker.setIcon(getStatusIcon(id, entry.data.status, entry.data.fillLevel, !isSelected));
+          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected));
         }
         return m;
       });
@@ -448,10 +466,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     return segments;
   };
 
-  // Extracts the current user's ID from the persisted admin object in localStorage
+  // Extracts the current user's ID from the persisted admin object in sessionStorage
   const getCurrentUserId = () => {
     if (typeof window === 'undefined') return 1; // SSR safety — default to a placeholder ID
-    const raw = localStorage.getItem('admin');
+    const raw = sessionStorage.getItem('admin');
     if (!raw) return 1;
     try {
       const admin = JSON.parse(raw);
@@ -557,7 +575,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     try {
       const userId = getCurrentUserId();
       const res = await fetch(`${API_ORIGIN}/api/route-sessions/user/${userId}/active`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
       if (res.ok) {
         const json = await res.json();
         setAssignedRoutes(Array.isArray(json) ? json : (json.data || []));
@@ -573,7 +591,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const visualizeSession = async (sessionId: string, clear = true) => {
     try {
       const res = await fetch(`${API_ORIGIN}/api/route-sessions/${sessionId}/routes`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
       if (!res.ok) throw new Error('Failed to fetch routes');
       const json = await res.json();
       const vehicleRoutes = Array.isArray(json) ? json : (json.data || []);
@@ -664,14 +682,24 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     if (mapRef.current && leafletMapRef.current) return; // Prevent double-initialisation (React StrictMode)
     if (!mapRef.current) return;
 
-    // Enable completely free map interaction and zoom
+    // Enable completely free map interaction and zoom, setting an initial default center (Colombo) to prevent layer rendering crashes
     const map = L.map(mapRef.current, {
       zoomControl: false           // Zoom controls added manually at bottom-right
-    });
+    }).setView([6.9271, 79.8612], 11);
 
     leafletMapRef.current = map;
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { noWrap: true }).addTo(map);
+    // Trigger map invalidation shortly after container attachment to prevent initial gray tile loads
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+      noWrap: true,
+      keepBuffer: 12,       // Keeps a larger perimeter of loaded tiles in cache to prevent gray gaps when moving/panning
+      updateWhenIdle: false, // Update tiles continuously during zoom/pan animations for seamless rendering
+      updateWhenZooming: true
+    }).addTo(map);
 
     // Add zoom controls to the top right
     L.control.zoom({ position: 'topright' }).addTo(map);
@@ -769,8 +797,9 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
     // Dimming mask
     if (focusMode) {
-      const worldOuterRing: [number, number][] = [[90, -180], [90, 180], [-90, 180], [-90, -180]];
-      maskLayerRef.current = L.polygon([worldOuterRing, municipalCoords], {
+      // Use a regional outer box around Sri Lanka instead of worldwide coordinates to prevent Leaflet/SVG clipping glitches on zoom/pan
+      const sriLankaRegionOuterRing: [number, number][] = [[12.0, 77.0], [12.0, 83.0], [5.0, 83.0], [5.0, 77.0]];
+      maskLayerRef.current = L.polygon([sriLankaRegionOuterRing, municipalCoords], {
         stroke: false, fillColor: "#0f172a", fillOpacity: 0.45, interactive: false
       }).addTo(map);
     }
@@ -859,10 +888,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           if (polyBounds?.isValid()) {
             map.fitBounds(polyBounds.pad(0.05), { animate: false });
           }
+          map.invalidateSize(); // Invalidate size before revealing to ensure correct tile layouts
 
           // Keep the loader visible for a minimum time so it feels intentional, then reveal
           setTimeout(() => {
             setCouncilTransitioning(false);
+            // Invalidate layout again shortly after state changes and transitions complete
+            setTimeout(() => map.invalidateSize(), 50);
           }, 900);
         });
       } else {
@@ -957,7 +989,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const handleCreateBinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(BINS_API, {
@@ -1069,7 +1101,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     try {
       const userId = getCurrentUserId();
       const res = await fetch(`${API_ORIGIN}/api/route-sessions/user/${userId}/active`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
       if (res.ok) {
         const json = await res.json();
         const assignments = Array.isArray(json) ? json : (json.data || []).filter((x: any) => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
@@ -1079,7 +1111,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           for (const assignment of assignments) {
             try {
               const routeRes = await fetch(`${API_ORIGIN}/api/route-sessions/${assignment.sessionId}/routes`,
-                { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+                { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
               if (routeRes.ok) {
                 const vRoutes = await routeRes.json();
                 const vehicleRoutes = Array.isArray(vRoutes) ? vRoutes : (vRoutes.data || []);

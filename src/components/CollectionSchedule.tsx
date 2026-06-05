@@ -114,13 +114,13 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
   const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
   const fetchSuggestions = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/events/suggestions`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -185,7 +185,7 @@ export function CollectionSchedule({ council }: { council?: { name?: string } | 
 
   const updateSuggestion = async (id: number, action: 'approve' | 'reject') => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/events/${id}/${action}`, {
         method: 'PATCH',
         headers: {

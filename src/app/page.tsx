@@ -52,12 +52,33 @@ export default function Home() {
 
   useEffect(() => {
     const checkToken = async () => {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setIsAuthenticated(false);
         setCheckingAuth(false);
         setUserRole(null);
         return;
+      }
+
+      // Client-side JWT expiration check
+      try {
+        const payload = decodeJwtPayload(token);
+        if (payload && payload.exp) {
+          const currentTimestamp = Math.floor(Date.now() / 1000);
+          if (currentTimestamp >= payload.exp) {
+            console.log('Token expired client-side');
+            sessionStorage.removeItem('token');
+            sessionStorage.removeItem('admin');
+            sessionStorage.removeItem('role');
+            sessionStorage.removeItem('council');
+            setIsAuthenticated(false);
+            setUserRole(null);
+            setCheckingAuth(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse token client-side', e);
       }
 
       try {
@@ -77,26 +98,26 @@ export default function Home() {
           // Prefer role stored from token if available
           const payload = decodeJwtPayload(token);
           const roleFromToken = payload?.role || payload?.roles || null;
-          const role = (roleFromToken as UserRole) || (localStorage.getItem('role') as UserRole);
+          const role = (roleFromToken as UserRole) || (sessionStorage.getItem('role') as UserRole);
           setUserRole(role);
-          // If this is a regular admin, initialize selectedCouncil from localStorage if available
+          // If this is a regular admin, initialize selectedCouncil from sessionStorage if available
           if (role === 'admin') {
             try {
-              const storedCouncil = localStorage.getItem('council');
+              const storedCouncil = sessionStorage.getItem('council');
               if (storedCouncil) setSelectedCouncil(JSON.parse(storedCouncil));
             } catch (e) {}
           }
         } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('admin');
-          localStorage.removeItem('role');
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('admin');
+          sessionStorage.removeItem('role');
           setIsAuthenticated(false);
           setUserRole(null);
         }
       } catch (err) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('admin');
-        localStorage.removeItem('role');
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('admin');
+        sessionStorage.removeItem('role');
         setIsAuthenticated(false);
         setUserRole(null);
       }
@@ -108,10 +129,10 @@ export default function Home() {
   }, [API_BASE]);
 
   const handleLogout = async () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('admin');
-    localStorage.removeItem('role');
-    localStorage.removeItem('council');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('admin');
+    sessionStorage.removeItem('role');
+    sessionStorage.removeItem('council');
     setSelectedCouncil(null);
     
     setIsAuthenticated(false);
@@ -120,11 +141,11 @@ export default function Home() {
 
   const handleLogin = (opts?: { mustChangePassword?: boolean }) => {
     setIsAuthenticated(true);
-    // Prefer explicit flag passed from login response; fall back to localStorage for backward compatibility
+    // Prefer explicit flag passed from login response; fall back to sessionStorage for backward compatibility
     let mustChange = opts?.mustChangePassword;
     if (typeof mustChange === 'undefined') {
       try {
-        mustChange = JSON.parse(localStorage.getItem('mustChangePassword') || 'false');
+        mustChange = JSON.parse(sessionStorage.getItem('mustChangePassword') || 'false');
       } catch (e) {
         mustChange = false;
       }
@@ -136,13 +157,13 @@ export default function Home() {
       setCurrentPage('dashboard');
     }
 
-    // Set userRole from localStorage after login
-    const role = localStorage.getItem('role') as UserRole;
+    // Set userRole from sessionStorage after login
+    const role = sessionStorage.getItem('role') as UserRole;
     setUserRole(role);
-    // Initialize selectedCouncil for admin users from localStorage written by Login
+    // Initialize selectedCouncil for admin users from sessionStorage written by Login
     if (role === 'admin') {
       try {
-        const stored = localStorage.getItem('council');
+        const stored = sessionStorage.getItem('council');
         if (stored) setSelectedCouncil(JSON.parse(stored));
         else setSelectedCouncil(null);
       } catch (e) {
@@ -158,7 +179,7 @@ export default function Home() {
       return COUNCILS.find((c) => c.id === selectedId) || null;
     }
     try {
-      const stored = localStorage.getItem('council');
+      const stored = sessionStorage.getItem('council');
       return stored ? JSON.parse(stored) : null;
     } catch (e) {
       return null;

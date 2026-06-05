@@ -128,3 +128,7 @@
 html {
   font-size: var(--font-size);
 }
+
+.leaflet-container {
+  background: #f8fafc !important;
+}
