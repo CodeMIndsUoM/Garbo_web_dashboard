@@ -242,6 +242,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       return;
     }
 
+    // Try to load from local static file first to prevent network delay/latency
+    const localBoundary = (allBoundariesData as Record<string, any>)[council.name];
+    if (localBoundary) {
+      setBoundaryData(localBoundary);
+      setBoundaryLoading(false);
+      return;
+    }
+
     const fetchBoundary = async () => {
       try {
         const headers = getAuthHeaders();
