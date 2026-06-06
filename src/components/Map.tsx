@@ -21,7 +21,8 @@ import {
   ChevronUp,
   ChevronDown,
   Trash2,
-  X
+  X,
+  Loader2
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -47,7 +48,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 };
 
 // Generates beautiful custom SVG bin HTML based on status, fill level, and selection state
-const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel: number = 0, isSelected: boolean = false) => {
+const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel: number = 0, isSelected: 'route' | 'delete' | boolean = false) => {
   const color = STATUS_COLOR_MAP[status.toLowerCase()] || STATUS_COLOR_MAP['not_checked'];
   let fillPercent = fillLevel;
   if (fillPercent <= 1) fillPercent = fillPercent * 100;
@@ -75,9 +76,14 @@ const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel
         <path d="M10 13H14V15H10V13Z" fill="#1e293b"/>
       </svg>
       ${isSelected ? `
-      <div class="absolute -top-1.5 -right-1.5 bg-green-500 text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg" style="width: 17px; height: 17px; z-index: 10;">
+      <div class="absolute -top-1.5 -right-1.5 ${isSelected === 'delete' ? 'bg-red-500' : 'bg-green-500'} text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg" style="width: 17px; height: 17px; z-index: 10;">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
+          ${isSelected === 'delete' ? `
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          ` : `
+            <polyline points="20 6 9 17 4 12"></polyline>
+          `}
         </svg>
       </div>
       ` : ''}
@@ -86,7 +92,7 @@ const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel
 };
 
 // Generates L.divIcon using the customized SVG bin content
-const getStatusIcon = (id: string, status?: string, fillLevel?: number, isSelected?: boolean) => {
+const getStatusIcon = (id: string, status?: string, fillLevel?: number, isSelected?: 'route' | 'delete' | boolean) => {
   return L.divIcon({
     html: createBinIconHtml(id, status, fillLevel, isSelected),
     className: '',
@@ -178,12 +184,18 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const allBoundsRef = useRef<L.LatLngBounds | null>(null);   // Cached combined bounds of all councils for zoom-out transitions
   const markersRef = useRef<BinMarkersMap>(new Map());
   const toggleBinSelectionRef = useRef<(id: string) => void>(() => {});
+  const toggleDeleteBinSelectionRef = useRef<(id: string) => void>(() => {});
 
   const [council, setCouncil] = useState(initialCouncil);
+  const councilRef = useRef(council);
+  useEffect(() => { councilRef.current = council; }, [council]);
+
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   useEffect(() => {
-    setCouncil(initialCouncil);
+    if (initialCouncil?.name !== council?.name) {
+      setCouncil(initialCouncil);
+    }
   }, [initialCouncil]);
 
   useEffect(() => {
@@ -199,9 +211,11 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
   const [markers, setMarkers] = useState<BinMarkersMap>(new Map()); // All rendered bin markers indexed by bin ID
   const [addMode, setAddMode] = useState(false); // When true, map clicks trigger new-bin placement
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, binId: string } | null>(null); // Right-click context menu state for a specific bin
+  const [contextMenu, setContextMenu] = useState<{ binId: string } | null>(null); // Right-click context menu state for a specific bin
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number, y: number } | null>(null); // Anchor coordinates for the context menu
   const [assignedRoutes, setAssignedRoutes] = useState<any[]>([]); // Routes previously assigned to the current user
   const [loadingRoutes, setLoadingRoutes] = useState(false); // Loading indicator for the assigned routes fetch
+  const [isGeneratingRoute, setIsGeneratingRoute] = useState(false); // Loading state for route generation
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false); // Controls the new-bin creation dialog
   const [newBin, setNewBin] = useState({ location: '', type: 'General Waste', zone: '', council: '' }); // Form state for the new bin dialog
 
@@ -215,6 +229,9 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(''); // Selected vehicle ID in the route setup panel
   const [selectedDriverId, setSelectedDriverId] = useState<string>(''); // Selected driver ID in the route setup panel
   const selectionModeRef = useRef(false); // Ref mirror of selectionMode — used inside Leaflet click closures
+  const [deleteSelectionMode, setDeleteSelectionMode] = useState(false); // When true, map markers are tappable for bulk bin delete selection
+  const [selectedBinsToDelete, setSelectedBinsToDelete] = useState<string[]>([]); // IDs of bins marked for bulk deletion
+  const deleteSelectionModeRef = useRef(false); // Ref mirror of deleteSelectionMode — used inside Leaflet click closures
 
   // Overhaul custom UI states
   const [isPlannerExpanded, setIsPlannerExpanded] = useState(false);
@@ -293,8 +310,40 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   // Keep refs in sync with their corresponding state values so Leaflet closures always read current values
   useEffect(() => { addModeRef.current = addMode; }, [addMode]);
   useEffect(() => { selectionModeRef.current = selectionMode; }, [selectionMode]);
+  useEffect(() => { deleteSelectionModeRef.current = deleteSelectionMode; }, [deleteSelectionMode]);
   useEffect(() => { markersRef.current = markers; }, [markers]);
   useEffect(() => { toggleBinSelectionRef.current = toggleBinSelection; });
+  useEffect(() => { toggleDeleteBinSelectionRef.current = toggleDeleteBinSelection; });
+
+  // Dynamically repositions context menu to stay anchored to its bin marker during map panning/zooming
+  useEffect(() => {
+    if (!contextMenu || !leafletMapRef.current) {
+      setContextMenuPos(null);
+      return;
+    }
+
+    const updateContextMenuPosition = () => {
+      const entry = markersRef.current.get(contextMenu.binId);
+      if (!entry || !leafletMapRef.current) return;
+      const containerPoint = leafletMapRef.current.latLngToContainerPoint(entry.marker.getLatLng());
+      setContextMenuPos({
+        x: containerPoint.x,
+        y: containerPoint.y - 12
+      });
+    };
+
+    updateContextMenuPosition();
+
+    const map = leafletMapRef.current;
+    const handleMapChange = () => {
+      updateContextMenuPosition();
+    };
+
+    map.on('move zoom viewreset drag', handleMapChange);
+    return () => {
+      map.off('move zoom viewreset drag', handleMapChange);
+    };
+  }, [contextMenu]);
 
   // Fetches vehicles and drivers whenever selection mode opens or the council changes
   useEffect(() => {
@@ -342,7 +391,33 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         const item = m.get(id);
         if (item) {
           // Revert to fill-status icon if deselecting, otherwise apply the selection checkmark
-          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected));
+          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected ? 'route' : false));
+        }
+        return m;
+      });
+      return newSelected;
+    });
+  };
+
+  // Toggles a bin's deletion selection state and swaps its marker icon between status-based and the red X
+  const toggleDeleteBinSelection = (id: string) => {
+    const entry = markers.get(id);
+    if (!entry) return;
+
+    // Guard: Prevent selecting bins that do not match the current council context
+    if (council?.name && entry.data.council && entry.data.council.trim().toLowerCase() !== council.name.trim().toLowerCase()) {
+      return;
+    }
+
+    setSelectedBinsToDelete(prev => {
+      const isSelected = prev.includes(id);
+      const newSelected = isSelected ? prev.filter(b => b !== id) : [...prev, id];
+      setMarkers(currentMarkers => {
+        const m = new Map(currentMarkers);
+        const item = m.get(id);
+        if (item) {
+          // Revert to fill-status icon if deselecting, otherwise apply the deletion cross
+          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected ? 'delete' : false));
         }
         return m;
       });
@@ -738,42 +813,67 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     map.on('click', (e: L.LeafletMouseEvent) => {
       setContextMenu(null); // Dismiss any open context menu on map click
       if (!addModeRef.current) return; // Ignore clicks when not in add mode
-      const pt = point([e.latlng.lng, e.latlng.lat]); // Turf point uses [lng, lat]
 
-      // Detect which council this click falls inside
-      let detectedCouncil: string | null = null;
+      try {
+        const pt = point([e.latlng.lng, e.latlng.lat]); // Turf point uses [lng, lat]
+        let detectedCouncil: string | null = null;
+        const activeCouncil = councilRef.current;
 
-      if (turfPolyRef.current) {
-        if (booleanPointInPolygon(pt, turfPolyRef.current)) {
-          detectedCouncil = council?.name || null;
-        }
-      } else {
-        // Iterate through all 5 councils in allBoundariesData
-        for (const [cName, cData] of Object.entries(allBoundariesData)) {
-          const coords = cData.boundaryPoints.map((p: any) => [p.lng, p.lat]);
-          coords.push(coords[0]);
-          const poly = turfPolygon([coords]);
-          if (booleanPointInPolygon(pt, poly)) {
-            detectedCouncil = cName;
-            break;
+        if (activeCouncil?.name) {
+          let isInside = false;
+          if (turfPolyRef.current) {
+            isInside = booleanPointInPolygon(pt, turfPolyRef.current);
+          } else {
+            // Fallback: build boundary dynamically
+            const localBoundary = (allBoundariesData as Record<string, any>)[activeCouncil.name];
+            if (localBoundary?.boundaryPoints?.length >= 3) {
+              const coords = localBoundary.boundaryPoints.map((p: any) => [p.lng, p.lat]);
+              coords.push(coords[0]);
+              const poly = turfPolygon([coords]);
+              isInside = booleanPointInPolygon(pt, poly);
+            }
+          }
+
+          if (!isInside) {
+            toast.error(`Unable to add bin outside the selected council boundary: ${activeCouncil.name}`);
+            return;
+          }
+          detectedCouncil = activeCouncil.name;
+        } else {
+          // Iterate through all 5 councils in allBoundariesData (Super Admin view with no active council context)
+          for (const [cName, cData] of Object.entries(allBoundariesData)) {
+            if (!cData || !cData.boundaryPoints || cData.boundaryPoints.length < 3) continue;
+            const coords = cData.boundaryPoints.map((p: any) => [p.lng, p.lat]);
+            coords.push(coords[0]);
+            const poly = turfPolygon([coords]);
+            if (booleanPointInPolygon(pt, poly)) {
+              detectedCouncil = cName;
+              break;
+            }
+          }
+          if (!detectedCouncil) {
+            toast.error("Outside municipal area! Please click inside one of the council boundaries.");
+            return;
           }
         }
-      }
 
-      if (!detectedCouncil) {
-        toast.error("Outside municipal area! Please click inside one of the council boundaries.");
-        return;
+        // Pre-populate the form with the clicked coordinates and open the creation dialog
+        setNewBin(prev => ({ 
+          ...prev, 
+          location: `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`,
+          council: detectedCouncil || ''
+        }));
+        setIsCreateModalOpen(true);
+        setAddMode(false); // Exit add mode after capturing a location
+      } catch (err) {
+        console.error("Error handling map click for bin placement:", err);
+        toast.error("An error occurred while placing the bin. Please try again.");
+        setAddMode(false);
       }
-
-      // Pre-populate the form with the clicked coordinates and open the creation dialog
-      setNewBin(prev => ({ 
-        ...prev, 
-        location: `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`,
-        council: detectedCouncil || ''
-      }));
-      setIsCreateModalOpen(true);
-      setAddMode(false); // Exit add mode after capturing a location
     });
+
+    map.on('movestart', () => setContextMenu(null));
+    map.on('zoomstart', () => setContextMenu(null));
 
     loadBins();          // Fetch and render existing bins from the API
     loadActiveSession(); // Restore any previously active route session for this user
@@ -783,7 +883,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       if (routeLayerRef.current) routeLayerRef.current.clearLayers();
       if (boundaryLayerRef.current) boundaryLayerRef.current.clearLayers();
     };
-  }, [boundaryLoading, boundaryData]);
+  }, [boundaryLoading]);
 
   // ── Helper: compute combined bounds of all councils (cached) ──
   const getAllCouncilBounds = (): L.LatLngBounds | null => {
@@ -943,7 +1043,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       // "All Councils" view
       renderAllCouncils(map, !isZoomingOut);
     }
-  }, [council, boundaryData, focusMode]);
+  }, [council?.name, boundaryData, focusMode]);
 
   // ── UPDATE MARKER VISIBILITY ON COUNCIL FILTER CHANGE ──
   useEffect(() => {
@@ -966,7 +1066,15 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
   // ── LOAD BINS ────────────────────────────────────────────────────────────
   const loadBins = async () => {
-    const res = await fetch(BINS_API);
+    const role = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null;
+    const userIsSuperAdmin = role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'role_superadmin';
+    
+    let url = BINS_API;
+    if (!userIsSuperAdmin && council?.name) {
+      url = `${BINS_API}?council=${encodeURIComponent(council.name)}`;
+    }
+
+    const res = await fetch(url);
     if (!res.ok) { console.error(`Failed to load bins: ${res.status}`); return; }
     const payload = await res.json();
     let bins: any[] = [];
@@ -978,6 +1086,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       const lat = Number(bin.lat ?? bin.latitude);
       const lng = Number(bin.lng ?? bin.longitude);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      // Scoping logic: regular admins should only see bins for their own council
+      if (!userIsSuperAdmin && council?.name) {
+        if (!bin.council || bin.council.trim().toLowerCase() !== council.name.trim().toLowerCase()) {
+          return;
+        }
+      }
+
       addMarker({
         id: String(bin.id), binCode: bin.binCode,
         lat, lng, fillLevel: bin.fillLevel,
@@ -1004,14 +1120,20 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   // Creates and registers a Leaflet marker for a bin, wiring up click and context-menu handlers
   const addMarker = (data: BinData) => {
     if (!leafletMapRef.current) return;
-    const isSelected = selectedBins.includes(data.id);
+    const isSelected = selectedBins.includes(data.id) ? 'route' : (selectedBinsToDelete.includes(data.id) ? 'delete' : false);
     const marker = L.marker([data.lat, data.lng], { icon: getStatusIcon(data.id, data.status, data.fillLevel, isSelected) })
       .addTo(leafletMapRef.current);
     marker.bindTooltip(renderTooltip(data));
-    marker.on('click', () => { if (selectionModeRef.current) toggleBinSelectionRef.current(data.id); }); // Only toggle selection when in selection mode
+    marker.on('click', () => {
+      if (selectionModeRef.current) {
+        toggleBinSelectionRef.current(data.id);
+      } else if (deleteSelectionModeRef.current) {
+        toggleDeleteBinSelectionRef.current(data.id);
+      }
+    });
     marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
-      const pt = leafletMapRef.current!.latLngToContainerPoint(e.latlng); // Convert geo coords to pixel coords for positioning the context menu
-      setContextMenu({ x: pt.x, y: pt.y, binId: data.id });
+      e.originalEvent.preventDefault(); // Prevent standard browser menu
+      setContextMenu({ binId: data.id });
     });
     setMarkers(prev => { const m = new Map(prev); m.set(data.id, { marker, data }); return m; });
   };
@@ -1089,6 +1211,67 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     }
   };
 
+  // Sends a DELETE request to delete multiple selected bins and removes their markers
+  const handleBulkDelete = async () => {
+    if (selectedBinsToDelete.length === 0) return;
+
+    // Check if user is authorized to manage all selected bins
+    for (const id of selectedBinsToDelete) {
+      if (!canManageBin(id)) {
+        toast.error('You can only manage bins from your assigned council.');
+        return;
+      }
+    }
+
+    const confirmed = window.confirm(`Are you sure you want to delete the ${selectedBinsToDelete.length} selected bins?`);
+    if (!confirmed) return;
+
+    try {
+      const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const binIds = selectedBinsToDelete.map(id => Number(id)).filter(id => Number.isFinite(id));
+      const res = await fetch(`${BINS_API}/batch`, {
+        method: "DELETE",
+        headers,
+        body: JSON.stringify(binIds)
+      });
+
+      if (!res.ok) {
+        let errMessage = 'Failed to delete selected bins';
+        try {
+          const errData = await res.json();
+          errMessage = errData.message || errMessage;
+        } catch { }
+        throw new Error(errMessage);
+      }
+
+      // Remove markers from Leaflet map
+      selectedBinsToDelete.forEach(id => {
+        const entry = markers.get(id);
+        if (entry && leafletMapRef.current) {
+          leafletMapRef.current.removeLayer(entry.marker);
+        }
+      });
+
+      // Update markers state
+      setMarkers(prev => {
+        const m = new Map(prev);
+        selectedBinsToDelete.forEach(id => m.delete(id));
+        return m;
+      });
+
+      clearSelectedBinIcons(selectedBinsToDelete);
+      setSelectedBinsToDelete([]);
+      setDeleteSelectionMode(false);
+      toast.success(`${binIds.length} bins deleted successfully`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error during bulk deletion';
+      toast.error(message);
+    }
+  };
+
   // Applies partial updates to a bin's data and refreshes its icon/tooltip
   const updateBinLocally = (id: string, updates: Partial<BinData>) => {
     const entry = markers.get(id);
@@ -1096,7 +1279,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     const newData = { ...entry.data, ...updates };
     entry.data = newData;
     entry.marker.bindTooltip(renderTooltip(newData));
-    const isSelected = selectedBins.includes(id);
+    const isSelected = selectedBins.includes(id) ? 'route' : (selectedBinsToDelete.includes(id) ? 'delete' : false);
     entry.marker.setIcon(getStatusIcon(id, newData.status, newData.fillLevel, isSelected));
     setMarkers(new Map(markers));
   };
@@ -1283,6 +1466,9 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
             setSelectionMode(nextSelect);
             if (nextSelect) {
               setAddMode(false);
+              setDeleteSelectionMode(false);
+              clearSelectedBinIcons(selectedBinsToDelete);
+              setSelectedBinsToDelete([]);
               setShowHistorySheet(false);
               clearRouteVisualization();
               setRouteStatus('');
@@ -1302,6 +1488,40 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         >
           <Navigation className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden sm:inline">{selectionMode ? 'Selecting...' : 'Route'}</span>
+        </button>
+
+        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+
+        {/* Delete Bins */}
+        <button
+          title={deleteSelectionMode ? 'Selecting bins for deletion' : 'Delete Bins'}
+          onClick={() => {
+            const nextDelete = !deleteSelectionMode;
+            setDeleteSelectionMode(nextDelete);
+            if (nextDelete) {
+              setAddMode(false);
+              setSelectionMode(false);
+              clearSelectedBinIcons(selectedBins);
+              setSelectedBins([]);
+              setShowHistorySheet(false);
+              clearRouteVisualization();
+              setRouteStatus('');
+              setRouteError('');
+              setSelectedBinsToDelete([]);
+              setIsPlannerExpanded(true);
+            } else {
+              clearSelectedBinIcons(selectedBinsToDelete);
+              setSelectedBinsToDelete([]);
+              setIsPlannerExpanded(false);
+            }
+          }}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${deleteSelectionMode
+            ? 'bg-red-600 text-white shadow-sm hover:bg-red-700'
+            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            }`}
+        >
+          <Trash2 className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden sm:inline">{deleteSelectionMode ? 'Selecting...' : 'Delete Bins'}</span>
         </button>
 
         <div className="w-px h-4 bg-gray-300/40 shrink-0" />
@@ -1566,13 +1786,15 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                     Clear All
                   </Button>
                   <Button
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold h-10 transition-all shadow-md"
+                    disabled={isGeneratingRoute}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold h-10 transition-all shadow-md disabled:opacity-50 flex items-center justify-center"
                     onClick={async () => {
                       if (selectedBins.length === 0) { toast.error("Please select at least one bin"); return; }
                       if (!selectedVehicleId) { toast.error("Please select a vehicle"); return; }
                       if (!selectedDriverId) { toast.error("Please select a driver"); return; }
                       const vehicle = vehicles.find(v => String(v.id) === selectedVehicleId);
                       const capacity = vehicle?.capacity || DEFAULT_VEHICLE_CAPACITY;
+                      setIsGeneratingRoute(true);
                       try {
                         const selectedBinIds = selectedBins.map(id => Number(id)).filter(id => Number.isFinite(id));
                         const res = await fetch(ROUTE_SESSION_API, {
@@ -1613,11 +1835,131 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                         clearSelectedBinIcons(selectedBins);
                         setSelectedBins([]);
                         setIsPlannerExpanded(false);
-                      } catch (e) { console.error(e); toast.error("Error generating routes"); }
+                        toast.success("Route generated successfully!");
+                      } catch (e) { 
+                        console.error(e); 
+                        toast.error("Error generating routes"); 
+                      } finally {
+                        setIsGeneratingRoute(false);
+                      }
                     }}
                   >
-                    <Navigation className="w-3.5 h-3.5 mr-1.5" />
-                    Generate Route
+                    {isGeneratingRoute ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Navigation className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    {isGeneratingRoute ? "Generating..." : "Generate Route"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* COLLAPSIBLE BULK BIN DELETION BOTTOM DRAWER */}
+      {deleteSelectionMode && (
+        <div
+          style={{ zIndex: 999 }}
+          className={`absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] transition-all duration-300 ease-in-out flex flex-col ${isPlannerExpanded ? 'h-[280px]' : 'h-14'
+            }`}
+        >
+          {/* Header/Collapsed Panel Bar */}
+          <div
+            className="flex items-center justify-between px-6 h-14 border-b border-gray-100 shrink-0 cursor-pointer select-none bg-red-50/50 hover:bg-red-50/80 transition-colors"
+            onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
+          >
+            <div className="flex items-center gap-3">
+              {isPlannerExpanded ? (
+                <ChevronDown className="w-5 h-5 text-red-500 animate-bounce" />
+              ) : (
+                <ChevronUp className="w-5 h-5 text-red-500 animate-bounce" />
+              )}
+              <span className="font-semibold text-gray-800 text-sm">Bulk Bin Deletion</span>
+              <span className="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-semibold">
+                {selectedBinsToDelete.length} Bins Selected for Deletion
+              </span>
+            </div>
+            <div className="flex items-center gap-4" onClick={e => e.stopPropagation()}>
+              {!isPlannerExpanded && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs font-semibold"
+                  onClick={() => {
+                    setDeleteSelectionMode(false);
+                    clearSelectedBinIcons(selectedBinsToDelete);
+                    setSelectedBinsToDelete([]);
+                    setIsPlannerExpanded(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+              <button
+                onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
+                className="text-xs font-bold text-red-700 hover:text-red-800 transition-colors"
+              >
+                {isPlannerExpanded ? "Collapse" : "Expand Configuration"}
+              </button>
+            </div>
+          </div>
+
+          {/* Expanded Configuration Details */}
+          {isPlannerExpanded && (
+            <div className="p-5 flex flex-col md:flex-row gap-6 overflow-hidden flex-1 bg-white">
+              {/* Left Column: Selected Bins Tag Chips */}
+              <div className="flex-1 flex flex-col gap-2 min-w-0">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bins to Delete</span>
+                {selectedBinsToDelete.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl p-4 bg-gray-50/50">
+                    <Trash2 className="w-6 h-6 text-gray-300 mb-1" />
+                    <p className="text-gray-400 text-xs text-center">Click bins on the map to add them to the deletion list</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] p-2 border border-gray-100 rounded-xl bg-slate-50/50">
+                    {selectedBinsToDelete.map(id => {
+                      const entry = markers.get(id);
+                      return (
+                        <div key={id} className="flex items-center gap-1.5 bg-white text-gray-800 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 shadow-sm shrink-0">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}></span>
+                          <span>{entry?.data.binCode || id}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleDeleteBinSelection(id)}
+                            className="text-gray-400 hover:text-red-500 font-bold ml-1 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Actions */}
+              <div className="w-full md:w-80 flex flex-col justify-end gap-4">
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-xs h-10 border-gray-200"
+                    onClick={() => {
+                      clearSelectedBinIcons(selectedBinsToDelete);
+                      setSelectedBinsToDelete([]);
+                    }}
+                  >
+                    Clear All
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={selectedBinsToDelete.length === 0}
+                    className="flex-1 text-xs h-10 bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    onClick={handleBulkDelete}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Selected Bins
                   </Button>
                 </div>
               </div>
@@ -1774,8 +2116,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       )}
 
       {/* CONTEXT MENU — appears on right-click of a bin marker */}
-      {contextMenu && (
-        <div style={{ top: contextMenu.y, left: contextMenu.x, zIndex: 9999 }}
+      {contextMenu && contextMenuPos && (
+        <div style={{ top: contextMenuPos.y, left: contextMenuPos.x, zIndex: 9999, transform: 'translate(-50%, -105%)' }}
           className="absolute bg-white shadow-xl rounded-lg p-2.5 z-[2000] min-w-[190px] border border-gray-200 flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-150">
           <div className="text-[10px] font-bold text-gray-400 px-2 py-0.5 uppercase tracking-wider flex justify-between items-center border-b border-gray-50 pb-1.5">
             <span>Manage Bin</span>
