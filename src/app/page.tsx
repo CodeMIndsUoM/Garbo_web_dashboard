@@ -178,12 +178,7 @@ export default function Home() {
       if (!selectedId || selectedId === 'all') return null;
       return COUNCILS.find((c) => c.id === selectedId) || null;
     }
-    try {
-      const stored = sessionStorage.getItem('council');
-      return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-      return null;
-    }
+    return selectedCouncil;
   };
 
   // Navigation helper for opening the Create Admin page
