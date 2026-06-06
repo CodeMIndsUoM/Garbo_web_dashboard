@@ -132,3 +132,11 @@ html {
 .leaflet-container {
   background: #f8fafc !important;
 }
+
+.leaflet-container:focus,
+.leaflet-container:active,
+.leaflet-container *:focus,
+.leaflet-container *:active {
+  outline: none !important;
+}
+
