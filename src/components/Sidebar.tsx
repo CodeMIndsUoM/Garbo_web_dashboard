@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, Map as MapIcon, Shield, Users, Building2, Trophy } from 'lucide-react';
+import { LayoutDashboard, Trash2, Truck, BarChart3, Map as MapIcon, Shield, UserCircle, Trophy } from 'lucide-react';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -13,17 +13,12 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selectedCouncil }: SidebarProps) {
   const menuItems = [
-    ...(userRole === 'superadmin' ? [
-      { id: 'home' as PageType, label: 'Home', icon: LayoutDashboard },
-    ] : []),
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'schedule' as PageType, label: 'Bin Collection', icon: Calendar },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
     { id: 'vehicles' as PageType, label: 'Vehicle Management', icon: Truck },
     { id: 'map' as PageType, label: 'Map', icon: MapIcon },
     { id: 'analytics' as PageType, label: 'Analytics', icon: BarChart3 },
-    { id: 'citizen-management' as PageType, label: 'Citizen Management', icon: Users },
-    { id: 'third-party-collectors' as PageType, label: '3rd Party Collectors', icon: Building2 },
+    { id: 'external-users' as PageType, label: 'External Users', icon: UserCircle },
     { id: 'gamification' as PageType, label: 'Gamification', icon: Trophy },
     { id: 'internal-users' as PageType, label: 'Internal Users', icon: Shield },
   ];
