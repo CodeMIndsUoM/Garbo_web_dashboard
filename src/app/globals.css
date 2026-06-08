@@ -1,4 +1,5 @@
 @import "leaflet/dist/leaflet.css";
+@import "../theme/tokens.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -143,5 +144,204 @@ html {
 .draft-stop-marker {
   background: transparent !important;
   border: none !important;
+}
+
+/* Auth / login layout — explicit classes so shadow & radius always apply */
+@layer components {
+  .garbo-auth-shell {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-page);
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-shell {
+      flex-direction: row;
+    }
+  }
+
+  .garbo-auth-form-column {
+    display: flex;
+    width: 100%;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1.5rem;
+    order: 1;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgb(220 252 231 / 0.55), transparent 70%),
+      linear-gradient(165deg, var(--brand-50) 0%, var(--surface-page) 42%, #ffffff 100%);
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-form-column {
+      width: 46%;
+      max-width: 46%;
+      flex: 0 0 46%;
+      padding: 3rem 2.75rem;
+      justify-content: center;
+    }
+  }
+
+  .garbo-auth-form-stack {
+    width: 100%;
+    max-width: 26rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .garbo-auth-brand-header {
+    padding: 0 0.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-brand-header {
+      padding-bottom: 0.25rem;
+    }
+  }
+
+  .garbo-auth-form-card {
+    width: 100%;
+    padding: 2rem 2.25rem;
+    border-radius: var(--radius-auth-card);
+    border: 1px solid var(--surface-border);
+    background: var(--auth-form-backdrop);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-auth-card);
+  }
+
+  @media (min-width: 640px) {
+    .garbo-auth-form-card {
+      padding: 2.5rem 2.75rem;
+    }
+  }
+
+  .garbo-auth-hero-column {
+    position: relative;
+    order: 2;
+    min-height: 280px;
+    width: 100%;
+    flex: 1;
+    overflow: hidden;
+    background-color: var(--brand-800);
+    background-image: var(--auth-hero-image);
+    background-size: cover;
+    background-position: center;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-hero-column {
+      width: 54%;
+      max-width: 54%;
+      flex: 0 0 54%;
+      min-height: 100vh;
+      height: 100vh;
+    }
+  }
+
+  .garbo-auth-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      145deg,
+      var(--auth-hero-brand-tint) 0%,
+      var(--auth-hero-overlay) 50%,
+      rgb(15 23 42 / 0.58) 100%
+    );
+    backdrop-filter: blur(1px);
+  }
+
+  .garbo-auth-hero-inner {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 2rem 1.75rem;
+    color: #fff;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-hero-inner {
+      padding: 2.5rem 3rem 2.25rem;
+    }
+  }
+
+  .garbo-auth-hero-header {
+    flex-shrink: 0;
+  }
+
+  .garbo-auth-hero-main {
+    margin-top: auto;
+    width: 100%;
+    max-width: 32rem;
+    padding-top: 2rem;
+    padding-bottom: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-hero-main {
+      padding-bottom: 1rem;
+    }
+  }
+
+  .garbo-auth-hero-footer {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: rgb(255 255 255 / 0.7);
+    padding-top: 0.25rem;
+  }
+
+  .garbo-auth-hero-rotator {
+    width: 100%;
+    max-width: 30rem;
+  }
+
+  .garbo-auth-hero-title {
+    font-size: clamp(1.35rem, 2.4vw, 2rem);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 16px rgb(0 0 0 / 0.35);
+  }
+
+  .garbo-auth-hero-body {
+    margin-top: 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: rgb(255 255 255 / 0.92);
+    text-shadow: 0 1px 10px rgb(0 0 0 / 0.3);
+    max-width: 28rem;
+  }
+
+  .garbo-auth-hero-dots {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .garbo-auth-hero-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: rgb(255 255 255 / 0.35);
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+
+  .garbo-auth-hero-dot--active {
+    width: 1.5rem;
+    background: rgb(255 255 255 / 0.95);
+  }
+
+  .garbo-auth-hero-dot:hover {
+    background: rgb(255 255 255 / 0.65);
+  }
 }
 
