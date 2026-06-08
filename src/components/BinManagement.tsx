@@ -22,8 +22,9 @@ import {
   SelectValue,
 } from "./ui/select";
 import { toast } from "sonner";
+import { apiFetch } from '@/lib/api';
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'}/api/bins`;
+const BINS_API = '/api/bins';
 const COUNCILS = [
   'Colombo',
   'Dehiwala-Mt. Lavinia',
@@ -48,6 +49,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
   
@@ -63,17 +65,13 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
   const isAdmin = userRole === 'admin';
   const defaultCouncil = council?.name || '';
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const fetchBins = async () => {
     try {
       setLoading(true);
       const query = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
-      const response = await fetch(`${API_BASE}${query}`, { headers: authHeaders() });
-      const result = await response.json();
+      const { response, data: result } = await apiFetch<{ success?: boolean; data?: Bin[] }>(
+        `${BINS_API}${query}`
+      );
       if (result.success) {
         const data = Array.isArray(result.data) ? result.data : [];
         const hasCouncilField = data.some((b: any) => typeof b?.council === 'string');
@@ -102,22 +100,19 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         return;
       }
 
+      const { zone: _zone, ...rest } = newBin;
       const binDataToSubmit = {
-        ...newBin,
+        ...rest,
         status: 'empty'
       };
 
-      const response = await fetch(API_BASE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders(),
-        },
-        body: JSON.stringify(binDataToSubmit),
-      });
-      const result = await response.json();
-      if (result.success) {
-        toast.success("Bin created successfully");
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string; data?: { zone?: string } }>(
+        BINS_API,
+        { method: 'POST', body: JSON.stringify(binDataToSubmit) }
+      );
+      if (response.ok && result.success) {
+        const assignedZone = result.data?.zone;
+        toast.success(assignedZone ? `Bin created successfully (Zone ${assignedZone})` : "Bin created successfully");
         setIsCreateModalOpen(false);
         setNewBin({
           binCode: '',
@@ -140,11 +135,10 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const handleDeleteBin = async (id: number) => {
     if (!confirm("Are you sure you want to delete this bin?")) return;
     try {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      });
-      const result = await response.json();
+      const { data: result } = await apiFetch<{ success?: boolean }>(
+        `${BINS_API}/${id}`,
+        { method: 'DELETE' }
+      );
       if (result.success) {
         toast.success("Bin deleted successfully");
         fetchBins();
@@ -154,25 +148,58 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     }
   };
 
-  const filteredBins = bins.filter(bin => 
-    bin.binCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    bin.location?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const normalizeStatus = (status: string) =>
+    (status || '').toLowerCase().replace(/\s+/g, '_');
 
-  const councilScopedBins = useMemo(() => {
-    if (!council?.name) return filteredBins;
+  const councilBins = useMemo(() => {
+    if (!council?.name) return bins;
     const councilName = council.name.toLowerCase();
-    return filteredBins.filter((bin: any) => {
+    return bins.filter((bin) => {
       if (typeof bin?.council !== 'string') return true;
       return bin.council.toLowerCase() === councilName;
     });
-  }, [filteredBins, council]);
+  }, [bins, council]);
+
+  const binCounts = useMemo(
+    () => ({
+      total: councilBins.length,
+      full: councilBins.filter((b) => normalizeStatus(b.status) === 'full').length,
+      half: councilBins.filter((b) => normalizeStatus(b.status) === 'half').length,
+      empty: councilBins.filter((b) => normalizeStatus(b.status) === 'empty').length,
+    }),
+    [councilBins]
+  );
+
+  const councilScopedBins = useMemo(() => {
+    let result = councilBins;
+    if (statusFilter) {
+      result = result.filter((b) => normalizeStatus(b.status) === statusFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (bin) =>
+          bin.binCode?.toLowerCase().includes(q) ||
+          bin.location?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [councilBins, statusFilter, searchQuery]);
+
+  const handleStatusCardClick = (filter: string | null) => {
+    setStatusFilter((prev) => (prev === filter ? null : filter));
+  };
+
+  const statCardClass = (active: boolean) =>
+    `bg-white cursor-pointer transition-all hover:shadow-md ${
+      active ? 'ring-2 ring-blue-500 shadow-md' : ''
+    }`;
 
   const nextBinCode = useMemo(() => {
     if (!council?.name) return 'Auto-generated';
     const prefix = `${council.name.trim()}-`.toLowerCase();
     
-    const maxNumber = councilScopedBins.reduce((max, bin) => {
+    const maxNumber = councilBins.reduce((max, bin) => {
       const code = bin.binCode?.toLowerCase() || '';
       if (code.startsWith(prefix)) {
         const numStr = code.slice(prefix.length).trim();
@@ -184,7 +211,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     }, 0);
     
     return `${council.name.trim()}-${maxNumber + 1}`;
-  }, [council, councilScopedBins]);
+  }, [council, councilBins]);
 
 
 
@@ -225,19 +252,11 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Zone</label>
-                <Input 
-                  type="number"
-                  min="1"
-                  placeholder="e.g. 1" 
-                  value={newBin.zone}
-                  onChange={(e) => setNewBin({...newBin, zone: e.target.value})}
-                  required
-                />
-              </div>
+              <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                Zone is assigned automatically from coordinates when you save.
+              </p>
 
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
+              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
                 Save Bin
               </Button>
             </form>
@@ -245,14 +264,20 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         </Dialog>
       </div>
 
-      {/* Stats Summary */}
+      {/* Stats Summary — click a card to filter the grid below */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card className="bg-white">
+        <Card
+          className={statCardClass(statusFilter === null)}
+          onClick={() => handleStatusCardClick(null)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick(null)}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Total Bins</p>
-                <p className="text-2xl font-semibold text-gray-900">{bins.length}</p>
+                <p className="text-2xl font-semibold text-gray-900">{binCounts.total}</p>
               </div>
               <div className="p-3 bg-gray-50 rounded-full">
                 <Trash2 className="w-6 h-6 text-gray-400" />
@@ -261,14 +286,18 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={statCardClass(statusFilter === 'full')}
+          onClick={() => handleStatusCardClick('full')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('full')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Critical</p>
-                <p className="text-2xl font-semibold text-red-600">
-                  {bins.filter(b => b.status === 'critical').length}
-                </p>
+                <p className="text-sm text-gray-600 mb-1">Full</p>
+                <p className="text-2xl font-semibold text-red-600">{binCounts.full}</p>
               </div>
               <div className="p-3 bg-red-50 rounded-full">
                 <AlertTriangle className="w-6 h-6 text-red-400" />
@@ -277,14 +306,18 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={statCardClass(statusFilter === 'half')}
+          onClick={() => handleStatusCardClick('half')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('half')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Warning</p>
-                <p className="text-2xl font-semibold text-orange-600">
-                  {bins.filter(b => b.status === 'warning').length}
-                </p>
+                <p className="text-sm text-gray-600 mb-1">Half</p>
+                <p className="text-2xl font-semibold text-orange-600">{binCounts.half}</p>
               </div>
               <div className="p-3 bg-orange-50 rounded-full">
                 <AlertTriangle className="w-6 h-6 text-orange-400" />
@@ -293,14 +326,18 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={statCardClass(statusFilter === 'empty')}
+          onClick={() => handleStatusCardClick('empty')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('empty')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Normal</p>
-                <p className="text-2xl font-semibold text-green-600">
-                  {bins.filter(b => b.status === 'normal').length}
-                </p>
+                <p className="text-sm text-gray-600 mb-1">Empty</p>
+                <p className="text-2xl font-semibold text-green-600">{binCounts.empty}</p>
               </div>
               <div className="p-3 bg-green-50 rounded-full">
                 <Trash2 className="w-6 h-6 text-green-400" />

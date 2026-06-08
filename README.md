@@ -11,11 +11,12 @@ Admin dashboard UI for the Garbo Smart Waste Management System, built with **Nex
 
 - **Frontend dev server**: Next.js defaults to **`3000`**
   - If `3000` is busy, Next will use another port (commonly `3001`).
-- **Backend API**: `http://localhost:8080`
+- **Backend API**: `http://localhost:8081` (or `8080` depending on your local setup)
 
 The frontend uses:
 
-- `NEXT_PUBLIC_API_BASE` to target the backend directly (defaulted to `http://localhost:8080`)
+- `NEXT_PUBLIC_API_BASE` to target the backend directly (default: `http://localhost:8081`)
+- Shared API client: `src/lib/api.ts` (`apiFetch`, `getApiBase`, `getAuthHeaders`)
 - a **dev rewrite** in `next.config.mjs`:
   - `/api/*` → `http://localhost:8080/api/*` (development only)
 
@@ -24,8 +25,7 @@ The frontend uses:
 Dashboard is role-aware:
 
 - **superadmin**
-  - gets `Home` tab
-  - can switch between councils from council selector
+  - global council dropdown in the top bar (applies to all pages)
   - can choose council from dropdowns in relevant create/edit flows
 - **admin**
   - does not get council switching
