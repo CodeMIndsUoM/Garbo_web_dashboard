@@ -7,7 +7,7 @@
 
 - **Repo:** `Garbo_web_dashboard/`
 - **Status:** `[ ]` todo · `[~]` in progress · `[x]` done · `[⏸]` blocked (waiting on backend)
-- **Last updated:** 2026-06-08 (W0 ✅ · W1 ✅ · W3 ✅ · W4 ✅)
+- **Last updated:** 2026-06-08 (W0 ✅ · W1 ✅ · W3 ✅ · W4 ✅ · W4A/W4B planned)
 
 ---
 
@@ -54,6 +54,8 @@
 | **W2** | Remove Bin Collection page | No |
 | **W3** | Card click-filtering (Bin + Vehicle) | No |
 | **W4** | Map route visibility UX | No |
+| **W4A** | Auto multi-route generation + bin-capacity vehicles | Yes — auto endpoint + `maxBins` on Vehicle |
+| **W4B** | Route planner right panel (match History UX) | No |
 | **W5** | Remove manual zone input | Yes — `zone` optional on `POST /api/bins` |
 | **W6** | External Users page (merge Citizen + 3rd Party) | Yes — secured approval endpoints |
 | **W7** | Internal Users polish + superadmin create | Yes — superadmin create with council |
@@ -107,7 +109,8 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 | **Sprint 2** | W4 + W8 | Map route UX + realtime bins (coordinate backend early) |
 | **Sprint 3** | W6 + W7 | External Users page + Internal Users polish |
 | **Sprint 4** | W5 + W2 | Remove zone input (after backend) + remove Bin Collection |
-| **Sprint 5** | W9 | UI consistency + dark theme (last) |
+| **Sprint 5** | W4B + W4A | Route planner right panel + auto multi-route (backend `maxBins` + auto-preview) |
+| **Sprint 6** | W9 | UI consistency + dark theme (last) |
 
 ---
 
@@ -310,51 +313,145 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 ---
 
-### W4A — Auto route generation (planned — feasibility ✅)
+### W4A — Auto multi-route generation + vehicle bin capacity (planned — feasibility ✅)
 
-**Goal:** Add **Auto Generate Route** alongside manual **Route** (select bins → optimize). No ML model required.
+**Goal:** Add **Auto Generate Routes** alongside the existing manual **Route** flow. Manual flow is **unchanged**. Auto flow creates **one or many routes** (not one giant route), then admin assigns **driver + vehicle** per route.
 
-#### Current manual flow (keep)
+**Legend UI:** `[x]` Glass panel aligned with History (`bg-white/70 backdrop-blur-md`, right side).
+
+#### Current manual flow (keep — do not remove)
 1. Admin clicks **Route** → selects bins on map (green badge)
-2. Chooses vehicle + driver in bottom planner
+2. Chooses vehicle + driver in planner
 3. Backend `POST /api/route-sessions` → OR-Tools + OSRM optimizes stop order
 
 #### Proposed auto flow (add)
-1. Admin clicks **Auto Route** (new toolbar button)
-2. System picks bins automatically for active council:
-   - **Priority:** `full` → `half` → skip `empty` / `not_checked` (configurable)
-   - **Scope:** bins inside council boundary; optional zone clusters (F5)
-   - **Capacity:** respect vehicle capacity + available vehicles
-3. Same backend optimizer (`RouteSessionService.solveRoute`) — only **bin selection** changes
+1. Admin clicks **Auto Route** (new toolbar button, beside **Route**)
+2. System analyses council bins needing collection:
+   - **Priority:** `full` first, then `half`; skip `empty` / `not_checked` (configurable threshold)
+   - **Scope:** bins inside council boundary; split by zone cluster when W5/F5 zones exist
+3. System **splits work into multiple routes** instead of one route for all bins:
+   - Count available vehicles + each vehicle **max bin capacity**
+   - Cluster bins geographically (K-means per zone or council — **no ML**)
+   - Run multi-vehicle CVRP **or** one session per vehicle/cluster
+   - Output: **N route drafts** (e.g. Route 1: 42 bins, Route 2: 38 bins, Route 3: 25 bins)
+4. Admin reviews drafts in **Route Planner panel (W4B)** — assigns **driver + vehicle** per route
+5. On confirm → same `optimizeAndBroadcast` + WebSocket READY flow as manual (one session per assignment)
 
-#### Is this feasible without a model?
+#### Why multiple routes (not one route for all bins)
+| Problem with single mega-route | Multi-route approach |
+|---|---|
+| One collector cannot visit 200+ bins in one shift | Split by vehicle count & bin capacity |
+| OR-Tools may fail or produce unrealistic paths | Smaller CVRP instances solve reliably |
+| No parallel collection | Multiple collectors work simultaneously |
 
-| Piece | Already exists? | Notes |
+#### Vehicle capacity — bin count (not tons)
+
+**Today:** `Vehicle.capacity` is stored/displayed as **tons**; optimizer already treats capacity as **integer bin count** in `vehicleCapacities[]`.
+
+**Change (agreed direction):**
+- Add **`maxBins`** (integer) on Vehicle entity — max bins one trip can collect
+- Keep `capacity` (tons) optional for analytics/reporting, or migrate UI to show only `maxBins`
+- Vehicle Management form: **Max bins per trip** instead of tons
+- Route planner dropdown rules:
+  - Show only vehicles where `maxBins >= routeBinCount` **enabled**
+  - Vehicles with insufficient capacity: **disabled + dimmed**; `title`/tooltip: *"Not enough capacity (needs X bins, max Y)"*
+  - If **total fleet maxBins** < bins to collect → warn admin: *"Need more vehicles"*; allow partial auto-routes for feasible subset
+
+**Example:** 105 bins need collection; vehicles A=50, B=100, C=30 → auto creates 2–3 routes; only B eligible for 50-bin route; A/C eligible for smaller routes.
+
+#### Is ML required?
+
+| Step | Method | ML? |
 |---|---|---|
-| Bin coordinates | ✅ | `Bin.lat` / `Bin.lng` |
-| Fill level / status | ✅ | `status`, `fillLevel` from field-staff reports |
-| Route optimizer | ✅ | Google OR-Tools CVRP + OSRM (`ORToolsWrapper`, `OSRMClient`) |
-| Zone clustering | ⏳ F5 planned | K-means per council — improves accuracy for many bins |
-| ML / AI model | ❌ Not needed | Classical VRP + priority rules is industry standard |
+| Pick bins by fill status | SQL filter + sort by priority | ❌ No |
+| Split bins into groups | K-means / zone clustering (W5) | ❌ No — classical clustering |
+| Optimize stop order per route | OR-Tools CVRP + OSRM | ❌ No |
+| Assign driver to route | **Admin manual** (system suggests available drivers) | ❌ No |
+| Predict future fill levels | Optional future enhancement | ⚠️ ML only if you want forecasting — **not required for v1** |
 
-**Verdict: Worth building.** Clustering runs in background (F5); auto-route is a **selection policy** on top of existing optimizer.
+**Verdict: Worth building without any ML model.**
 
-#### Suggested implementation order
-1. **Backend** `POST /api/route-sessions/auto` — accept `council`, `vehicleCount`, `minFillStatus`, `maxBins`
-2. **Backend** query: bins where `status IN ('full','half')` AND `council = ?` ORDER BY priority
-3. **Optional:** one route per zone cluster (after F5)
-4. **Web** Map toolbar: **Auto Route** button → confirm dialog → same WebSocket READY flow as manual
+#### Background processing
+- **Zone clustering (W5/F5):** runs when bins are created/updated — improves geographic splits
+- **Auto-route generation:** on-demand when admin clicks **Auto Route** (not silent background job in v1)
+- Optional later: scheduled nightly draft routes for next-day review
 
-**Web tasks (when approved):**
-- [ ] Add **Auto Route** button next to **Route** in `Map.tsx`
-- [ ] Call new auto endpoint; show which bins were auto-selected before confirm
-- [ ] Reuse existing route planner / WebSocket visualization
+#### API contract (draft — agree with backend before build)
 
-**Backend tasks (separate branch `feature/web-dashboard-update` in `Garbo_backend`):**
-- [ ] `AutoRouteService` — bin selection by fill + council + zone
-- [ ] Endpoint wired to existing `optimizeAndBroadcast`
+`POST /api/route-sessions/auto-preview`
+```json
+{
+  "council": "Moratuwa",
+  "minFillStatus": ["full", "half"],
+  "useZones": true
+}
+```
+Response:
+```json
+{
+  "totalBinsNeedingCollection": 105,
+  "fleetSummary": { "availableVehicles": 4, "totalMaxBins": 180 },
+  "draftRoutes": [
+    { "draftId": "d1", "binIds": [1,2,3], "binCount": 42, "suggestedZone": 2 },
+    { "draftId": "d2", "binIds": [4,5], "binCount": 38, "suggestedZone": 1 }
+  ],
+  "warnings": ["3 bins skipped — no vehicle capacity remaining"]
+}
+```
 
-**Status:** `[ ]` not started — awaiting approval after Sprint 3
+`POST /api/route-sessions` (existing) — called **once per confirmed draft** with `selectedBinIds`, `vehicleId`, `driverId`, `vehicleCapacities: [vehicle.maxBins]`.
+
+#### Web tasks
+- [ ] **Auto Route** toolbar button
+- [ ] Preview draft routes (bin count, map highlight per draft)
+- [ ] Per-draft **vehicle** dropdown (capacity-filtered, disabled + tooltip when too small)
+- [ ] Per-draft **driver** dropdown (available collectors)
+- [ ] Fleet capacity banner when total `maxBins` insufficient
+- [ ] Confirm all assignments → create sessions sequentially; show in History
+
+#### Backend tasks (`Garbo_backend/`, branch `feature/web-dashboard-update`)
+- [ ] `Vehicle.maxBins` column + DTO
+- [ ] `AutoRouteService` — filter bins, cluster, split into drafts
+- [ ] `POST /api/route-sessions/auto-preview` endpoint
+- [ ] Wire confirmed routes to existing `RouteSessionService.optimizeAndBroadcast`
+
+#### Vehicle Management (web + backend)
+- [ ] Replace "Capacity (tons)" with **Max bins per trip** in `VehicleManagement.tsx`
+- [ ] Display `maxBins` on vehicle cards
+
+**Status:** `[ ]` not started — manual Route flow stays; implement after Sprint 3 approval
+
+---
+
+### W4B — Route planner right panel (planned)
+
+**Goal:** Move route creation UI from **bottom drawer** to **right-side glass panel** — same layout language as **History** and **Legend**.
+
+**Current (change):**
+- Route Planner = collapsible bottom overlay (`selectionMode`)
+- Active session status = bottom-left floating card
+
+**Target:**
+- **Route Planner panel** — `absolute right-4 top-20 bottom-4`, `bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl`
+- Opens when **Route** or **Auto Route** is active
+- **Mutual exclusion:** only one right panel at a time (Route Planner | History | Legend)
+- Sections inside panel:
+  1. Header: mode (Manual / Auto), bin count, Cancel
+  2. Selected bins chips (manual) or draft route cards (auto)
+  3. Vehicle + driver per route (capacity rules from W4A)
+  4. Generate / Confirm button
+  5. Active session status in panel footer (replaces bottom-left card)
+
+**Manual delete bins:** keep bottom drawer for now OR move to second tab in same panel (decide in implementation).
+
+**Checklist**
+- [ ] Extract shared `MapSidePanel` styles (History, Legend, Route Planner)
+- [ ] Move route planner content from bottom drawer to right panel
+- [ ] Close History/Legend when Route Planner opens
+- [ ] Move active session status into panel footer
+- [ ] Responsive: full-width panel on mobile
+
+**Status:** `[ ]` not started — depends on W4A for auto-route sections
 
 ---
 
