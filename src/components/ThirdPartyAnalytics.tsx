@@ -1,322 +1,184 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { CheckCircle2, Package, Loader2 } from 'lucide-react';
 import {
-  ArrowLeft, CheckCircle2, Package, TrendingUp, Loader2, Calendar
-} from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell, PieChart, Pie, Legend
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
 } from 'recharts';
+import {
+  AnalyticsChartCard,
+  AnalyticsErrorBanner,
+  AnalyticsPageHeader,
+  AnalyticsPageShell,
+  AnalyticsSegmentFilter,
+  AnalyticsStatCard,
+  CHART,
+  mapRecordToPieData,
+  formatStatusKey,
+} from './layout/analytics-ui';
+import { AnalyticsDonutChart } from './layout/AnalyticsDonutChart';
 
-// Allowed time-range filters for the analytics view.
 type Period = 'TODAY' | 'LAST_WEEK' | 'LAST_MONTH' | 'ALL';
 
-// Server response payload for third-party collection analytics.
 interface AnalyticsData {
-  totalRequests:      number;
-  completionRate:     number;
-  slotDistribution:   Record<string, number>;
-  statusSummary:      Record<string, number>;
+  totalRequests: number;
+  completionRate: number;
+  slotDistribution: Record<string, number>;
+  statusSummary: Record<string, number>;
   wasteTypeBreakdown: Record<string, number>;
-  filterPeriod:       string;
+  filterPeriod: string;
 }
 
-// Optional council scope to filter analytics by municipality.
 interface Council {
-  id:           string;
-  name:         string;
+  id: string;
+  name: string;
   description?: string;
 }
-
-// Color palette for slot (morning, afternoon, evening) visualization.
-const SLOT_COLORS: Record<string, string> = {
-  MORNING:   '#f59e0b',
-  AFTERNOON: '#3b82f6',
-  EVENING:   '#8b5cf6',
-};
-
-// Color palette for request status (completed, assigned, etc.) visualization.
-const STATUS_COLORS: Record<string, string> = {
-  COMPLETED: '#10b981',
-  ASSIGNED:  '#3b82f6',
-  CONFIRMED: '#f59e0b',
-  OPEN:      '#64748b',
-  CANCELLED:   '#ef4444',
-};
-
-// Color palette for waste type categories in breakdown chart.
-const WASTE_COLORS: Record<string, string> = {
-  ORGANIC: '#10b981',
-  PLASTIC: '#3b82f6',
-  MIXED:   '#64748b',
-  METAL:   '#f59e0b',
-  GLASS:   '#06b6d4',
-  PAPER:   '#8b5cf6',
-};
-
-// Transforms server maps into chart-ready objects with formatted names and colors.
-function toChartData(map: Record<string, number>, colors: Record<string, string>) {
-  return Object.entries(map).map(([name, value]) => ({
-    name:    name.charAt(0) + name.slice(1).toLowerCase(),
-    rawName: name,
-    value,
-    color:   colors[name] ?? '#94a3b8',
-  }));
-}
-
-// Custom chart tooltip displays formatted request counts and labels.
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white p-4 rounded-xl shadow-xl border-none ring-1 ring-gray-100">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{label || payload[0].name}</p>
-        <p className="text-lg font-bold text-gray-900">
-          {payload[0].value.toLocaleString()}
-          <span className="text-sm font-medium text-gray-500 ml-1.5">requests</span>
-        </p>
-      </div>
-    );
-  }
-  return null;
-};
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 export function ThirdPartyAnalytics({ onBack, council }: { onBack: () => void; council?: Council | null }) {
-
-  // Component state: current view period, fetched data, loading/error flags.
-  const [period, setPeriod]   = useState<Period>('ALL');
-  const [data, setData]       = useState<AnalyticsData | null>(null);
+  const [period, setPeriod] = useState<Period>('ALL');
+  const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Memoized fetch function prevents infinite loops when period or council changes.
-  const fetchData = useCallback(async (p: Period) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set('period', p);
-      if (council?.name) params.set('councilId', council.name);
+  const fetchData = useCallback(
+    async (p: Period) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        params.set('period', p);
+        if (council?.name) params.set('councilId', council.name);
 
-      const res = await fetch(`${BASE_URL}/api/admin/thirdparty/analyze?${params.toString()}`);
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+        const res = await fetch(`${BASE_URL}/api/admin/thirdparty/analyze?${params.toString()}`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `HTTP ${res.status}`);
+        }
+        const json: AnalyticsData = await res.json();
+        setData(json);
+      } catch (err: any) {
+        setError(err.message ?? 'Unknown error');
+      } finally {
+        setLoading(false);
       }
-      const json: AnalyticsData = await res.json();
-      setData(json);
-    } catch (err: any) {
-      setError(err.message ?? 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }, [council?.name]);
+    },
+    [council?.name]
+  );
 
-  // Refetch data whenever period or council changes, with memoized callback to prevent unnecessary re-renders.
-  useEffect(() => { fetchData(period); }, [period, fetchData]);
+  useEffect(() => {
+    fetchData(period);
+  }, [period, fetchData]);
 
-  const slotChartData   = data ? toChartData(data.slotDistribution,  SLOT_COLORS)   : [];
-  const statusChartData = data ? toChartData(data.statusSummary,      STATUS_COLORS) : [];
-  const wasteChartData  = data ? toChartData(data.wasteTypeBreakdown, WASTE_COLORS)  : [];
+  const slotChartData = mapRecordToPieData(data?.slotDistribution, formatStatusKey);
+  const statusChartData = mapRecordToPieData(data?.statusSummary, formatStatusKey);
+  const wasteChartData = mapRecordToPieData(data?.wasteTypeBreakdown, formatStatusKey);
 
-  // Period filter options shown in the header selector.
-  const periods: { label: string; value: Period }[] = [
-    { label: 'Today',        value: 'TODAY'      },
-    { label: 'Last 7 days',  value: 'LAST_WEEK'  },
-    { label: 'Last 30 days', value: 'LAST_MONTH' },
-    { label: 'All time',     value: 'ALL'        },
-  ];
-
-  // Full-page loading state while initial data arrives.
   if (loading && !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50/30 gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-        <p className="text-gray-500 font-medium">Analyzing collection data...</p>
-      </div>
+      <AnalyticsPageShell>
+        <div className="flex flex-col items-center justify-center gap-4 py-24">
+          <Loader2 className="w-10 h-10 animate-spin text-gray-400" />
+          <p className="text-sm text-gray-500">Analyzing collection data...</p>
+        </div>
+      </AnalyticsPageShell>
     );
   }
 
   return (
-    <div className="p-8 bg-gray-50/30 min-h-screen">
+    <AnalyticsPageShell>
+      <AnalyticsPageHeader
+        title="Third Party Collectors"
+        subtitle={
+          council?.name
+            ? `${council.name} — external collection services and requests`
+            : 'Monitoring external collection services and requests'
+        }
+        onBack={onBack}
+        actions={
+          <AnalyticsSegmentFilter
+            options={[
+              { label: 'Today', value: 'TODAY' },
+              { label: 'Last 7 days', value: 'LAST_WEEK' },
+              { label: 'Last 30 days', value: 'LAST_MONTH' },
+              { label: 'All time', value: 'ALL' },
+            ]}
+            value={period}
+            onChange={setPeriod}
+          />
+        }
+      />
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-        <div className="flex items-center gap-5">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-full shadow-sm hover:bg-white transition-all hover:scale-105 active:scale-95 border-gray-200">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Third Party Collectors</h1>
-            <p className="text-gray-500 text-lg">
-              {council?.name
-                ? `${council.name} — external collection services and requests`
-                : 'Monitoring external collection services and requests'}
-            </p>
-          </div>
-        </div>
+      {error ? <AnalyticsErrorBanner message={error} /> : null}
 
-        {/* Period filter pills */}
-        <div className="flex gap-1 bg-white border border-gray-100 rounded-2xl p-1.5 shadow-md ring-1 ring-black/[0.03]">
-          {periods.map(p => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${
-                period === p.value
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <AnalyticsStatCard
+          label="Total Requests"
+          value={data?.totalRequests.toLocaleString() ?? 0}
+          detail={data?.filterPeriod?.replace(/_/g, ' ') ?? 'Current view'}
+          icon={Package}
+          loading={loading}
+        />
+        <AnalyticsStatCard
+          label="Completion Rate"
+          value={`${data?.completionRate ?? 0}%`}
+          detail="Service efficiency"
+          icon={CheckCircle2}
+          loading={loading}
+        />
       </div>
 
-      {/* Error banner */}
-      {error && (
-        // Non-blocking error message; UI remains visible for period switching.
-        <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-700 text-sm font-medium flex items-center gap-3">
-          <div className="p-1 bg-red-100 rounded-full">
-            <Package className="w-4 h-4" />
-          </div>
-          {error}
-        </div>
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <AnalyticsChartCard title="Preferred Collection Slots">
+          <AnalyticsDonutChart
+            data={slotChartData}
+            centerValue={data?.totalRequests ?? 0}
+            centerLabel="Total"
+            height={280}
+          />
+        </AnalyticsChartCard>
 
-      {/* KPI Row */}
-      {/* Summary cards show total requests and completion rate with period context. */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-        <Card className="border-none bg-gradient-to-br from-white to-blue-50/40 shadow-xl ring-1 ring-gray-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 group">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-bold text-gray-400 uppercase tracking-widest">Total Requests</CardTitle>
-            <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform duration-500">
-              <Package className="w-5 h-5 text-white" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-black text-gray-900 mb-2 tracking-tight">
-              {data ? data.totalRequests.toLocaleString() : '—'}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 text-blue-700 font-bold bg-blue-100 px-2.5 py-1 rounded-full text-xs">
-                <Calendar className="w-3.5 h-3.5" />
-                {data ? data.filterPeriod.replace('_', ' ') : 'Analyzing...'}
-              </span>
-              <span className="text-gray-400 text-sm font-medium">Current view</span>
-            </div>
-          </CardContent>
-        </Card>
+        <AnalyticsChartCard title="Request Status Summary">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={statusChartData} layout="vertical" margin={{ left: 10, right: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART.grid} />
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} width={90} />
+              <Tooltip contentStyle={CHART.tooltipStyle} />
+              <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={28}>
+                {statusChartData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </AnalyticsChartCard>
 
-        <Card className="border-none bg-gradient-to-br from-white to-emerald-50/40 shadow-xl ring-1 ring-gray-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 group">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-bold text-gray-400 uppercase tracking-widest">Completion Rate</CardTitle>
-            <div className="p-3 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform duration-500">
-              <CheckCircle2 className="w-5 h-5 text-white" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-black text-gray-900 mb-2 tracking-tight">
-              {data ? `${data.completionRate}%` : '—'}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1 text-emerald-700 font-bold bg-emerald-100 px-2.5 py-1 rounded-full text-xs">
-                <TrendingUp className="w-3.5 h-3.5" />
-                Active
-              </span>
-              <span className="text-gray-400 text-sm font-medium">Service efficiency</span>
-            </div>
-          </CardContent>
-        </Card>
+        <AnalyticsChartCard title="Waste Type Breakdown">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={wasteChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} />
+              <Tooltip contentStyle={CHART.tooltipStyle} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                {wasteChartData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </AnalyticsChartCard>
       </div>
-
-      {/* Charts */}
-      {/* Three complementary views: time-slot preference, status breakdown, and waste-type distribution. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-
-        {/* Preferred Slot — Donut */}
-        <Card className="border-none shadow-xl ring-1 ring-gray-100 bg-white hover:shadow-2xl transition-all duration-500">
-          <CardHeader className="border-b border-gray-50 bg-gray-50/30">
-            <CardTitle className="text-lg font-bold text-gray-800">Preferred Collection Slots</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-8">
-            <div className="h-[300px] w-full relative group">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={slotChartData}
-                    cx="50%" cy="50%"
-                    innerRadius={70} outerRadius={100}
-                    paddingAngle={8}
-                    dataKey="value"
-                    animationBegin={0} animationDuration={1500}
-                  >
-                    {slotChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend verticalAlign="bottom" height={36} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                <p className="text-3xl font-black text-gray-900">{data ? data.totalRequests : 0}</p>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Status Summary — Horizontal Bar */}
-        <Card className="border-none shadow-xl ring-1 ring-gray-100 bg-white hover:shadow-2xl transition-all duration-500">
-          <CardHeader className="border-b border-gray-50 bg-gray-50/30">
-            <CardTitle className="text-lg font-bold text-gray-800">Request Status Summary</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-8">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={statusChartData} layout="vertical" margin={{ left: 10, right: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 13, fontWeight: 600 }} width={85} />
-                <Tooltip cursor={{ fill: '#f8fafc' }} content={<CustomTooltip />} />
-                <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={32} animationDuration={1500}>
-                  {statusChartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Waste Type — Vertical Bar */}
-        <Card className="border-none shadow-xl ring-1 ring-gray-100 bg-white hover:shadow-2xl transition-all duration-500">
-          <CardHeader className="border-b border-gray-50 bg-gray-50/30">
-            <CardTitle className="text-lg font-bold text-gray-800">Waste Type Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-8">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={wasteChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 13, fontWeight: 600 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <Tooltip cursor={{ fill: '#f8fafc' }} content={<CustomTooltip />} />
-                <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={45} animationDuration={1500}>
-                  {wasteChartData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-      </div>
-    </div>
+    </AnalyticsPageShell>
   );
 }
