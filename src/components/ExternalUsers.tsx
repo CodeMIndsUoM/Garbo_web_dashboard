@@ -16,6 +16,8 @@ import {
   UserPlus,
   Users,
   X,
+  EyeOff,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
@@ -23,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 type Tab = 'citizens' | 'collectors';
 type CitizensSection = 'users' | 'complaints' | 'events';
@@ -384,6 +387,34 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
     }
   };
 
+  const hideCitizen = async (empId: number) => {
+    if (!confirm('Hide this citizen from the admin list?')) return;
+    try {
+      const { response } = await apiFetch(`/api/admin/citizens/${empId}/hide`, { method: 'POST' });
+      if (!response.ok) throw new Error('Hide failed');
+      toast.success('Citizen hidden');
+      void loadData();
+    } catch {
+      toast.error('Failed to hide citizen');
+    }
+  };
+
+  const deleteCitizen = async (empId: number) => {
+    if (!confirm('Delete this citizen permanently? This cannot be undone.')) return;
+    try {
+      const { response } = await apiFetch(`/api/admin/citizens/${empId}`, { method: 'DELETE' });
+      if (response.status === 409) {
+        toast.error('Cannot delete citizen with linked records');
+        return;
+      }
+      if (!response.ok) throw new Error('Delete failed');
+      toast.success('Citizen deleted');
+      void loadData();
+    } catch {
+      toast.error('Failed to delete citizen');
+    }
+  };
+
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventForm.title.trim() || !eventForm.eventDate) {
@@ -473,24 +504,42 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
           ) : citizens.length === 0 ? (
             <p className="text-gray-500">No citizens found for this council.</p>
           ) : (
-            <div className="space-y-2">
-              {citizens.map((citizen) => (
-                <div
-                  key={citizen.empId}
-                  className="p-4 border border-gray-200 rounded-lg flex items-start justify-between gap-4"
-                >
-                  <div className="min-w-0">
-                    <p className="text-gray-900 font-medium">{citizen.empName || citizen.email}</p>
-                    <p className="text-sm text-gray-500">{citizen.email}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {[citizen.phone, citizen.area, citizen.address].filter(Boolean).join(' · ')}
-                    </p>
-                  </div>
-                  {citizen.council && (
-                    <Badge variant="secondary">{citizen.council}</Badge>
-                  )}
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Council</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {citizens.map((citizen) => (
+                    <TableRow key={citizen.empId}>
+                      <TableCell className="font-medium">{citizen.empId}</TableCell>
+                      <TableCell>{citizen.empName || '—'}</TableCell>
+                      <TableCell>{citizen.email || '—'}</TableCell>
+                      <TableCell>{citizen.phone || '—'}</TableCell>
+                      <TableCell>{citizen.council || '—'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => void hideCitizen(citizen.empId)}>
+                            <EyeOff className="w-3.5 h-3.5 mr-1" />
+                            Hide
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => void deleteCitizen(citizen.empId)}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
@@ -907,6 +956,45 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
     }
   };
 
+  const hideCollector = async (empId: number) => {
+    setActingId(empId);
+    try {
+      const { response } = await apiFetch(`/api/auth/thirdparty-register/${empId}/hide`, { method: 'POST' });
+      if (!response.ok) throw new Error('Hide failed');
+      toast.success('Collector hidden');
+      setExpandedPendingId(null);
+      setExpandedActiveId(null);
+      setExpandedRevokedId(null);
+      void loadData();
+    } catch {
+      toast.error('Failed to hide collector');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const deleteCollector = async (empId: number) => {
+    if (!confirm('Delete this collector permanently? This cannot be undone.')) return;
+    setActingId(empId);
+    try {
+      const { response } = await apiFetch(`/api/auth/thirdparty-register/${empId}`, { method: 'DELETE' });
+      if (response.status === 409) {
+        toast.error('Cannot delete collector with linked records');
+        return;
+      }
+      if (!response.ok) throw new Error('Delete failed');
+      toast.success('Collector deleted');
+      setExpandedPendingId(null);
+      setExpandedActiveId(null);
+      setExpandedRevokedId(null);
+      void loadData();
+    } catch {
+      toast.error('Failed to delete collector');
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const revoke = async (empId: number) => {
     setActingId(empId);
     try {
@@ -1048,9 +1136,17 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                             setRejectReasons((prev) => ({ ...prev, [item.empId]: e.target.value }))
                           }
                         />
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex flex-wrap gap-2 justify-end">
                           <Button variant="outline" onClick={() => setExpandedPendingId(null)} disabled={isActing}>
                             Collapse
+                          </Button>
+                          <Button variant="outline" onClick={() => void hideCollector(item.empId)} disabled={isActing}>
+                            <EyeOff className="w-3.5 h-3.5 mr-1" />
+                            Hide
+                          </Button>
+                          <Button variant="outline" onClick={() => void deleteCollector(item.empId)} disabled={isActing}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Delete
                           </Button>
                           <Button variant="outline" onClick={() => void reject(item.empId)} disabled={isActing}>
                             Reject
@@ -1156,9 +1252,17 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                             setRevokeReasons((prev) => ({ ...prev, [collector.empId]: e.target.value }))
                           }
                         />
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex flex-wrap gap-2 justify-end">
                           <Button variant="outline" onClick={() => setExpandedActiveId(null)} disabled={isActing}>
                             Collapse
+                          </Button>
+                          <Button variant="outline" onClick={() => void hideCollector(collector.empId)} disabled={isActing}>
+                            <EyeOff className="w-3.5 h-3.5 mr-1" />
+                            Hide
+                          </Button>
+                          <Button variant="outline" onClick={() => void deleteCollector(collector.empId)} disabled={isActing}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Delete
                           </Button>
                           <Button variant="outline" onClick={() => void revoke(collector.empId)} disabled={isActing}>
                             Revoke Access
@@ -1226,9 +1330,17 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                           <div><span className="text-gray-500">Company:</span> {collector.company || '—'}</div>
                           <div className="sm:col-span-2"><span className="text-gray-500">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
                         </div>
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex flex-wrap gap-2 justify-end">
                           <Button variant="outline" onClick={() => setExpandedRevokedId(null)} disabled={isActing}>
                             Collapse
+                          </Button>
+                          <Button variant="outline" onClick={() => void hideCollector(collector.empId)} disabled={isActing}>
+                            <EyeOff className="w-3.5 h-3.5 mr-1" />
+                            Hide
+                          </Button>
+                          <Button variant="outline" onClick={() => void deleteCollector(collector.empId)} disabled={isActing}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Delete
                           </Button>
                           <Button
                             className="bg-green-600 hover:bg-green-700"
