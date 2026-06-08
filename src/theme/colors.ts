@@ -24,6 +24,16 @@ export const surface = {
   elevated: 'bg-[var(--surface-elevated)]',
   subtle: 'bg-[var(--surface-subtle)]',
   border: 'border-[var(--surface-border)]',
+  topbar: 'bg-[var(--surface-topbar)]',
+} as const;
+
+export const glass = {
+  surface: 'bg-[var(--glass-surface)]',
+  surfaceSolid: 'bg-[var(--glass-surface-solid)]',
+  border: 'border-[var(--glass-border)]',
+  field: 'bg-[var(--glass-field)]',
+  text: 'text-[var(--glass-text)]',
+  textMuted: 'text-[var(--glass-text-muted)]',
 } as const;
 
 export const status = {

@@ -3,6 +3,15 @@ const nextConfig = {
   reactStrictMode: true,
 
   staticPageGenerationTimeout: 120,
+
+  // sockjs-client → debug → supports-color (Node-only); stub for browser bundle
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'supports-color': false,
+    };
+    return config;
+  },
   
   // Restrict backend proxying to local development only.
   async rewrites() {

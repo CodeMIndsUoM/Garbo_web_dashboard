@@ -179,7 +179,7 @@ function AuthenticatedShell({
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}

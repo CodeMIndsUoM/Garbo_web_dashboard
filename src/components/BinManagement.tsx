@@ -1,26 +1,16 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, MapPin, AlertTriangle, Search, Plus, Loader2 } from 'lucide-react';
+import { Trash2, MapPin, CircleAlert, Gauge, CircleCheck, Search, Plus, Loader2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "./ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { PageHeader } from './layout/PageHeader';
+import { StatCard, StatCardGrid, ViewModeToggle, type ViewMode } from './layout/management-ui';
+import { AddBinGlassModal } from './bin/AddBinGlassModal';
 import { toast } from "sonner";
 import { apiFetch } from '@/lib/api';
 import { useBinRealtime } from '@/hooks/useBinRealtime';
@@ -52,6 +42,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
@@ -72,6 +63,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     zone: '',
     status: 'empty',
     coordinates: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
   });
 
   const isAdmin = userRole === 'admin';
@@ -219,6 +211,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           zone: '',
           status: 'empty',
           coordinates: '',
+          priority: 'medium',
         });
         fetchBins();
       } else {
@@ -287,11 +280,6 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     setStatusFilter((prev) => (prev === filter ? null : filter));
   };
 
-  const statCardClass = (active: boolean) =>
-    `cursor-pointer transition-all hover:shadow-md ${
-      active ? 'ring-2 ring-green-500 shadow-md' : ''
-    }`;
-
   const nextBinCode = useMemo(() => {
     if (!council?.name) return 'Auto-generated';
     const prefix = `${council.name.trim()}-`.toLowerCase();
@@ -331,7 +319,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const statusTextClass = (status: string) => {
     const key = normalizeBinStatus(status);
     if (key === 'full') return 'text-red-600';
-    return 'text-gray-700';
+    return 'text-foreground';
   };
 
   return (
@@ -343,127 +331,61 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         report={selectedReport}
         loading={reportLoading}
       />
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <h2 className="text-gray-900 mb-2">Bin Management</h2>
-          <p className="text-gray-600">Monitor and manage all waste bins in real-time</p>
-        </div>
-        
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-green-600 hover:bg-green-700 text-white">
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Bin
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Waste Bin</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateBin} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Bin Code</label>
-                <Input 
-                  value={nextBinCode}
-                  disabled
-                  className="bg-gray-50 text-gray-500 font-semibold"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
-                <Input 
-                  placeholder="lat, lng" 
-                  value={newBin.location}
-                  onChange={(e) => setNewBin({...newBin, location: e.target.value})}
-                  required
-                />
-              </div>
-              <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                Zone is assigned automatically from coordinates when you save.
-              </p>
+      <PageHeader
+        title="Bin Management"
+        subtitle="Monitor and manage all waste bins in real-time"
+        actions={
+          <Button type="button" variant="brand" className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="size-4" />
+            Add New Bin
+          </Button>
+        }
+      />
+      <AddBinGlassModal
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        nextBinCode={nextBinCode}
+        location={newBin.location}
+        onLocationChange={(value) => setNewBin((p) => ({ ...p, location: value }))}
+        priority={newBin.priority}
+        onPriorityChange={(value) => setNewBin((p) => ({ ...p, priority: value }))}
+        onSubmit={handleCreateBin}
+      />
 
-              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
-                Save Bin
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Stats Summary — click a card to filter the grid below */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card
-          className={statCardClass(statusFilter === null)}
+      <StatCardGrid columns={4} className="mb-8">
+        <StatCard
+          label="Total Bins"
+          value={binCounts.total}
+          icon={Trash2}
+          active={statusFilter === null}
           onClick={() => handleStatusCardClick(null)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick(null)}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Bins</p>
-                <p className="text-2xl text-gray-900">{binCounts.total}</p>
-              </div>
-              <Trash2 className="w-10 h-10 shrink-0 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={statCardClass(statusFilter === 'full')}
+        />
+        <StatCard
+          label="Full"
+          value={binCounts.full}
+          valueClassName="text-status-danger"
+          icon={CircleAlert}
+          iconClassName="text-status-danger/60"
+          active={statusFilter === 'full'}
           onClick={() => handleStatusCardClick('full')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('full')}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Full</p>
-                <p className="text-2xl text-red-600">{binCounts.full}</p>
-              </div>
-              <AlertTriangle className="w-10 h-10 shrink-0 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={statCardClass(statusFilter === 'half')}
+        />
+        <StatCard
+          label="Half"
+          value={binCounts.half}
+          icon={Gauge}
+          iconClassName="text-amber-400"
+          active={statusFilter === 'half'}
           onClick={() => handleStatusCardClick('half')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('half')}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Half</p>
-                <p className="text-2xl text-gray-900">{binCounts.half}</p>
-              </div>
-              <AlertTriangle className="w-10 h-10 shrink-0 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={statCardClass(statusFilter === 'empty')}
+        />
+        <StatCard
+          label="Empty"
+          value={binCounts.empty}
+          icon={CircleCheck}
+          iconClassName="text-brand-500"
+          active={statusFilter === 'empty'}
           onClick={() => handleStatusCardClick('empty')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('empty')}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Empty</p>
-                <p className="text-2xl text-gray-900">{binCounts.empty}</p>
-              </div>
-              <Trash2 className="w-10 h-10 shrink-0 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        />
+      </StatCardGrid>
 
       {/* Search and Filters */}
       {councilFilterUnavailable && (
@@ -471,9 +393,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           Council-specific bin filtering is not available from backend data yet, so all bins are shown for this section.
         </div>
       )}
-      <div className="mb-6">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search bins by ID or location..."
             className="pl-10"
@@ -481,26 +403,89 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </div>
 
-      {/* Bins Grid */}
+      {/* Bins */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="w-10 h-10 text-green-600 animate-spin mb-4" />
-          <p className="text-gray-600">Loading bin data...</p>
+          <p className="text-muted-foreground">Loading bin data...</p>
         </div>
       ) : councilScopedBins.length === 0 ? (
-        <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-          <Trash2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">No bins found</p>
-          <p className="text-sm text-gray-400 mt-1">Start by adding a new waste bin to the system.</p>
+        <div className="text-center py-20 bg-muted rounded-xl border-2 border-dashed border-border">
+          <Trash2 className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+          <p className="text-muted-foreground font-medium">No bins found</p>
+          <p className="text-sm text-muted-foreground mt-1">Start by adding a new waste bin to the system.</p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/80 hover:bg-muted/80">
+                <TableHead>Bin</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Assignment</TableHead>
+                <TableHead>Fill status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {councilScopedBins.map((bin) => (
+                <TableRow
+                  key={bin.id}
+                  className="cursor-pointer"
+                  onClick={() => openBinDetail(bin)}
+                >
+                  <TableCell className="font-medium">{bin.binCode}</TableCell>
+                  <TableCell className="max-w-[220px]">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{bin.location}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        bin.isAssigned
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : 'border-border bg-muted text-muted-foreground'
+                      }
+                    >
+                      {bin.isAssigned ? 'Assigned' : 'Not Assigned'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`font-semibold ${statusTextClass(bin.status)}`}>
+                      {statusLabel(bin.status)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBin(bin.id);
+                        }}
+                        className="p-1.5 text-muted-foreground hover:text-red-600"
+                        aria-label="Delete bin"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {councilScopedBins.map((bin) => (
             <Card
               key={bin.id}
-              className="hover:shadow-lg transition-all duration-300 border-gray-100 group overflow-hidden relative cursor-pointer"
+              className="hover:shadow-lg transition-all duration-300 border-border group overflow-hidden relative cursor-pointer"
               onClick={() => openBinDetail(bin)}
               role="button"
               tabIndex={0}
@@ -510,8 +495,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-gray-900 font-semibold mb-1">{bin.binCode}</h3>
-                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                    <h3 className="text-foreground font-semibold mb-1">{bin.binCode}</h3>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="w-4 h-4" />
                       <span className="line-clamp-1">{bin.location}</span>
                     </div>
@@ -521,7 +506,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                       className={
                         bin.isAssigned
                           ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-gray-50 text-gray-600 border-gray-200'
+                          : 'bg-muted text-muted-foreground border-border'
                       }
                       variant="outline"
                     >
@@ -532,7 +517,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                         e.stopPropagation();
                         handleDeleteBin(bin.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-all"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-600 transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -543,7 +528,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   {/* Fill Level */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-600">Fill Status</span>
+                      <span className="text-sm font-medium text-muted-foreground">Fill Status</span>
                       <span className={`text-sm font-bold ${statusTextClass(bin.status)}`}>
                         {statusLabel(bin.status)}
                       </span>

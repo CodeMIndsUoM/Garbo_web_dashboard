@@ -7,6 +7,8 @@ export const typography = {
   pageTitle: 'text-[length:var(--text-page-title)] font-semibold tracking-[var(--tracking-tight)] leading-[var(--leading-tight)] text-foreground',
   pageSubtitle: 'text-[length:var(--text-caption)] leading-[var(--leading-normal)] text-muted-foreground',
   sectionTitle: 'text-[length:var(--text-section-title)] font-semibold leading-[var(--leading-tight)] text-foreground',
+  /** Stat / KPI numbers on summary cards — shared across Dashboard, Bin, Vehicle, etc. */
+  statValue: 'text-[length:var(--text-stat-value)] font-semibold leading-[var(--leading-tight)] text-foreground',
   sectionEyebrow:
     'text-[length:var(--text-micro)] font-medium uppercase tracking-wide leading-[var(--leading-normal)] text-muted-foreground',
   body: 'text-[length:var(--text-body)] font-normal leading-[var(--leading-normal)] text-foreground',

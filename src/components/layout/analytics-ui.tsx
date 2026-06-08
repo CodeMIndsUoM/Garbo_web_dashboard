@@ -1,22 +1,26 @@
 'use client';
 
 import React from 'react';
-import type { LucideIcon } from 'lucide-react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/card';
 import { cn } from '../ui/utils';
+import { typography } from '@/theme';
+import { StatCard, type StatCardProps } from './management-ui';
 
-/** Shared chart colors — brand green primary, gray secondary, red for alerts only */
+/** Shared chart colors — use CSS variables from tokens.css */
 export const CHART = {
-  brand: '#16a34a',
-  brandLight: '#86efac',
-  neutral: '#9ca3af',
-  alert: '#ef4444',
-  grid: '#f3f4f6',
+  brand: 'var(--brand-600)',
+  brandLight: 'var(--brand-500)',
+  neutral: 'var(--chart-neutral)',
+  alert: 'var(--status-danger)',
+  grid: 'var(--chart-grid)',
+  cursor: 'var(--chart-cursor)',
   tooltipStyle: {
     borderRadius: '8px',
-    border: '1px solid #e5e7eb',
-    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+    border: '1px solid var(--border)',
+    backgroundColor: 'var(--card)',
+    color: 'var(--foreground)',
+    boxShadow: 'var(--shadow-card)',
     padding: '12px',
   },
 } as const;
@@ -37,9 +41,9 @@ interface DashboardSectionProps {
 export function DashboardSection({ title, description, children }: DashboardSectionProps) {
   return (
     <section className="mb-8">
-      <div className="mb-4 border-b border-gray-100 pb-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">{title}</h3>
-        {description ? <p className="mt-1 text-sm text-gray-600">{description}</p> : null}
+      <div className="mb-4 border-b border-border pb-3">
+        <h3 className={typography.sectionEyebrow}>{title}</h3>
+        {description ? <p className={`${typography.caption} mt-1`}>{description}</p> : null}
       </div>
       {children}
     </section>
@@ -53,9 +57,9 @@ interface DashboardAlertBannerProps {
 export function DashboardAlertBanner({ items }: DashboardAlertBannerProps) {
   if (items.length === 0) return null;
   return (
-    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-      <p className="text-sm font-medium text-amber-900 mb-1">Needs attention</p>
-      <ul className="list-disc pl-5 text-sm text-amber-800 space-y-0.5">
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+      <p className="text-sm font-medium text-amber-900 dark:text-amber-200 mb-1">Needs attention</p>
+      <ul className="list-disc pl-5 text-sm text-amber-800 dark:text-amber-300/90 space-y-0.5">
         {items.map((item) => (
           <li key={item}>{item}</li>
         ))}
@@ -84,14 +88,14 @@ export function AnalyticsPageHeader({ title, subtitle, onBack, actions }: Analyt
             type="button"
             onClick={onBack}
             aria-label="Back to dashboard"
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-accent"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
         ) : null}
         <div>
-          <h2 className="text-gray-900 mb-2">{title}</h2>
-          <p className="text-gray-600">{subtitle}</p>
+          <h2 className={`${typography.pageTitle} mb-2`}>{title}</h2>
+          <p className={typography.pageSubtitle}>{subtitle}</p>
         </div>
       </div>
       {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
@@ -99,62 +103,11 @@ export function AnalyticsPageHeader({ title, subtitle, onBack, actions }: Analyt
   );
 }
 
-interface AnalyticsStatCardProps {
-  label: string;
-  value: React.ReactNode;
-  detail?: string;
-  icon?: LucideIcon;
-  loading?: boolean;
-  error?: string;
-  onClick?: () => void;
-}
+export type AnalyticsStatCardProps = StatCardProps;
 
-export function AnalyticsStatCard({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  loading,
-  error,
-  onClick,
-}: AnalyticsStatCardProps) {
-  const interactive = Boolean(onClick);
-
-  return (
-    <Card
-      className={cn(interactive && 'cursor-pointer transition-all hover:shadow-md')}
-      onClick={onClick}
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      onKeyDown={
-        interactive
-          ? (e) => {
-              if (e.key === 'Enter') onClick?.();
-            }
-          : undefined
-      }
-    >
-      <CardContent className="pt-6">
-        {loading ? (
-          <div className="flex items-center gap-2 py-2">
-            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-            <span className="text-sm text-gray-400">Loading...</span>
-          </div>
-        ) : error ? (
-          <div className="text-sm text-red-600 py-1">{error}</div>
-        ) : (
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-sm text-gray-600 mb-1">{label}</p>
-              <p className="text-2xl text-gray-900">{value}</p>
-              {detail ? <p className="text-xs text-gray-500 mt-1">{detail}</p> : null}
-            </div>
-            {Icon ? <Icon className="w-10 h-10 shrink-0 text-gray-400" /> : null}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+/** @deprecated Import StatCard from management-ui — kept as alias for dashboard drill-down pages */
+export function AnalyticsStatCard(props: AnalyticsStatCardProps) {
+  return <StatCard {...props} />;
 }
 
 interface AnalyticsChartCardProps {
@@ -173,12 +126,12 @@ export function AnalyticsChartCard({
   className,
 }: AnalyticsChartCardProps) {
   return (
-    <Card className={cn('overflow-hidden', className)}>
-      <CardHeader className="border-b border-gray-100 pb-4">
+    <Card className={cn('overflow-hidden border-border shadow-[var(--shadow-card)]', className)}>
+      <CardHeader className="border-b border-border pb-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-gray-900 mb-1">{title}</h3>
-            {subtitle ? <p className="text-sm text-gray-600">{subtitle}</p> : null}
+            <h3 className={`${typography.sectionTitle} mb-1`}>{title}</h3>
+            {subtitle ? <p className={typography.caption}>{subtitle}</p> : null}
           </div>
           {actions}
         </div>
@@ -205,7 +158,7 @@ export function AnalyticsSegmentFilter<T extends string>({
   onChange,
 }: AnalyticsSegmentFilterProps<T>) {
   return (
-    <div className="flex rounded-lg bg-gray-100 p-1">
+    <div className="flex rounded-lg bg-muted p-1">
       {options.map((option) => (
         <button
           key={option.value}
@@ -214,8 +167,8 @@ export function AnalyticsSegmentFilter<T extends string>({
           className={cn(
             'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
             value === option.value
-              ? 'bg-white text-green-600 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+              ? 'bg-card text-brand-600 shadow-sm dark:text-brand-500'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
           )}
         >
           {option.label}
@@ -227,7 +180,7 @@ export function AnalyticsSegmentFilter<T extends string>({
 
 export function AnalyticsErrorBanner({ message }: { message: string }) {
   return (
-    <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    <div className="mb-6 rounded-lg border border-status-danger-border bg-status-danger-muted px-4 py-3 text-sm text-status-danger">
       {message}
     </div>
   );
@@ -236,7 +189,7 @@ export function AnalyticsErrorBanner({ message }: { message: string }) {
 export function AnalyticsLoadingBlock({ label = 'Loading...' }: { label?: string }) {
   return (
     <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       <span className="sr-only">{label}</span>
     </div>
   );
@@ -244,13 +197,13 @@ export function AnalyticsLoadingBlock({ label = 'Loading...' }: { label?: string
 
 /** Consistent pie/donut segment colors — green family + gray + alert */
 export const PIE_COLORS = [
-  CHART.brand,
-  '#22c55e',
+  'var(--brand-600)',
+  'var(--brand-500)',
   '#86efac',
   '#4ade80',
-  CHART.neutral,
-  '#d1d5db',
-  CHART.alert,
+  'var(--chart-neutral)',
+  '#64748b',
+  'var(--status-danger)',
 ] as const;
 
 export interface PieChartEntry {

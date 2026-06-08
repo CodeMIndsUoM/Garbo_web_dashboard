@@ -34,12 +34,14 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-6 border-b border-gray-200">
+    <aside className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      <div className="border-b border-sidebar-border p-6">
         <AuthBrandLogo size="sm" />
-        {/* Council name display */}
         {selectedCouncil && selectedCouncil.name && (
-          <div className="mt-4 text-sm font-semibold text-green-700 truncate" title={selectedCouncil.name}>
+          <div
+            className="mt-4 truncate text-sm font-semibold text-brand-700 dark:text-brand-muted-foreground"
+            title={selectedCouncil.name}
+          >
             {selectedCouncil.name}
           </div>
         )}
@@ -58,12 +60,12 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
               <li key={item.id}>
                 <button
                   onClick={() => onPageChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                      ? 'bg-green-50 text-green-700'
-                      : 'text-gray-700 hover:bg-gray-50'
+                  className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 transition-colors ${isActive
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                      : 'text-sidebar-foreground hover:bg-accent'
                     }`}
                 >
-                  <Icon className="w-5 h-5 shrink-0" />
+                  <Icon className="h-5 w-5 shrink-0" />
                   <span className="whitespace-nowrap">{item.label}</span>
                 </button>
               </li>
@@ -72,10 +74,14 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-200">
+      <div className="border-t border-sidebar-border p-4">
         {userRole && (
-          <div className={`rounded-xl border p-2 ${userRole === 'superadmin' ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'
-            }`}>
+          <div
+            className={`rounded-xl border p-2 ${userRole === 'superadmin'
+                ? 'border-brand-200 bg-brand-muted dark:border-brand-200/30'
+                : 'border-border bg-secondary'
+              }`}
+          >
             <button
               onClick={() => {
                 if (userRole === 'superadmin') {
@@ -85,16 +91,18 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
                   onPageChange('admin-edit-password');
                 }
               }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors select-none ${userRole === 'superadmin'
-                  ? 'hover:bg-purple-100 cursor-pointer'
-                  : 'hover:bg-blue-100 cursor-pointer'
+              className={`flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 transition-colors ${userRole === 'superadmin' ? 'hover:bg-brand-100 dark:hover:bg-brand-muted' : 'hover:bg-accent'
                 }`}
               disabled={userRole !== 'superadmin' && userRole !== 'admin'}
             >
-              <Shield className={`w-4 h-4 shrink-0 ${userRole === 'superadmin' ? 'text-purple-600' : 'text-blue-600'
-                }`} />
-              <span className={`text-xs font-medium capitalize ${userRole === 'superadmin' ? 'text-purple-700' : 'text-blue-700'
-                }`}>
+              <Shield
+                className={`h-4 w-4 shrink-0 ${userRole === 'superadmin' ? 'text-brand-600 dark:text-brand-500' : 'text-status-info'
+                  }`}
+              />
+              <span
+                className={`text-xs font-medium capitalize ${userRole === 'superadmin' ? 'text-brand-700 dark:text-brand-muted-foreground' : 'text-foreground'
+                  }`}
+              >
                 {userRole === 'superadmin' ? 'Superadmin' : 'Admin'}
               </span>
             </button>

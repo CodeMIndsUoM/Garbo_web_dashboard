@@ -152,7 +152,10 @@ export function Login({ onLogin }: LoginProps) {
         </div>
 
         {error ? (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <p
+            className="rounded-lg border border-status-danger-border bg-status-danger-muted px-3 py-2 text-sm text-status-danger"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}

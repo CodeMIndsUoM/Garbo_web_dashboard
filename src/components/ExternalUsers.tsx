@@ -123,7 +123,7 @@ function statusBadgeClass(status?: string) {
   if (s.includes('reject')) return 'bg-red-100 text-red-800';
   if (s.includes('complet') || s.includes('approv') || s === 'active') return 'bg-green-100 text-green-800';
   if (s.includes('progress')) return 'bg-blue-100 text-blue-800';
-  return 'bg-gray-100 text-gray-700';
+  return 'bg-gray-100 text-foreground';
 }
 
 function formatTimeLabel(time?: string): string {
@@ -434,9 +434,9 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-gray-500">Loading citizens...</p>
+              <p className="text-muted-foreground">Loading citizens...</p>
             ) : citizens.length === 0 ? (
-              <p className="text-gray-500">No citizens found for this council.</p>
+              <p className="text-muted-foreground">No citizens found for this council.</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -481,9 +481,9 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-gray-500">Loading complaints...</p>
+              <p className="text-muted-foreground">Loading complaints...</p>
             ) : complaints.length === 0 ? (
-              <p className="text-gray-500">No complaints found.</p>
+              <p className="text-muted-foreground">No complaints found.</p>
             ) : (
               <div className="space-y-2">
                 {complaints.map((complaint) => (
@@ -491,15 +491,15 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                     key={complaint.id}
                     type="button"
                     onClick={() => void openComplaint(complaint.id)}
-                    className="w-full text-left p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50/30 transition-colors flex items-start justify-between gap-4"
+                    className="w-full text-left p-4 border border-border rounded-lg hover:border-green-300 hover:bg-green-50/30 transition-colors flex items-start justify-between gap-4"
                   >
                     <div className="min-w-0">
-                      <p className="text-gray-900 font-medium truncate">
+                      <p className="text-foreground font-medium truncate">
                         {complaint.description?.slice(0, 80) || `Complaint #${complaint.id}`}
                       </p>
-                      <p className="text-sm text-gray-500 mt-1">{complaint.location || 'No location'}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{complaint.location || 'No location'}</p>
                       {complaint.createdAt && (
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {new Date(complaint.createdAt).toLocaleString()}
                         </p>
                       )}
@@ -521,9 +521,9 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className="text-gray-500">Loading suggestions...</p>
+                <p className="text-muted-foreground">Loading suggestions...</p>
               ) : events.length === 0 ? (
-                <p className="text-gray-500">No pending event suggestions.</p>
+                <p className="text-muted-foreground">No pending event suggestions.</p>
               ) : (
                 <div className="space-y-4">
                   {events.map((event) => {
@@ -536,7 +536,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                     return (
                       <div
                         key={event.id}
-                        className="border border-gray-200 rounded-xl overflow-hidden flex flex-col sm:flex-row"
+                        className="border border-border rounded-xl overflow-hidden flex flex-col sm:flex-row"
                       >
                         {eventImage ? (
                           <a href={eventImage} target="_blank" rel="noreferrer" className="sm:w-40 shrink-0">
@@ -547,7 +547,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                             />
                           </a>
                         ) : (
-                          <div className="sm:w-40 shrink-0 h-32 sm:h-auto flex items-center justify-center bg-gray-50 text-gray-400">
+                          <div className="sm:w-40 shrink-0 h-32 sm:h-auto flex items-center justify-center bg-muted text-muted-foreground">
                             <ImageIcon className="w-8 h-8" />
                           </div>
                         )}
@@ -556,9 +556,9 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                             {event.category && (
                               <Badge className={`mb-2 ${categoryBadgeClass(event.category)}`}>{event.category}</Badge>
                             )}
-                            <p className="text-gray-900 font-semibold">{event.title}</p>
-                            <p className="text-sm text-gray-600 mt-1">{event.description || 'No description'}</p>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">
+                            <p className="text-foreground font-semibold">{event.title}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{event.description || 'No description'}</p>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
                               {event.eventDate && (
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
@@ -657,7 +657,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                       onChange={(e) => void handleEventImage(e.target.files?.[0] || null)}
                       disabled={uploadingImage}
                     />
-                    <span className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 w-full justify-center">
+                    <span className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-foreground hover:bg-muted w-full justify-center">
                       <ImageIcon className="w-4 h-4" />
                       {uploadingImage ? 'Uploading...' : 'Upload event photo'}
                     </span>
@@ -675,7 +675,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                     <img
                       src={eventForm.imagePreview}
                       alt="Event preview"
-                      className="rounded-lg border border-gray-200 max-h-40 object-cover"
+                      className="rounded-lg border border-border max-h-40 object-cover"
                     />
                   </div>
                 )}
@@ -696,32 +696,32 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 
       {selectedComplaintId !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900">Complaint #{selectedComplaintId}</h3>
-              <button type="button" onClick={() => { setSelectedComplaintId(null); setComplaintDetail(null); }} className="text-gray-400 hover:text-gray-600">
+          <div className="bg-card rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <h3 className="text-lg font-semibold text-foreground">Complaint #{selectedComplaintId}</h3>
+              <button type="button" onClick={() => { setSelectedComplaintId(null); setComplaintDetail(null); }} className="text-muted-foreground hover:text-muted-foreground">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               {detailLoading ? (
-                <p className="text-gray-500">Loading...</p>
+                <p className="text-muted-foreground">Loading...</p>
               ) : complaintDetail ? (
                 <>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{complaintDetail.description || 'No description'}</p>
-                  <p className="text-xs text-gray-500">{complaintDetail.location || 'No location'}</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{complaintDetail.description || 'No description'}</p>
+                  <p className="text-xs text-muted-foreground">{complaintDetail.location || 'No location'}</p>
                   {detailImage ? (
                     <a href={detailImage} target="_blank" rel="noreferrer" className="block">
-                      <img src={detailImage} alt="Complaint" className="rounded-lg border border-gray-200 max-h-48 object-cover w-full" />
+                      <img src={detailImage} alt="Complaint" className="rounded-lg border border-border max-h-48 object-cover w-full" />
                     </a>
                   ) : (
-                    <div className="flex items-center gap-2 text-xs text-gray-400 p-4 border border-dashed rounded-lg">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground p-4 border border-dashed rounded-lg">
                       <ImageIcon className="w-4 h-4" />
                       No image attached
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <label className="block text-sm font-medium text-foreground mb-1">Status</label>
                     <select
                       value={complaintStatus}
                       onChange={(e) => setComplaintStatus(e.target.value)}
@@ -733,7 +733,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Resolution notes</label>
+                    <label className="block text-sm font-medium text-foreground mb-1">Resolution notes</label>
                     <textarea
                       value={resolutionNotes}
                       onChange={(e) => setResolutionNotes(e.target.value)}
@@ -987,9 +987,9 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-gray-500">Loading pending applications...</p>
+              <p className="text-muted-foreground">Loading pending applications...</p>
             ) : pending.length === 0 ? (
-              <p className="text-gray-500">No pending third-party registrations.</p>
+              <p className="text-muted-foreground">No pending third-party registrations.</p>
             ) : (
               <div className="space-y-2">
                 {pending.map((item) => {
@@ -1000,46 +1000,46 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                   return (
                     <div
                       key={item.empId}
-                      className={`border rounded-lg overflow-hidden transition-colors ${isOpen ? 'border-green-400 shadow-sm' : 'border-gray-200'
+                      className={`border rounded-lg overflow-hidden transition-colors ${isOpen ? 'border-green-400 shadow-sm' : 'border-border'
                         }`}
                     >
                       <button
                         type="button"
                         onClick={() => togglePendingExpanded(item.empId)}
-                        className={`w-full text-left p-4 flex items-center justify-between gap-4 ${isOpen ? 'bg-green-50/40' : 'hover:bg-gray-50'
+                        className={`w-full text-left p-4 flex items-center justify-between gap-4 ${isOpen ? 'bg-green-50/40' : 'hover:bg-muted'
                           }`}
                       >
                         <div className="min-w-0">
-                          <p className="font-medium text-gray-900">{item.empName || item.email}</p>
-                          <p className="text-sm text-gray-500">{item.email}</p>
-                          <p className="text-xs text-gray-400 mt-1">
+                          <p className="font-medium text-foreground">{item.empName || item.email}</p>
+                          <p className="text-sm text-muted-foreground">{item.email}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
                             {[item.company, item.assignedCouncils].filter(Boolean).join(' · ')}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Badge className="bg-amber-100 text-amber-800">PENDING</Badge>
                           {isOpen ? (
-                            <ChevronUp className="w-5 h-5 text-gray-500" />
+                            <ChevronUp className="w-5 h-5 text-muted-foreground" />
                           ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-500" />
+                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
                           )}
                         </div>
                       </button>
                       {isOpen && (
-                        <div className="border-t border-gray-200 p-4 space-y-4 bg-white">
+                        <div className="border-t border-border p-4 space-y-4 bg-card">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                            <div><span className="text-gray-500">Email:</span> {item.email || '—'}</div>
-                            <div><span className="text-gray-500">Phone:</span> {item.phone || '—'}</div>
-                            <div><span className="text-gray-500">NIC:</span> {item.NIC || item.nic || '—'}</div>
-                            <div><span className="text-gray-500">DOB:</span> {item.dateOfBirth || '—'}</div>
-                            <div><span className="text-gray-500">Company:</span> {item.company || '—'}</div>
-                            <div><span className="text-gray-500">Contract ID:</span> {item.contractId || '—'}</div>
-                            <div><span className="text-gray-500">Contract start:</span> {item.contractStart || '—'}</div>
-                            <div><span className="text-gray-500">Contract end:</span> {item.contractEnd || '—'}</div>
-                            <div className="sm:col-span-2"><span className="text-gray-500">Councils:</span> {item.assignedCouncils || '—'}</div>
-                            <div className="sm:col-span-2"><span className="text-gray-500">Address:</span> {item.defaultAddress || '—'}</div>
+                            <div><span className="text-muted-foreground">Email:</span> {item.email || '—'}</div>
+                            <div><span className="text-muted-foreground">Phone:</span> {item.phone || '—'}</div>
+                            <div><span className="text-muted-foreground">NIC:</span> {item.NIC || item.nic || '—'}</div>
+                            <div><span className="text-muted-foreground">DOB:</span> {item.dateOfBirth || '—'}</div>
+                            <div><span className="text-muted-foreground">Company:</span> {item.company || '—'}</div>
+                            <div><span className="text-muted-foreground">Contract ID:</span> {item.contractId || '—'}</div>
+                            <div><span className="text-muted-foreground">Contract start:</span> {item.contractStart || '—'}</div>
+                            <div><span className="text-muted-foreground">Contract end:</span> {item.contractEnd || '—'}</div>
+                            <div className="sm:col-span-2"><span className="text-muted-foreground">Councils:</span> {item.assignedCouncils || '—'}</div>
+                            <div className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {item.defaultAddress || '—'}</div>
                             {item.createdAt && (
-                              <div className="sm:col-span-2 text-xs text-gray-400">
+                              <div className="sm:col-span-2 text-xs text-muted-foreground">
                                 Submitted: {new Date(item.createdAt).toLocaleString()}
                               </div>
                             )}
@@ -1047,17 +1047,17 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {nicFront ? (
                               <a href={nicFront} target="_blank" rel="noreferrer">
-                                <img src={nicFront} alt="NIC front" className="rounded-lg border max-h-40 object-contain w-full bg-gray-50" />
+                                <img src={nicFront} alt="NIC front" className="rounded-lg border max-h-40 object-contain w-full bg-muted" />
                               </a>
                             ) : (
-                              <div className="text-xs text-gray-400 border border-dashed rounded-lg p-6 text-center">No NIC front photo</div>
+                              <div className="text-xs text-muted-foreground border border-dashed rounded-lg p-6 text-center">No NIC front photo</div>
                             )}
                             {nicBack ? (
                               <a href={nicBack} target="_blank" rel="noreferrer">
-                                <img src={nicBack} alt="NIC back" className="rounded-lg border max-h-40 object-contain w-full bg-gray-50" />
+                                <img src={nicBack} alt="NIC back" className="rounded-lg border max-h-40 object-contain w-full bg-muted" />
                               </a>
                             ) : (
-                              <div className="text-xs text-gray-400 border border-dashed rounded-lg p-6 text-center">No NIC back photo</div>
+                              <div className="text-xs text-muted-foreground border border-dashed rounded-lg p-6 text-center">No NIC back photo</div>
                             )}
                           </div>
                           <Input
@@ -1107,9 +1107,9 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-gray-500">Loading collectors...</p>
+              <p className="text-muted-foreground">Loading collectors...</p>
             ) : active.length === 0 ? (
-              <p className="text-gray-500">No active third-party collectors.</p>
+              <p className="text-muted-foreground">No active third-party collectors.</p>
             ) : (
               <div className="space-y-2">
                 {active.map((collector) => {
@@ -1120,57 +1120,57 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                   return (
                     <div
                       key={collector.empId}
-                      className={`border rounded-lg overflow-hidden transition-colors ${isOpen ? 'border-green-400 shadow-sm' : 'border-gray-200'
+                      className={`border rounded-lg overflow-hidden transition-colors ${isOpen ? 'border-green-400 shadow-sm' : 'border-border'
                         }`}
                     >
                       <button
                         type="button"
                         onClick={() => toggleActiveExpanded(collector.empId)}
-                        className={`w-full text-left p-4 flex items-center justify-between gap-4 ${isOpen ? 'bg-green-50/40' : 'hover:bg-gray-50'
+                        className={`w-full text-left p-4 flex items-center justify-between gap-4 ${isOpen ? 'bg-green-50/40' : 'hover:bg-muted'
                           }`}
                       >
                         <div className="min-w-0">
-                          <p className="font-medium text-gray-900">{collector.empName || collector.email}</p>
-                          <p className="text-sm text-gray-500">{collector.email}</p>
-                          <p className="text-xs text-gray-400 mt-1">
+                          <p className="font-medium text-foreground">{collector.empName || collector.email}</p>
+                          <p className="text-sm text-muted-foreground">{collector.email}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
                             {[collector.company, collector.assignedCouncils].filter(Boolean).join(' · ')}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Badge className="bg-green-100 text-green-800">ACTIVE</Badge>
                           {isOpen ? (
-                            <ChevronUp className="w-5 h-5 text-gray-500" />
+                            <ChevronUp className="w-5 h-5 text-muted-foreground" />
                           ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-500" />
+                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
                           )}
                         </div>
                       </button>
                       {isOpen && (
-                        <div className="border-t border-gray-200 p-4 space-y-4 bg-white">
+                        <div className="border-t border-border p-4 space-y-4 bg-card">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                            <div><span className="text-gray-500">Email:</span> {collector.email || '—'}</div>
-                            <div><span className="text-gray-500">Phone:</span> {collector.phone || '—'}</div>
-                            <div><span className="text-gray-500">NIC:</span> {collector.NIC || collector.nic || '—'}</div>
-                            <div><span className="text-gray-500">Company:</span> {collector.company || '—'}</div>
-                            <div><span className="text-gray-500">Contract ID:</span> {collector.contractId || '—'}</div>
-                            <div><span className="text-gray-500">Contract:</span> {[collector.contractStart, collector.contractEnd].filter(Boolean).join(' → ') || '—'}</div>
-                            <div className="sm:col-span-2"><span className="text-gray-500">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
-                            <div className="sm:col-span-2"><span className="text-gray-500">Address:</span> {collector.defaultAddress || '—'}</div>
+                            <div><span className="text-muted-foreground">Email:</span> {collector.email || '—'}</div>
+                            <div><span className="text-muted-foreground">Phone:</span> {collector.phone || '—'}</div>
+                            <div><span className="text-muted-foreground">NIC:</span> {collector.NIC || collector.nic || '—'}</div>
+                            <div><span className="text-muted-foreground">Company:</span> {collector.company || '—'}</div>
+                            <div><span className="text-muted-foreground">Contract ID:</span> {collector.contractId || '—'}</div>
+                            <div><span className="text-muted-foreground">Contract:</span> {[collector.contractStart, collector.contractEnd].filter(Boolean).join(' → ') || '—'}</div>
+                            <div className="sm:col-span-2"><span className="text-muted-foreground">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
+                            <div className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {collector.defaultAddress || '—'}</div>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {nicFront ? (
                               <a href={nicFront} target="_blank" rel="noreferrer">
-                                <img src={nicFront} alt="NIC front" className="rounded-lg border max-h-40 object-contain w-full bg-gray-50" />
+                                <img src={nicFront} alt="NIC front" className="rounded-lg border max-h-40 object-contain w-full bg-muted" />
                               </a>
                             ) : (
-                              <div className="text-xs text-gray-400 border border-dashed rounded-lg p-6 text-center">No NIC front photo</div>
+                              <div className="text-xs text-muted-foreground border border-dashed rounded-lg p-6 text-center">No NIC front photo</div>
                             )}
                             {nicBack ? (
                               <a href={nicBack} target="_blank" rel="noreferrer">
-                                <img src={nicBack} alt="NIC back" className="rounded-lg border max-h-40 object-contain w-full bg-gray-50" />
+                                <img src={nicBack} alt="NIC back" className="rounded-lg border max-h-40 object-contain w-full bg-muted" />
                               </a>
                             ) : (
-                              <div className="text-xs text-gray-400 border border-dashed rounded-lg p-6 text-center">No NIC back photo</div>
+                              <div className="text-xs text-muted-foreground border border-dashed rounded-lg p-6 text-center">No NIC back photo</div>
                             )}
                           </div>
                           <Input
@@ -1212,9 +1212,9 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-gray-500">Loading revoked collectors...</p>
+              <p className="text-muted-foreground">Loading revoked collectors...</p>
             ) : revoked.length === 0 ? (
-              <p className="text-gray-500">No revoked third-party collectors.</p>
+              <p className="text-muted-foreground">No revoked third-party collectors.</p>
             ) : (
               <div className="space-y-2">
                 {revoked.map((collector) => {
@@ -1223,36 +1223,36 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                   return (
                     <div
                       key={collector.empId}
-                      className={`border rounded-lg overflow-hidden transition-colors ${isOpen ? 'border-amber-400 shadow-sm' : 'border-gray-200'
+                      className={`border rounded-lg overflow-hidden transition-colors ${isOpen ? 'border-amber-400 shadow-sm' : 'border-border'
                         }`}
                     >
                       <button
                         type="button"
                         onClick={() => toggleRevokedExpanded(collector.empId)}
-                        className={`w-full text-left p-4 flex items-center justify-between gap-4 ${isOpen ? 'bg-amber-50/40' : 'hover:bg-gray-50'
+                        className={`w-full text-left p-4 flex items-center justify-between gap-4 ${isOpen ? 'bg-amber-50/40' : 'hover:bg-muted'
                           }`}
                       >
                         <div className="min-w-0">
-                          <p className="font-medium text-gray-900">{collector.empName || collector.email}</p>
-                          <p className="text-sm text-gray-500">{collector.email}</p>
-                          <p className="text-xs text-gray-400 mt-1">{collector.assignedCouncils || '—'}</p>
+                          <p className="font-medium text-foreground">{collector.empName || collector.email}</p>
+                          <p className="text-sm text-muted-foreground">{collector.email}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{collector.assignedCouncils || '—'}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Badge className="bg-red-100 text-red-800">REVOKED</Badge>
                           {isOpen ? (
-                            <ChevronUp className="w-5 h-5 text-gray-500" />
+                            <ChevronUp className="w-5 h-5 text-muted-foreground" />
                           ) : (
-                            <ChevronDown className="w-5 h-5 text-gray-500" />
+                            <ChevronDown className="w-5 h-5 text-muted-foreground" />
                           )}
                         </div>
                       </button>
                       {isOpen && (
-                        <div className="border-t border-gray-200 p-4 space-y-4 bg-white">
+                        <div className="border-t border-border p-4 space-y-4 bg-card">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                            <div><span className="text-gray-500">Email:</span> {collector.email || '—'}</div>
-                            <div><span className="text-gray-500">Phone:</span> {collector.phone || '—'}</div>
-                            <div><span className="text-gray-500">Company:</span> {collector.company || '—'}</div>
-                            <div className="sm:col-span-2"><span className="text-gray-500">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
+                            <div><span className="text-muted-foreground">Email:</span> {collector.email || '—'}</div>
+                            <div><span className="text-muted-foreground">Phone:</span> {collector.phone || '—'}</div>
+                            <div><span className="text-muted-foreground">Company:</span> {collector.company || '—'}</div>
+                            <div className="sm:col-span-2"><span className="text-muted-foreground">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
                           </div>
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             <Button variant="outline" size="sm" onClick={() => setExpandedRevokedId(null)} disabled={isActing}>

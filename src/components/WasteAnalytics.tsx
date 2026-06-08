@@ -1,20 +1,20 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Trash2, Users, Truck, AlertCircle, Briefcase, FileText, Loader2 } from 'lucide-react';
+import { Truck, Container, Users, CircleAlert, Briefcase, FileText, Loader2 } from 'lucide-react';
 import { apiFetch, getApiBase } from '@/lib/api';
 import { COUNCILS, getCouncilApiName } from '@/lib/council-context';
 import {
   AnalyticsChartCard,
-  AnalyticsPageHeader,
   AnalyticsSegmentFilter,
-  AnalyticsStatCard,
   CHART,
   CHART_ANIMATION,
-  DashboardAlertBanner,
   DashboardSection,
   type PieChartEntry,
 } from './layout/analytics-ui';
+import { PageHeader } from './layout/PageHeader';
+import { StatCard, StatCardGrid } from './layout/management-ui';
+import { Button } from './ui/button';
 import { AnalyticsDonutChart } from './layout/AnalyticsDonutChart';
 import {
   BarChart,
@@ -427,9 +427,6 @@ export function WasteAnalytics({
     fetchBinAnalytics();
   }, [council]);
 
-  const collectionRate =
-    summary && summary.assigned > 0 ? Math.round((summary.collected / summary.assigned) * 100) : 0;
-
   const otherStaff = Math.max(
     0,
     (staffSummary?.totalStaff ?? 0) -
@@ -469,22 +466,6 @@ export function WasteAnalytics({
     ].filter((item) => item.value > 0);
   }, [binZoneRows]);
 
-  const alertItems = useMemo(() => {
-    const items: string[] = [];
-    if ((summary?.missed ?? 0) > 0) items.push(`${summary?.missed} bins missed collection today`);
-    if (urgentBins > 0) items.push(`${urgentBins} bins are full and need urgent collection`);
-    if ((complaintSummary?.pendingCount ?? 0) > 0) {
-      items.push(`${complaintSummary?.pendingCount} new complaints awaiting action`);
-    }
-    if ((vehicleSummary?.maintenance ?? 0) > 0) {
-      items.push(`${vehicleSummary?.maintenance} vehicles in maintenance`);
-    }
-    if ((binReportSummary?.affectedBinsToday ?? 0) > 0) {
-      items.push(`${binReportSummary?.affectedBinsToday} bins affected by citizen reports today`);
-    }
-    return items;
-  }, [summary, urgentBins, complaintSummary, vehicleSummary, binReportSummary]);
-
   const totalUsers = citizenCount + (staffSummary?.totalStaff ?? 0);
   const hasReportCouncilActivity = reportByCouncil.some((row) => row.weekCount > 0 || row.todayCount > 0);
   const hasComplaintActivity =
@@ -501,13 +482,13 @@ export function WasteAnalytics({
 
   const chartLoader = (h = 260) => (
     <div className={`flex h-[${h}px] items-center justify-center`} style={{ height: h }}>
-      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
     </div>
   );
 
   return (
     <div className="p-8">
-      <AnalyticsPageHeader
+      <PageHeader
         title="Dashboard"
         subtitle={
           council?.name
@@ -515,84 +496,83 @@ export function WasteAnalytics({
             : 'Monitor waste collection, staff, fleet, and citizen services in real-time'
         }
         actions={
-          <button
-            type="button"
-            onClick={() => onNavigate?.('reports')}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700"
-          >
-            <FileText className="w-4 h-4" />
+          <Button type="button" variant="brand" className="gap-2" onClick={() => onNavigate?.('reports')}>
+            <FileText className="size-4" />
             View Report
-          </button>
+          </Button>
         }
       />
 
-      <DashboardAlertBanner items={alertItems} />
-
-      <DashboardSection title="Today's Operations" description="Collection performance and issues that need action now">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <AnalyticsStatCard
-            label="Total Collected"
+      <DashboardSection title="Today's Operations" description="Key counts for collection, bins, complaints, and reports">
+        <StatCardGrid columns={4}>
+          <StatCard
+            label="Collected Today"
             value={summary?.collected ?? 0}
-            detail={`${collectionRate}% efficiency · ${summary?.assigned ?? 0} assigned · ${summary?.missed ?? 0} missed`}
-            icon={Trash2}
+            icon={Truck}
+            iconClassName="text-brand-500"
             loading={loading}
             error={error ?? undefined}
             onClick={() => onNavigate?.('total-collection')}
           />
-          <AnalyticsStatCard
+          <StatCard
             label="Bins Onsite"
             value={totalBins}
-            detail={urgentBins > 0 ? `${urgentBins} urgent (full)` : 'Active across all zones'}
-            icon={Trash2}
+            valueClassName={urgentBins > 0 ? 'text-status-danger' : undefined}
+            icon={Container}
+            iconClassName={urgentBins > 0 ? 'text-status-danger/70' : 'text-brand-500'}
             loading={binLoading}
             onClick={() => onNavigate?.('bin-analytics')}
           />
-          <AnalyticsStatCard
-            label="Complaints Today"
+          <StatCard
+            label="Complaints"
             value={complaintSummary?.pendingCount ?? 0}
-            detail={`${complaintSummary?.resolutionRate ?? 0}% resolution rate`}
-            icon={AlertCircle}
+            valueClassName={(complaintSummary?.pendingCount ?? 0) > 0 ? 'text-status-danger' : undefined}
+            icon={CircleAlert}
+            iconClassName={
+              (complaintSummary?.pendingCount ?? 0) > 0 ? 'text-status-danger/70' : 'text-muted-foreground'
+            }
             loading={complaintLoading}
             onClick={() => onNavigate?.('complaint-analytics')}
           />
-          <AnalyticsStatCard
-            label="Bin Reports Today"
+          <StatCard
+            label="Bin Reports"
             value={binReportSummary?.totalReportsToday ?? 0}
-            detail={`${binReportSummary?.affectedBinsToday ?? 0} affected bins`}
             icon={FileText}
+            iconClassName="text-muted-foreground"
             loading={binReportLoading}
             onClick={() => onNavigate?.('bin-report-analytics')}
           />
-        </div>
+        </StatCardGrid>
       </DashboardSection>
 
-      <DashboardSection title="Resources" description="People, vehicles, and external services supporting collections">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <AnalyticsStatCard
-            label="Collecting Staff"
+      <DashboardSection title="Resources" description="Staff, fleet, and third-party services">
+        <StatCardGrid columns={3}>
+          <StatCard
+            label="Staff On Duty"
             value={staffSummary?.onDutyCount ?? 0}
-            detail={`${staffSummary?.attendanceRate ?? 0}% active · ${staffSummary?.totalStaff ?? 0} total staff`}
             icon={Users}
+            iconClassName="text-brand-500"
             loading={staffLoading}
             onClick={() => onNavigate?.('staff-analytics')}
           />
-          <AnalyticsStatCard
-            label="Fleet On Route"
+          <StatCard
+            label="On Route"
             value={vehicleSummary?.onRoute ?? 0}
-            detail={`${vehicleSummary?.available ?? 0} available · ${vehicleSummary?.totalFleet ?? 0} total`}
+            valueClassName="text-status-info"
             icon={Truck}
+            iconClassName="text-status-info/70"
             loading={vehicleLoading}
             onClick={() => onNavigate?.('vehicle-analytics')}
           />
-          <AnalyticsStatCard
-            label="Third Party Requests"
-            value={thirdPartySummary?.totalRequests.toLocaleString() ?? 0}
-            detail={`${thirdPartySummary?.completionRate ?? 0}% completed last month`}
+          <StatCard
+            label="Third Party"
+            value={(thirdPartySummary?.totalRequests ?? 0).toLocaleString()}
             icon={Briefcase}
+            iconClassName="text-muted-foreground"
             loading={thirdPartyLoading}
             onClick={() => onNavigate?.('third-party-analytics')}
           />
-        </div>
+        </StatCardGrid>
       </DashboardSection>
 
       <DashboardSection title="Live Analytics" description="Animated charts from real-time system data">
@@ -605,7 +585,7 @@ export function WasteAnalytics({
             {activityLoading ? (
               chartLoader(280)
             ) : activityData.length === 0 ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-gray-400">
+              <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
                 No collection activity recorded today
               </div>
             ) : (
@@ -690,7 +670,7 @@ export function WasteAnalytics({
             {zoneLoading ? (
               chartLoader(280)
             ) : zoneData.length === 0 ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-gray-400">
+              <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
                 No zone data for this period — try Weekly or Monthly
               </div>
             ) : (
@@ -699,7 +679,7 @@ export function WasteAnalytics({
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
                   <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} dy={8} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} allowDecimals={false} domain={[0, 'auto']} />
-                  <Tooltip cursor={{ fill: '#f9fafb' }} contentStyle={CHART.tooltipStyle} />
+                  <Tooltip cursor={{ fill: CHART.cursor }} contentStyle={CHART.tooltipStyle} />
                   <Bar
                     dataKey="collected"
                     fill={CHART.brand}
@@ -723,7 +703,7 @@ export function WasteAnalytics({
             {complaintChartLoading ? (
               chartLoader(280)
             ) : !hasComplaintActivity ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-gray-400">
+              <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
                 No complaints recorded for this council
               </div>
             ) : (
@@ -737,9 +717,9 @@ export function WasteAnalytics({
                     <p className="text-xs text-green-700">Resolved</p>
                     <p className="text-lg font-semibold text-green-900">{complaintSummary?.acceptedCount ?? 0}</p>
                   </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center">
-                    <p className="text-xs text-gray-600">Resolution</p>
-                    <p className="text-lg font-semibold text-gray-900">{complaintSummary?.resolutionRate ?? 0}%</p>
+                  <div className="rounded-lg border border-border bg-muted px-3 py-2 text-center">
+                    <p className="text-xs text-muted-foreground">Resolution</p>
+                    <p className="text-lg font-semibold text-foreground">{complaintSummary?.resolutionRate ?? 0}%</p>
                   </div>
                 </div>
 
@@ -753,14 +733,14 @@ export function WasteAnalytics({
                         height={180}
                       />
                     ) : (
-                      <div className="flex h-[180px] items-center justify-center text-sm text-gray-400">
+                      <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
                         No complaints today
                       </div>
                     )}
                   </div>
                   <div className="md:col-span-3">
                     {complaintMonthTrend.length === 0 ? (
-                      <div className="flex h-[180px] items-center justify-center text-sm text-gray-400">
+                      <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
                         No monthly trend data
                       </div>
                     ) : (
@@ -789,12 +769,12 @@ export function WasteAnalytics({
             {binReportLoading ? (
               chartLoader(280)
             ) : reportByCouncil.length === 0 ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-gray-400">
+              <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
                 Unable to load bin report data
               </div>
             ) : !hasReportCouncilActivity ? (
               <div className="space-y-4">
-                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                <div className="rounded-lg border border-dashed border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
                   No bin reports in the last 7 days across any council.
                 </div>
                 <ResponsiveContainer width="100%" height={220}>
