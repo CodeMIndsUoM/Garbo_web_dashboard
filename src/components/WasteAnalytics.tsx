@@ -1,8 +1,18 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Truck, Container, Users, CircleAlert, Briefcase, FileText, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiFetch, getApiBase } from '@/lib/api';
+import {
+  type ComplaintItem,
+  complaintStatusBadgeClass,
+  complaintStatusLabel,
+  complaintTitle,
+  filterComplaintsByCouncil,
+  isPendingComplaint,
+  patchComplaintStatus,
+} from '@/lib/complaints';
 import { COUNCILS, getCouncilApiName } from '@/lib/council-context';
 import {
   AnalyticsChartCard,
@@ -15,6 +25,7 @@ import {
 import { PageHeader } from './layout/PageHeader';
 import { StatCard, StatCardGrid } from './layout/management-ui';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { AnalyticsDonutChart } from './layout/AnalyticsDonutChart';
 import {
   BarChart,
@@ -138,6 +149,9 @@ export function WasteAnalytics({
   const [loading, setLoading] = useState(true);
   const [staffLoading, setStaffLoading] = useState(true);
   const [complaintLoading, setComplaintLoading] = useState(true);
+  const [pendingComplaints, setPendingComplaints] = useState<ComplaintItem[]>([]);
+  const [pendingComplaintsLoading, setPendingComplaintsLoading] = useState(true);
+  const [actingComplaintId, setActingComplaintId] = useState<number | null>(null);
   const [thirdPartyLoading, setThirdPartyLoading] = useState(true);
   const [binReportLoading, setBinReportLoading] = useState(true);
   const [vehicleLoading, setVehicleLoading] = useState(true);
@@ -296,6 +310,60 @@ export function WasteAnalytics({
     };
     fetchComplaints();
   }, [council]);
+
+  const refreshComplaintSummary = useCallback(async () => {
+    const councilName = getCouncilApiName(council);
+    const params = new URLSearchParams();
+    params.set('filter', 'TODAY');
+    if (councilName) params.set('councilId', councilName);
+    const res = await fetch(`${BASE_URL}/api/admin/complaintanalytics?${params.toString()}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    setComplaintSummary({
+      pendingCount: json.summary?.pendingCount ?? json.summary?.newCount ?? 0,
+      acceptedCount: json.summary?.acceptedCount ?? 0,
+      resolutionRate: json.summary?.resolutionRate ?? 0,
+    });
+  }, [council]);
+
+  const loadPendingComplaints = useCallback(async () => {
+    setPendingComplaintsLoading(true);
+    try {
+      const { response, data } = await apiFetch<ComplaintItem[]>('/api/complaints');
+      if (!response.ok) throw new Error('Failed to load complaints');
+      const raw = Array.isArray(data) ? data : [];
+      const pending = filterComplaintsByCouncil(raw, council?.name).filter((item) =>
+        isPendingComplaint(item.status),
+      );
+      pending.sort((a, b) => {
+        const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+        const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+        return bTime - aTime;
+      });
+      setPendingComplaints(pending.slice(0, 5));
+    } catch {
+      setPendingComplaints([]);
+    } finally {
+      setPendingComplaintsLoading(false);
+    }
+  }, [council?.name]);
+
+  useEffect(() => {
+    void loadPendingComplaints();
+  }, [loadPendingComplaints]);
+
+  const handleComplaintDecision = async (id: number, status: 'APPROVED' | 'REJECTED') => {
+    setActingComplaintId(id);
+    try {
+      await patchComplaintStatus(id, status);
+      toast.success(status === 'APPROVED' ? 'Complaint approved' : 'Complaint rejected');
+      await Promise.all([loadPendingComplaints(), refreshComplaintSummary()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update complaint');
+    } finally {
+      setActingComplaintId(null);
+    }
+  };
 
   useEffect(() => {
     const fetchThirdPartySummary = async () => {
@@ -573,6 +641,69 @@ export function WasteAnalytics({
             onClick={() => onNavigate?.('third-party-analytics')}
           />
         </StatCardGrid>
+      </DashboardSection>
+
+      <DashboardSection
+        title="Pending Citizen Complaints"
+        description="Approve or reject new reports submitted by citizens"
+      >
+        <div className="mb-4 flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => onNavigate?.('external-users')}>
+            View all
+          </Button>
+        </div>
+        {pendingComplaintsLoading ? (
+          <div className="flex items-center gap-2 py-6 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Loading complaints...
+          </div>
+        ) : pendingComplaints.length === 0 ? (
+          <p className="py-6 text-sm text-muted-foreground">No pending complaints right now.</p>
+        ) : (
+          <div className="space-y-3">
+            {pendingComplaints.map((complaint) => (
+              <div
+                key={complaint.id}
+                className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-foreground">{complaintTitle(complaint)}</p>
+                    <Badge className={complaintStatusBadgeClass(complaint.status)}>
+                      {complaintStatusLabel(complaint.status)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 truncate text-sm text-muted-foreground">
+                    {complaint.location || 'No location'}
+                  </p>
+                  {complaint.createdAt && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {new Date(complaint.createdAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button
+                    size="sm"
+                    variant="brand"
+                    disabled={actingComplaintId === complaint.id}
+                    onClick={() => void handleComplaintDecision(complaint.id, 'APPROVED')}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={actingComplaintId === complaint.id}
+                    onClick={() => void handleComplaintDecision(complaint.id, 'REJECTED')}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </DashboardSection>
 
       <DashboardSection title="Live Analytics" description="Animated charts from real-time system data">

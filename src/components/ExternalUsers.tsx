@@ -19,6 +19,15 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
+import {
+  type ComplaintItem,
+  complaintStatusBadgeClass,
+  complaintStatusLabel,
+  complaintTitle,
+  filterComplaintsByCouncil,
+  isPendingComplaint,
+  patchComplaintStatus,
+} from '@/lib/complaints';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -35,16 +44,6 @@ import {
 type Tab = 'citizens' | 'collectors';
 type CitizensSection = 'users' | 'complaints' | 'events';
 type CollectorsSection = 'pending' | 'active' | 'revoked';
-
-interface ComplaintItem {
-  id: number;
-  description?: string;
-  status?: string;
-  location?: string;
-  imageUrl?: string;
-  resolutionNotes?: string;
-  createdAt?: string;
-}
 
 interface EventItem {
   id: number;
@@ -187,7 +186,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
   const [complaintDetail, setComplaintDetail] = useState<ComplaintItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
-  const [complaintStatus, setComplaintStatus] = useState('inprogress');
+  const [actingComplaintId, setActingComplaintId] = useState<number | null>(null);
   const [eventForm, setEventForm] = useState({
     title: '',
     description: '',
@@ -224,11 +223,16 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
       const rawEvents = Array.isArray(eventsRes.data) ? eventsRes.data : [];
 
       setCitizens(citizenList);
-      setComplaints(
-        councilName
-          ? rawComplaints.filter((c) => matchesCouncil(councilName, c.location))
-          : rawComplaints
-      );
+      const filteredComplaints = filterComplaintsByCouncil(rawComplaints, councilName);
+      filteredComplaints.sort((a, b) => {
+        const aPending = isPendingComplaint(a.status) ? 1 : 0;
+        const bPending = isPendingComplaint(b.status) ? 1 : 0;
+        if (aPending !== bPending) return bPending - aPending;
+        const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
+        const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
+        return bTime - aTime;
+      });
+      setComplaints(filteredComplaints);
       setEvents(
         councilName
           ? rawEvents.filter((e) => matchesCouncil(councilName, e.council, e.location))
@@ -252,7 +256,6 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
       const { data } = await apiFetch<ComplaintItem>(`/api/complaints/${id}`);
       setComplaintDetail(data);
       setResolutionNotes(data.resolutionNotes || '');
-      setComplaintStatus(data.status || 'inprogress');
     } catch {
       toast.error('Could not load complaint details');
       setSelectedComplaintId(null);
@@ -261,20 +264,25 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
     }
   };
 
-  const saveComplaint = async () => {
-    if (!selectedComplaintId) return;
+  const updateComplaint = async (
+    id: number,
+    status: 'APPROVED' | 'REJECTED',
+    notes?: string,
+  ) => {
+    setActingComplaintId(id);
     try {
-      const { response } = await apiFetch(`/api/complaints/${selectedComplaintId}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: complaintStatus, resolutionNotes }),
-      });
-      if (!response.ok) throw new Error('Update failed');
-      toast.success('Complaint updated');
-      setSelectedComplaintId(null);
-      setComplaintDetail(null);
+      await patchComplaintStatus(id, status, notes);
+      toast.success(status === 'APPROVED' ? 'Complaint approved' : 'Complaint rejected');
+      if (selectedComplaintId === id) {
+        setSelectedComplaintId(null);
+        setComplaintDetail(null);
+        setResolutionNotes('');
+      }
       void loadData();
-    } catch {
-      toast.error('Failed to update complaint');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update complaint');
+    } finally {
+      setActingComplaintId(null);
     }
   };
 
@@ -485,28 +493,59 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
             ) : complaints.length === 0 ? (
               <p className="text-muted-foreground">No complaints found.</p>
             ) : (
-              <div className="space-y-2">
-                {complaints.map((complaint) => (
-                  <button
-                    key={complaint.id}
-                    type="button"
-                    onClick={() => void openComplaint(complaint.id)}
-                    className="w-full text-left p-4 border border-border rounded-lg hover:border-green-300 hover:bg-green-50/30 transition-colors flex items-start justify-between gap-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-foreground font-medium truncate">
-                        {complaint.description?.slice(0, 80) || `Complaint #${complaint.id}`}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">{complaint.location || 'No location'}</p>
-                      {complaint.createdAt && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(complaint.createdAt).toLocaleString()}
-                        </p>
-                      )}
+              <div className="space-y-3">
+                {complaints.map((complaint) => {
+                  const pending = isPendingComplaint(complaint.status);
+                  const isActing = actingComplaintId === complaint.id;
+                  return (
+                    <div
+                      key={complaint.id}
+                      className="p-4 border border-border rounded-lg hover:border-green-300 hover:bg-green-50/30 transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void openComplaint(complaint.id)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <p className="text-foreground font-medium">{complaintTitle(complaint)}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{complaint.location || 'No location'}</p>
+                        {complaint.issueType && (
+                          <p className="text-xs text-muted-foreground mt-1">Issue: {complaint.issueType}</p>
+                        )}
+                        {complaint.createdAt && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(complaint.createdAt).toLocaleString()}
+                          </p>
+                        )}
+                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge className={complaintStatusBadgeClass(complaint.status)}>
+                          {complaintStatusLabel(complaint.status)}
+                        </Badge>
+                        {pending && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              disabled={isActing}
+                              onClick={() => void updateComplaint(complaint.id, 'APPROVED')}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isActing}
+                              onClick={() => void updateComplaint(complaint.id, 'REJECTED')}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <Badge className={statusBadgeClass(complaint.status)}>{complaint.status || 'new'}</Badge>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -708,7 +747,25 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                 <p className="text-muted-foreground">Loading...</p>
               ) : complaintDetail ? (
                 <>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{complaintDetail.description || 'No description'}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge className={complaintStatusBadgeClass(complaintDetail.status)}>
+                      {complaintStatusLabel(complaintDetail.status)}
+                    </Badge>
+                    {complaintDetail.urgency && (
+                      <span className="text-xs text-muted-foreground">Urgency: {complaintDetail.urgency}</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {complaintTitle(complaintDetail)}
+                    </p>
+                    {complaintDetail.issueType && (
+                      <p className="text-xs text-muted-foreground mt-1">Type: {complaintDetail.issueType}</p>
+                    )}
+                  </div>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {complaintDetail.description || 'No description'}
+                  </p>
                   <p className="text-xs text-muted-foreground">{complaintDetail.location || 'No location'}</p>
                   {detailImage ? (
                     <a href={detailImage} target="_blank" rel="noreferrer" className="block">
@@ -720,36 +777,51 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                       No image attached
                     </div>
                   )}
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-                    <select
-                      value={complaintStatus}
-                      onChange={(e) => setComplaintStatus(e.target.value)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    >
-                      <option value="new">New</option>
-                      <option value="inprogress">In Progress</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Resolution notes</label>
-                    <textarea
-                      value={resolutionNotes}
-                      onChange={(e) => setResolutionNotes(e.target.value)}
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                      placeholder="Response to citizen..."
-                    />
-                  </div>
+                  {isPendingComplaint(complaintDetail.status) && (
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">
+                        Response to citizen (optional)
+                      </label>
+                      <textarea
+                        value={resolutionNotes}
+                        onChange={(e) => setResolutionNotes(e.target.value)}
+                        rows={3}
+                        className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background"
+                        placeholder="Add notes for the citizen..."
+                      />
+                    </div>
+                  )}
+                  {complaintDetail.resolutionNotes && !isPendingComplaint(complaintDetail.status) && (
+                    <div className="rounded-lg bg-muted border border-border p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Resolution notes</p>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">
+                        {complaintDetail.resolutionNotes}
+                      </p>
+                    </div>
+                  )}
                   <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" onClick={() => { setSelectedComplaintId(null); setComplaintDetail(null); }}>
-                      Cancel
+                    <Button variant="outline" onClick={() => { setSelectedComplaintId(null); setComplaintDetail(null); setResolutionNotes(''); }}>
+                      Close
                     </Button>
-                    <Button className="bg-green-600 hover:bg-green-700" onClick={() => void saveComplaint()}>
-                      <Check className="w-4 h-4 mr-1" />
-                      Save
-                    </Button>
+                    {isPendingComplaint(complaintDetail.status) && (
+                      <>
+                        <Button
+                          variant="outline"
+                          disabled={actingComplaintId === complaintDetail.id}
+                          onClick={() => void updateComplaint(complaintDetail.id, 'REJECTED', resolutionNotes)}
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          className="bg-green-600 hover:bg-green-700"
+                          disabled={actingComplaintId === complaintDetail.id}
+                          onClick={() => void updateComplaint(complaintDetail.id, 'APPROVED', resolutionNotes)}
+                        >
+                          <Check className="w-4 h-4 mr-1" />
+                          Approve
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </>
               ) : null}
