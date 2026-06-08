@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { EyeOff, HardHat, Trash2, Users } from 'lucide-react';
+import { HardHat, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 import { isSuperadmin } from '@/lib/auth';
@@ -12,6 +12,16 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { PageHeader } from './layout/PageHeader';
+import {
+  FormActions,
+  FormField,
+  FormPanel,
+  FormSelect,
+  PageSubSectionNav,
+  TableRowActions,
+  type NavItem,
+} from './layout/management-ui';
 
 type InternalSection = 'field-staff' | 'bin-collectors';
 type StaffRole = 'FIELD_MENTOR' | 'BIN_COLLECTOR';
@@ -22,56 +32,6 @@ interface InternalUser {
   email?: string;
   role?: string;
   onDuty?: boolean;
-}
-
-interface SubSectionItem<T extends string> {
-  id: T;
-  label: string;
-  icon: React.ReactNode;
-  count?: number;
-  description: string;
-}
-
-function SubSectionNav<T extends string>({
-  items,
-  active,
-  onChange,
-}: {
-  items: SubSectionItem<T>[];
-  active: T;
-  onChange: (id: T) => void;
-}) {
-  const activeItem = items.find((item) => item.id === active);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onChange(item.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active === item.id
-                ? 'bg-green-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-          >
-            {item.icon}
-            {item.label}
-            {item.count !== undefined && (
-              <span
-                className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${active === item.id ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                  }`}
-              >
-                {item.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-      {activeItem && <p className="text-sm text-gray-500">{activeItem.description}</p>}
-    </div>
-  );
 }
 
 function normalizeRole(role?: string): string {
@@ -264,7 +224,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
     }
   };
 
-  const internalSections: SubSectionItem<InternalSection>[] = [
+  const internalSections: NavItem<InternalSection>[] = [
     {
       id: 'field-staff',
       label: 'Field Staff',
@@ -286,64 +246,92 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h2 className="text-gray-900 mb-2">Internal Users</h2>
-        <p className="text-gray-600">Manage field staff and bin collectors for your council.</p>
-        {council?.name && (
-          <p className="text-sm text-gray-500 mt-1">Council context: {council.name}</p>
-        )}
-      </div>
+      <PageHeader
+        title="Internal Users"
+        subtitle="Manage field staff and bin collectors for your council."
+        extra={council?.name ? `Council context: ${council.name}` : undefined}
+      />
 
-      <SubSectionNav items={internalSections} active={section} onChange={setSection} />
+      <PageSubSectionNav
+        title="Staff type"
+        items={internalSections}
+        active={section}
+        onChange={setSection}
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>{createLabel}</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-end" onSubmit={createUser}>
-            <div>
-              <label className="block mb-1 font-medium">Full Name</label>
-              <Input placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-            </div>
-            <div>
-              <label className="block mb-1 font-medium">Email</label>
-              <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-            </div>
-            <div>
-              <label className="block mb-1 font-medium">Contact Number</label>
-              <Input placeholder="0771234567" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} />
-            </div>
-            {superadmin && (
-              <div>
-                <label className="block mb-1 font-medium">Council</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  value={createCouncil}
-                  onChange={(e) => setCreateCouncil(e.target.value)}
-                  required
-                >
-                  <option value="">Select council</option>
-                  {COUNCILS.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+          <form onSubmit={createUser}>
+            <FormPanel>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                <FormField label="Full Name" htmlFor="internal-full-name">
+                  <Input
+                    id="internal-full-name"
+                    placeholder="Full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
+                </FormField>
+                <FormField label="Email" htmlFor="internal-email">
+                  <Input
+                    id="internal-email"
+                    placeholder="name@example.com"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </FormField>
+                <FormField label="Contact Number" htmlFor="internal-contact">
+                  <Input
+                    id="internal-contact"
+                    placeholder="0771234567"
+                    value={contactNumber}
+                    onChange={(e) => setContactNumber(e.target.value)}
+                  />
+                </FormField>
               </div>
-            )}
 
-            <div className="lg:col-span-3 flex items-center gap-3 mt-2 flex-wrap">
-              <Button type="submit" className="bg-green-600 hover:bg-green-700" disabled={loading}>
-                {loading ? 'Creating...' : createLabel}
-              </Button>
-              <Button type="button" variant="outline" onClick={resetForm} disabled={loading}>
-                Reset
-              </Button>
-              <Badge variant="secondary">{activeRole}</Badge>
-              {error && <div className="text-red-600 text-sm">{error}</div>}
-              {success && <div className="text-green-600 text-sm">{success}</div>}
-            </div>
+              {superadmin ? (
+                <div className="mt-5 max-w-md">
+                  <FormField label="Council" htmlFor="internal-council">
+                    <FormSelect
+                      id="internal-council"
+                      value={createCouncil}
+                      onChange={(e) => setCreateCouncil(e.target.value)}
+                      required
+                    >
+                      <option value="">Select council</option>
+                      {COUNCILS.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </FormSelect>
+                  </FormField>
+                </div>
+              ) : null}
+            </FormPanel>
+
+            <FormActions>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="submit" variant="brand" disabled={loading}>
+                  {loading ? 'Creating...' : createLabel}
+                </Button>
+                <Button type="button" variant="outline" onClick={resetForm} disabled={loading}>
+                  Reset
+                </Button>
+              </div>
+              <Badge variant="outline" className="border-gray-200 text-gray-600">
+                {activeRole}
+              </Badge>
+              {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {success ? <p className="text-sm text-green-600">{success}</p> : null}
+            </FormActions>
           </form>
         </CardContent>
       </Card>
@@ -371,7 +359,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                     <TableHead>Full Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>On Duty</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -386,16 +374,10 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => void hideUser(user.empId)}>
-                            <EyeOff className="w-3.5 h-3.5 mr-1" />
-                            Hide
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => void deleteUser(user.empId)}>
-                            <Trash2 className="w-3.5 h-3.5 mr-1" />
-                            Delete
-                          </Button>
-                        </div>
+                        <TableRowActions
+                          onHide={() => void hideUser(user.empId)}
+                          onDelete={() => void deleteUser(user.empId)}
+                        />
                       </TableCell>
                     </TableRow>
                   ))}
