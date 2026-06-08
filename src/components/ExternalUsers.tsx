@@ -16,8 +16,6 @@ import {
   UserPlus,
   Users,
   X,
-  EyeOff,
-  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
@@ -26,62 +24,17 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { PageHeader } from './layout/PageHeader';
+import {
+  PagePrimaryTabs,
+  PageSubSectionNav,
+  TableRowActions,
+  type NavItem,
+} from './layout/management-ui';
 
 type Tab = 'citizens' | 'collectors';
 type CitizensSection = 'users' | 'complaints' | 'events';
 type CollectorsSection = 'pending' | 'active' | 'revoked';
-
-interface SubSectionItem<T extends string> {
-  id: T;
-  label: string;
-  icon: React.ReactNode;
-  count?: number;
-  description: string;
-}
-
-function SubSectionNav<T extends string>({
-  items,
-  active,
-  onChange,
-}: {
-  items: SubSectionItem<T>[];
-  active: T;
-  onChange: (id: T) => void;
-}) {
-  const activeItem = items.find((item) => item.id === active);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onChange(item.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active === item.id
-                ? 'bg-green-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-          >
-            {item.icon}
-            {item.label}
-            {item.count !== undefined && (
-              <span
-                className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${active === item.id ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                  }`}
-              >
-                {item.count}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-      {activeItem && (
-        <p className="text-sm text-gray-500">{activeItem.description}</p>
-      )}
-    </div>
-  );
-}
 
 interface ComplaintItem {
   id: number;
@@ -200,40 +153,20 @@ function categoryBadgeClass(category?: string) {
 export function ExternalUsers({ council }: { council?: { name?: string } | null }) {
   const [tab, setTab] = useState<Tab>('citizens');
 
+  const primaryTabs: NavItem<Tab>[] = [
+    { id: 'citizens', label: 'Citizens', icon: <Users className="size-4" /> },
+    { id: 'collectors', label: 'Third-Party Collectors', icon: <Building2 className="size-4" /> },
+  ];
+
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h2 className="text-gray-900 mb-1">External Users</h2>
-        <p className="text-gray-600">Citizen complaints, events, and third-party collector registrations</p>
-        {council?.name && (
-          <p className="text-sm text-gray-500 mt-1">Council context: {council.name}</p>
-        )}
-      </div>
+      <PageHeader
+        title="External Users"
+        subtitle="Citizen complaints, events, and third-party collector registrations"
+        extra={council?.name ? `Council context: ${council.name}` : undefined}
+      />
 
-      <div className="flex gap-2 border-b border-gray-200 pb-1">
-        <button
-          type="button"
-          onClick={() => setTab('citizens')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab === 'citizens'
-              ? 'bg-green-600 text-white'
-              : 'text-gray-600 hover:bg-gray-100'
-            }`}
-        >
-          <Users className="w-4 h-4" />
-          Citizens
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('collectors')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab === 'collectors'
-              ? 'bg-green-600 text-white'
-              : 'text-gray-600 hover:bg-gray-100'
-            }`}
-        >
-          <Building2 className="w-4 h-4" />
-          Third-Party Collectors
-        </button>
-      </div>
+      <PagePrimaryTabs items={primaryTabs} active={tab} onChange={setTab} />
 
       {tab === 'citizens' ? <CitizensTab council={council} /> : <CollectorsTab council={council} />}
     </div>
@@ -461,7 +394,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 
   const detailImage = resolveMediaUrl(complaintDetail?.imageUrl);
 
-  const citizenSections: SubSectionItem<CitizensSection>[] = [
+  const citizenSections: NavItem<CitizensSection>[] = [
     {
       id: 'users',
       label: 'Users',
@@ -487,7 +420,12 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 
   return (
     <div className="space-y-6">
-      <SubSectionNav items={citizenSections} active={section} onChange={setSection} />
+      <PageSubSectionNav
+        title="Citizens"
+        items={citizenSections}
+        active={section}
+        onChange={setSection}
+      />
 
       {section === 'users' && (
         <Card>
@@ -509,7 +447,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                       <TableHead>Email</TableHead>
                       <TableHead>Phone</TableHead>
                       <TableHead>Council</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -521,16 +459,10 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                         <TableCell>{citizen.phone || '—'}</TableCell>
                         <TableCell>{citizen.council || '—'}</TableCell>
                         <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => void hideCitizen(citizen.empId)}>
-                              <EyeOff className="w-3.5 h-3.5 mr-1" />
-                              Hide
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => void deleteCitizen(citizen.empId)}>
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Delete
-                            </Button>
-                          </div>
+                          <TableRowActions
+                            onHide={() => void hideCitizen(citizen.empId)}
+                            onDelete={() => void deleteCitizen(citizen.empId)}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1015,7 +947,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
     }
   };
 
-  const collectorSections: SubSectionItem<CollectorsSection>[] = [
+  const collectorSections: NavItem<CollectorsSection>[] = [
     {
       id: 'pending',
       label: 'Pending',
@@ -1041,7 +973,12 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
 
   return (
     <div className="space-y-6">
-      <SubSectionNav items={collectorSections} active={section} onChange={setSection} />
+      <PageSubSectionNav
+        title="Third-party collectors"
+        items={collectorSections}
+        active={section}
+        onChange={setSection}
+      />
 
       {section === 'pending' && (
         <Card>
@@ -1130,22 +1067,21 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                               setRejectReasons((prev) => ({ ...prev, [item.empId]: e.target.value }))
                             }
                           />
-                          <div className="flex flex-wrap gap-2 justify-end">
-                            <Button variant="outline" onClick={() => setExpandedPendingId(null)} disabled={isActing}>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setExpandedPendingId(null)} disabled={isActing}>
                               Collapse
                             </Button>
-                            <Button variant="outline" onClick={() => void hideCollector(item.empId)} disabled={isActing}>
-                              <EyeOff className="w-3.5 h-3.5 mr-1" />
-                              Hide
-                            </Button>
-                            <Button variant="outline" onClick={() => void deleteCollector(item.empId)} disabled={isActing}>
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Delete
-                            </Button>
-                            <Button variant="outline" onClick={() => void reject(item.empId)} disabled={isActing}>
+                            <TableRowActions
+                              onHide={() => void hideCollector(item.empId)}
+                              onDelete={() => void deleteCollector(item.empId)}
+                              hideDisabled={isActing}
+                              deleteDisabled={isActing}
+                            />
+                            <Button variant="outline" size="sm" onClick={() => void reject(item.empId)} disabled={isActing}>
                               Reject
                             </Button>
                             <Button
+                              size="sm"
                               className="bg-green-600 hover:bg-green-700"
                               onClick={() => void approve(item.empId)}
                               disabled={isActing}
@@ -1244,19 +1180,17 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                               setRevokeReasons((prev) => ({ ...prev, [collector.empId]: e.target.value }))
                             }
                           />
-                          <div className="flex flex-wrap gap-2 justify-end">
-                            <Button variant="outline" onClick={() => setExpandedActiveId(null)} disabled={isActing}>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setExpandedActiveId(null)} disabled={isActing}>
                               Collapse
                             </Button>
-                            <Button variant="outline" onClick={() => void hideCollector(collector.empId)} disabled={isActing}>
-                              <EyeOff className="w-3.5 h-3.5 mr-1" />
-                              Hide
-                            </Button>
-                            <Button variant="outline" onClick={() => void deleteCollector(collector.empId)} disabled={isActing}>
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Delete
-                            </Button>
-                            <Button variant="outline" onClick={() => void revoke(collector.empId)} disabled={isActing}>
+                            <TableRowActions
+                              onHide={() => void hideCollector(collector.empId)}
+                              onDelete={() => void deleteCollector(collector.empId)}
+                              hideDisabled={isActing}
+                              deleteDisabled={isActing}
+                            />
+                            <Button variant="outline" size="sm" onClick={() => void revoke(collector.empId)} disabled={isActing}>
                               Revoke Access
                             </Button>
                           </div>
@@ -1320,19 +1254,18 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                             <div><span className="text-gray-500">Company:</span> {collector.company || '—'}</div>
                             <div className="sm:col-span-2"><span className="text-gray-500">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
                           </div>
-                          <div className="flex flex-wrap gap-2 justify-end">
-                            <Button variant="outline" onClick={() => setExpandedRevokedId(null)} disabled={isActing}>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setExpandedRevokedId(null)} disabled={isActing}>
                               Collapse
                             </Button>
-                            <Button variant="outline" onClick={() => void hideCollector(collector.empId)} disabled={isActing}>
-                              <EyeOff className="w-3.5 h-3.5 mr-1" />
-                              Hide
-                            </Button>
-                            <Button variant="outline" onClick={() => void deleteCollector(collector.empId)} disabled={isActing}>
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Delete
-                            </Button>
+                            <TableRowActions
+                              onHide={() => void hideCollector(collector.empId)}
+                              onDelete={() => void deleteCollector(collector.empId)}
+                              hideDisabled={isActing}
+                              deleteDisabled={isActing}
+                            />
                             <Button
+                              size="sm"
                               className="bg-green-600 hover:bg-green-700"
                               onClick={() => void unrevoke(collector.empId)}
                               disabled={isActing}
