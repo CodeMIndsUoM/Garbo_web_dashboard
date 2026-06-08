@@ -60,6 +60,17 @@ const config: Config = {
           border: 'var(--sidebar-border)',
           ring: 'var(--sidebar-ring)',
         },
+        brand: {
+          50: 'var(--brand-50)',
+          100: 'var(--brand-100)',
+          200: 'var(--brand-200)',
+          500: 'var(--brand-500)',
+          600: 'var(--brand-600)',
+          700: 'var(--brand-700)',
+          800: 'var(--brand-800)',
+          DEFAULT: 'var(--brand-primary)',
+          foreground: 'var(--brand-primary-foreground)',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

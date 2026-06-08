@@ -1,0 +1,67 @@
+/**
+ * Garbo dashboard design tokens — single source of truth for theme values.
+ * Light-theme brand green values are fixed; do not change --brand-600 / --brand-700.
+ * Components should reference these variables (via Tailwind `brand-*` or `var(--*)`), not hardcode hex.
+ */
+
+:root {
+  /* ── Brand green (matches existing Tailwind green-600 / green-700 usage) ── */
+  --brand-50: #f0fdf4;
+  --brand-100: #dcfce7;
+  --brand-200: #bbf7d0;
+  --brand-500: #22c55e;
+  --brand-600: #16a34a;
+  --brand-700: #15803d;
+  --brand-800: #166534;
+
+  /* Semantic aliases */
+  --brand-primary: var(--brand-600);
+  --brand-primary-hover: var(--brand-700);
+  --brand-primary-foreground: #ffffff;
+  --brand-muted: var(--brand-50);
+  --brand-muted-foreground: var(--brand-800);
+  --brand-ring: var(--brand-500);
+
+  /* ── Surfaces (light polish layer — extends shadcn tokens) ── */
+  --surface-page: #f8fafc;
+  --surface-elevated: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-border: #e2e8f0;
+
+  /* ── Typography scale ── */
+  --font-family-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
+  --text-display: 2rem;
+  --text-page-title: 1.5rem;
+  --text-section-title: 1.125rem;
+  --text-body: 1rem;
+  --text-caption: 0.875rem;
+  --text-micro: 0.75rem;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --tracking-tight: -0.02em;
+
+  /* ── Radius & elevation ── */
+  --radius-card: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-auth-card: 1.25rem; /* 20px — visible rounded login card */
+  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
+  --shadow-elevated: 0 10px 40px -10px rgb(15 23 42 / 0.12), 0 4px 12px -4px rgb(15 23 42 / 0.08);
+  --shadow-auth-card:
+    0 0 0 1px rgb(226 232 240 / 0.9),
+    0 20px 50px -12px rgb(15 23 42 / 0.18),
+    0 8px 24px -8px rgb(15 23 42 / 0.12);
+
+  /* ── Auth layout (login) ── */
+  --auth-hero-image: url('/images/login-hero.jpg');
+  --auth-hero-overlay: rgb(15 23 42 / 0.42);
+  --auth-hero-brand-tint: rgb(22 163 74 / 0.28);
+  --auth-form-backdrop: rgba(255, 255, 255, 0.97);
+}
+
+.dark {
+  /* Dark values filled in W9B — placeholders keep build stable */
+  --surface-page: var(--background);
+  --surface-elevated: var(--card);
+  --surface-subtle: var(--muted);
+  --surface-border: var(--border);
+}
