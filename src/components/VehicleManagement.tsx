@@ -123,7 +123,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     const { assignedDriverId, assignedDriverName } = vehicle;
     if (!assignedDriverId) return 'Unassigned';
     if (assignedDriverName) return assignedDriverName;
-    
+
     const driver = driversById.get(assignedDriverId);
     if (!driver) return `#${assignedDriverId}`;
     return driver.empName || `Staff #${assignedDriverId}`;
@@ -160,8 +160,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   };
 
   const statCardClass = (active: boolean) =>
-    `cursor-pointer transition-all hover:shadow-md ${
-      active ? 'ring-2 ring-blue-500 shadow-md' : ''
+    `cursor-pointer transition-all hover:shadow-md ${active ? 'ring-2 ring-blue-500 shadow-md' : ''
     }`;
 
   const handleDelete = async () => {
@@ -313,12 +312,11 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredVehicles.map((vehicle) => (
             <Card key={vehicle.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 overflow-hidden relative">
-              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
-                vehicle.status === 'available' ? 'bg-green-500' :
-                vehicle.status === 'on_route' ? 'bg-blue-500' :
-                vehicle.status === 'maintenance' ? 'bg-amber-500' :
-                'bg-gray-400'
-              }`} />
+              <div className={`absolute top-0 left-0 right-0 h-1.5 ${vehicle.status === 'available' ? 'bg-green-500' :
+                  vehicle.status === 'on_route' ? 'bg-blue-500' :
+                    vehicle.status === 'maintenance' ? 'bg-amber-500' :
+                      'bg-gray-400'
+                }`} />
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -366,25 +364,25 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
                   {/* Status Quick Actions */}
                   <div className="pt-2 border-t border-gray-100">
-                      <div className="flex gap-1 flex-wrap">
-                        {/* Only allow manual toggle to/from Maintenance */}
-                        {vehicle.status === 'maintenance' ? (
-                          <button
-                            onClick={() => handleStatusChange(vehicle, 'available')}
-                            className={`text-xs px-2 py-1 rounded transition-colors bg-green-50 text-green-700 hover:opacity-80 border border-green-100`}
-                          >
-                            Set Available
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleStatusChange(vehicle, 'maintenance')}
-                            className={`text-xs px-2 py-1 rounded transition-colors bg-amber-50 text-amber-700 hover:opacity-80 border border-amber-100`}
-                            disabled={vehicle.status === 'on_route'}
-                          >
-                            Set Maintenance
-                          </button>
-                        )}
-                      </div>
+                    <div className="flex gap-1 flex-wrap">
+                      {/* Only allow manual toggle to/from Maintenance */}
+                      {vehicle.status === 'maintenance' ? (
+                        <button
+                          onClick={() => handleStatusChange(vehicle, 'available')}
+                          className={`text-xs px-2 py-1 rounded transition-colors bg-green-50 text-green-700 hover:opacity-80 border border-green-100`}
+                        >
+                          Set Available
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleStatusChange(vehicle, 'maintenance')}
+                          className={`text-xs px-2 py-1 rounded transition-colors bg-amber-50 text-amber-700 hover:opacity-80 border border-amber-100`}
+                          disabled={vehicle.status === 'on_route'}
+                        >
+                          Set Maintenance
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -529,19 +527,19 @@ function VehicleFormModal({
 
             <div>
               <label className="block text-sm text-gray-600 mb-1">License Plate *</label>
-              <Input value={form.licensePlate} onChange={e => setForm({...form, licensePlate: e.target.value})} placeholder="ABC-1234" />
+              <Input value={form.licensePlate} onChange={e => setForm({ ...form, licensePlate: e.target.value })} placeholder="ABC-1234" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Type *</label>
-              <select value={form.type} onChange={e => setForm({...form, type: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                 {VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">Max bins per trip</label>
-              <Input type="number" min="1" step="1" value={form.maxBins} onChange={e => setForm({...form, maxBins: e.target.value})} placeholder="50" />
+              <Input type="number" min="1" step="1" value={form.maxBins} onChange={e => setForm({ ...form, maxBins: e.target.value })} placeholder="50" />
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-4">

@@ -51,19 +51,17 @@ function SubSectionNav<T extends string>({
             key={item.id}
             type="button"
             onClick={() => onChange(item.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              active === item.id
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active === item.id
                 ? 'bg-green-600 text-white shadow-sm'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
+              }`}
           >
             {item.icon}
             {item.label}
             {item.count !== undefined && (
               <span
-                className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
-                  active === item.id ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
-                }`}
+                className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${active === item.id ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                  }`}
               >
                 {item.count}
               </span>

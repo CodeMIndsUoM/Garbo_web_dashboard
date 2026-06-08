@@ -21,6 +21,49 @@ export const CHART = {
   },
 } as const;
 
+/** Recharts animation defaults for dashboard graphs */
+export const CHART_ANIMATION = {
+  isAnimationActive: true,
+  animationDuration: 900,
+  animationEasing: 'ease-out' as const,
+};
+
+interface DashboardSectionProps {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}
+
+export function DashboardSection({ title, description, children }: DashboardSectionProps) {
+  return (
+    <section className="mb-8">
+      <div className="mb-4 border-b border-gray-100 pb-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">{title}</h3>
+        {description ? <p className="mt-1 text-sm text-gray-600">{description}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+interface DashboardAlertBannerProps {
+  items: string[];
+}
+
+export function DashboardAlertBanner({ items }: DashboardAlertBannerProps) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+      <p className="text-sm font-medium text-amber-900 mb-1">Needs attention</p>
+      <ul className="list-disc pl-5 text-sm text-amber-800 space-y-0.5">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function AnalyticsPageShell({ children }: { children: React.ReactNode }) {
   return <div className="p-8">{children}</div>;
 }

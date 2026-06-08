@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle2, AlertCircle, MapPin } from 'lucide-react';
+import { getCouncilApiName } from '@/lib/council-context';
 import {
   AnalyticsChartCard,
   AnalyticsErrorBanner,
@@ -43,11 +44,6 @@ interface Council {
   description?: string;
 }
 
-const getCouncilParam = (council?: Council | null) => {
-  const rawValue = council?.id || council?.name;
-  return rawValue ? rawValue.trim() : '';
-};
-
 const FILTER_MAP: Record<FilterType, string> = {
   Day: 'DAY',
   'Last Week': 'WEEK',
@@ -77,8 +73,8 @@ export function TotalCollection({
         const param = FILTER_MAP[filter];
         const url = new URL(`${BASE_URL}/api/admin/analytics`);
         url.searchParams.set('filter', param);
-        const councilParam = getCouncilParam(council);
-        if (councilParam) url.searchParams.set('council', councilParam);
+        const councilName = getCouncilApiName(council);
+        if (councilName) url.searchParams.set('council', councilName);
 
         const response = await fetch(url.toString());
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
