@@ -190,18 +190,11 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const councilRef = useRef(council);
   useEffect(() => { councilRef.current = council; }, [council]);
 
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
   useEffect(() => {
     if (initialCouncil?.name !== council?.name) {
       setCouncil(initialCouncil);
     }
   }, [initialCouncil]);
-
-  useEffect(() => {
-    const role = typeof window !== 'undefined' ? sessionStorage.getItem('role') : null;
-    setIsSuperAdmin(role?.toLowerCase() === 'superadmin' || role?.toLowerCase() === 'role_superadmin');
-  }, []);
 
   const [focusMode, setFocusMode] = useState(true);               // Toggle visual dimming mask on/off
 
@@ -1399,40 +1392,15 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
       {/* HORIZONTAL TOOLBAR — responsive, compact, consistent */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/70 backdrop-blur-xl border border-white/30 rounded-2xl shadow-xl px-2 py-1.5 gap-1 transition-all w-max max-w-[calc(100vw-2rem)]">
-        {/* Council Filter Dropdown or Static Badge */}
-        {isSuperAdmin ? (
-          <div className="flex items-center gap-1.5 bg-white/30 hover:bg-white/50 border border-white/20 rounded-xl px-2.5 py-1.5 transition-all shrink-0">
-            <Layers className="w-3.5 h-3.5 text-green-600 shrink-0" />
-            <select
-              value={council?.name || 'all'}
-              onChange={(e) => {
-                const selectedName = e.target.value;
-                if (selectedName === 'all') {
-                  setCouncil(null);
-                } else {
-                  setCouncil({ name: selectedName });
-                }
-              }}
-              className="bg-transparent border-none text-[11px] font-semibold text-slate-700 outline-none cursor-pointer min-w-0 max-w-[160px] truncate"
-            >
-              <option value="all">All Councils</option>
-              <option value="Colombo">Colombo</option>
-              <option value="Dehiwala-Mt. Lavinia">Dehiwala-Mt. Lavinia</option>
-              <option value="Kaduwela">Kaduwela</option>
-              <option value="Moratuwa">Moratuwa</option>
-              <option value="Sri Jayewardenepura Kotte">Sri J. Kotte</option>
-            </select>
-          </div>
-        ) : (
-          council?.name && (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 bg-emerald-50/80 text-emerald-700 border border-emerald-200/40 rounded-xl text-[11px] font-semibold shrink-0">
-              <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="truncate max-w-[120px]">{council.name}</span>
-            </div>
-          )
-        )}
+        {/* Council badge — filter controlled globally via top bar (F1) */}
+        <div className="flex items-center gap-1.5 px-2 py-1.5 bg-emerald-50/80 text-emerald-700 border border-emerald-200/40 rounded-xl text-[11px] font-semibold shrink-0">
+          <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+          <span className="truncate max-w-[160px]">
+            {council?.name || 'All Councils'}
+          </span>
+        </div>
 
-        {(isSuperAdmin || council?.name) && <div className="w-px h-5 bg-gray-300/40 shrink-0" />}
+        <div className="w-px h-5 bg-gray-300/40 shrink-0" />
 
         {/* Add Bin */}
         <button

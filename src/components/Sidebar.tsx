@@ -13,9 +13,6 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selectedCouncil }: SidebarProps) {
   const menuItems = [
-    ...(userRole === 'superadmin' ? [
-      { id: 'home' as PageType, label: 'Home', icon: LayoutDashboard },
-    ] : []),
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'schedule' as PageType, label: 'Bin Collection', icon: Calendar },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
