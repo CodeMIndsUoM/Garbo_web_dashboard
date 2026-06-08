@@ -11,7 +11,6 @@ import {
 import { Dashboard } from '@/components/Dashboard';
 import { BinManagement } from '@/components/BinManagement';
 import { VehicleManagement } from '@/components/VehicleManagement';
-import { WasteAnalytics } from '@/components/WasteAnalytics';
 import { Reports } from '@/components/Reports';
 import { Sidebar } from '@/components/Sidebar';
 import { Login } from '@/components/Login';
@@ -37,7 +36,6 @@ export type PageType =
   | 'bins'
   | 'map'
   | 'vehicles'
-  | 'analytics'
   | 'external-users'
   | 'gamification'
   | 'internal-users'
@@ -78,7 +76,12 @@ function AuthenticatedShell({
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard council={activeCouncil} />;
+        return (
+          <Dashboard
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+            council={activeCouncil}
+          />
+        );
       case 'bins':
         return (
           <BinManagement council={activeCouncil} userRole={userRole} />
@@ -89,13 +92,6 @@ function AuthenticatedShell({
         );
       case 'map':
         return <MapView council={activeCouncil} />;
-      case 'analytics':
-        return (
-          <WasteAnalytics
-            onNavigate={(page) => setCurrentPage(page as PageType)}
-            council={activeCouncil}
-          />
-        );
       case 'external-users':
         return <ExternalUsers council={activeCouncil} />;
       case 'gamification':
@@ -105,14 +101,14 @@ function AuthenticatedShell({
       case 'total-collection':
         return (
           <TotalCollection
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'bin-analytics':
         return (
           <BinAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             onNavigate={(page) => setCurrentPage(page as PageType)}
             council={activeCouncil}
           />
@@ -120,35 +116,35 @@ function AuthenticatedShell({
       case 'staff-analytics':
         return (
           <StaffAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'complaint-analytics':
         return (
           <ComplaintAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'third-party-analytics':
         return (
           <ThirdPartyAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'vehicle-analytics':
         return (
           <VehicleAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'bin-report-analytics':
         return (
           <BinReportAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
@@ -173,7 +169,12 @@ function AuthenticatedShell({
           <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />
         );
       default:
-        return <Dashboard council={activeCouncil} />;
+        return (
+          <Dashboard
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+            council={activeCouncil}
+          />
+        );
     }
   };
 

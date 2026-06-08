@@ -104,7 +104,7 @@ export function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <AuthShell title="Sign in" subtitle="Enter your credentials to access the Garbo dashboard.">
+    <AuthShell title="Sign in" subtitle="Enter your credentials to access the admin dashboard.">
       <form onSubmit={submit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="login-email" className={typography.label}>
