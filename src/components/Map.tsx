@@ -31,12 +31,20 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Switch } from "./ui/switch";
 import { GarboLoader } from "./GarboLoader";
+import { MapSidePanel } from "./map/MapSidePanel";
+import { useCouncil } from "@/lib/council-context";
 import { toast } from "sonner";
+import {
+  DEFAULT_VEHICLE_MAX_BINS,
+  getVehicleMaxBins,
+  isVehicleCapacitySufficient,
+  vehicleCapacityLabel,
+} from "@/lib/vehicle-capacity";
 
 const API_ORIGIN = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'; // Base URL for all API calls; overridable via env
 const BINS_API = `${API_ORIGIN}/api/bins`; // REST endpoint for bin CRUD operations
 const ROUTE_SESSION_API = `${API_ORIGIN}/api/route-sessions`; // REST endpoint for route session management
-const DEFAULT_VEHICLE_CAPACITY = 25; // Fallback capacity when vehicle data is unavailable
+const AUTO_ROUTE_PREVIEW_API = `${ROUTE_SESSION_API}/auto-preview`;
 const ROUTE_COLORS = ['#16a34a', '#2563eb', '#ea580c', '#7c3aed', '#db2777', '#0891b2']; // Distinct colors cycled per vehicle route
 
 // Maps bin fill status strings to their corresponding indicator colors
@@ -168,6 +176,25 @@ interface LoadedRouteSession {
   color: string;
 }
 
+interface DraftRoute {
+  draftId: string;
+  binIds: number[];
+  binCount: number;
+  suggestedZone?: string | null;
+}
+
+interface AutoRoutePreview {
+  totalBinsNeedingCollection: number;
+  fleetSummary: { availableVehicles: number; totalMaxBins: number };
+  draftRoutes: DraftRoute[];
+  warnings: string[];
+}
+
+interface DraftAssignment {
+  vehicleId: string;
+  driverId: string;
+}
+
 interface CouncilBoundaryDTO {
   council: string;
   depotLat: number;
@@ -179,11 +206,14 @@ type BinMarkersMap = Map<string, { marker: L.Marker; data: BinData }>; // Maps b
 type LatLngTuple = [number, number];
 
 export default function MapView({ council: initialCouncil }: { council?: { name?: string } | null }) {
+  const { isSuperadmin, selectedCouncilId, setSelectedCouncilId, councils } = useCouncil();
 
   const mapRef = useRef<HTMLDivElement | null>(null);   // DOM node that Leaflet mounts into
   const leafletMapRef = useRef<L.Map | null>(null);            // Leaflet map instance; null before initialisation
   const addModeRef = useRef(false);                         // Ref mirror of addMode — readable inside map event closures without stale state
   const routeLayerRef = useRef<L.FeatureGroup | null>(null);   // Parent layer group for all route sessions
+  const draftPreviewLayerRef = useRef<L.FeatureGroup | null>(null); // Auto-route draft preview polylines
+  const draftHighlightedBinIdsRef = useRef<Set<string>>(new Set());
   const sessionLayersRef = useRef<Map<string, L.FeatureGroup>>(new Map());
   const sessionSnapshotsRef = useRef<Map<string, RouteSessionSnapshot>>(new Map());
   const visibleSessionIdsRef = useRef<Record<string, boolean>>({});
@@ -242,6 +272,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const [isPlannerExpanded, setIsPlannerExpanded] = useState(false);
   const [showHistorySheet, setShowHistorySheet] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
+  const [showRoutePlanner, setShowRoutePlanner] = useState(false);
+  const [routePlannerTab, setRoutePlannerTab] = useState<'manual' | 'auto'>('manual');
+  const [autoRouteLoading, setAutoRouteLoading] = useState(false);
+  const [autoRoutePreview, setAutoRoutePreview] = useState<AutoRoutePreview | null>(null);
+  const [draftAssignments, setDraftAssignments] = useState<Record<string, DraftAssignment>>({});
+  const [focusedDraftId, setFocusedDraftId] = useState<string | null>(null);
+  const [confirmingDraftId, setConfirmingDraftId] = useState<string | null>(null);
+  const [confirmedDraftIds, setConfirmedDraftIds] = useState<string[]>([]);
   const [councilTransitioning, setCouncilTransitioning] = useState(false);
   const [historyTab, setHistoryTab] = useState<'all' | 'active' | 'completed'>('all');
   const [hoverPreview, setHoverPreview] = useState(false);
@@ -372,7 +410,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       } catch (e) { console.error('Failed to fetch routing resources', e); }
     };
     fetchResources();
-  }, [selectionMode, council?.name]);
+  }, [showRoutePlanner, council?.name]);
 
   // Reset bin selection and routing states when the council context changes
   useEffect(() => {
@@ -527,6 +565,176 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     if (routeLayerRef.current) routeLayerRef.current.clearLayers();
   };
 
+  const clearDraftRoutePreview = () => {
+    if (draftPreviewLayerRef.current) {
+      draftPreviewLayerRef.current.clearLayers();
+    }
+    for (const id of draftHighlightedBinIdsRef.current) {
+      const entry = markers.get(id);
+      if (entry && !selectedBins.includes(id) && !selectedBinsToDelete.includes(id)) {
+        entry.marker.setIcon(
+          getStatusIcon(id, entry.data.status, entry.data.fillLevel, false)
+        );
+      }
+    }
+    draftHighlightedBinIdsRef.current.clear();
+  };
+
+  const applyDraftBinHighlights = (
+    preview: AutoRoutePreview,
+    focusId: string | null,
+    confirmed: string[]
+  ) => {
+    for (const id of draftHighlightedBinIdsRef.current) {
+      const entry = markers.get(id);
+      if (entry && !selectedBins.includes(id) && !selectedBinsToDelete.includes(id)) {
+        entry.marker.setIcon(
+          getStatusIcon(id, entry.data.status, entry.data.fillLevel, false)
+        );
+      }
+    }
+    draftHighlightedBinIdsRef.current.clear();
+
+    const drafts = preview.draftRoutes.filter((d) => !confirmed.includes(d.draftId));
+    const toHighlight = focusId
+      ? drafts.filter((d) => d.draftId === focusId)
+      : drafts;
+
+    for (const draft of toHighlight) {
+      for (const binId of draft.binIds) {
+        const id = String(binId);
+        const entry = markers.get(id);
+        if (entry) {
+          entry.marker.setIcon(
+            getStatusIcon(id, entry.data.status, entry.data.fillLevel, 'route')
+          );
+          draftHighlightedBinIdsRef.current.add(id);
+        }
+      }
+    }
+  };
+
+  // Road-snapped route line (OSRM) clipped to council boundary via Turf — same as confirmed routes
+  const drawRoadSnappedPath = async (
+    pathCoordinates: [number, number][],
+    targetLayer: L.FeatureGroup,
+    options: {
+      color: string;
+      weight?: number;
+      opacity?: number;
+      dashArray?: string;
+      className?: string;
+      tooltip?: string;
+      isCompleted?: boolean;
+    }
+  ) => {
+    if (!leafletMapRef.current || pathCoordinates.length < 2) return;
+
+    const routeColor = options.isCompleted ? '#475569' : options.color;
+    const className = options.isCompleted ? '' : (options.className ?? 'animate-route-flow');
+    const dashArray = options.isCompleted ? undefined : (options.dashArray ?? '10, 10');
+    const osrmCoordString = pathCoordinates.map(([lat, lng]) => `${lng},${lat}`).join(';');
+
+    try {
+      const osrmRes = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${osrmCoordString}?overview=full&geometries=geojson`
+      );
+      if (!osrmRes.ok) throw new Error('OSRM request failed');
+      const osrmJson = await osrmRes.json();
+      const coords = osrmJson?.routes?.[0]?.geometry?.coordinates;
+      if (!coords || !Array.isArray(coords) || coords.length === 0) throw new Error('No OSRM geometry');
+      const latLngs: [number, number][] = coords.map((c: [number, number]) => [c[1], c[0]]);
+      const clippedSegments = clipPolylineToCouncil(latLngs);
+      clippedSegments.forEach((segment, index) => {
+        L.polyline(segment, {
+          color: routeColor,
+          weight: options.weight ?? 5,
+          opacity: options.opacity ?? 0.85,
+          className,
+          dashArray,
+        })
+          .bindTooltip(`${options.tooltip ?? 'Route'}${index > 0 ? ' (continued)' : ''}`)
+          .addTo(targetLayer);
+      });
+    } catch {
+      const clippedSegments = clipPolylineToCouncil(pathCoordinates);
+      clippedSegments.forEach((segment, index) => {
+        L.polyline(segment, {
+          color: routeColor,
+          weight: options.weight ?? 4,
+          opacity: options.opacity ?? 0.75,
+          dashArray,
+          className,
+        })
+          .bindTooltip(`${options.tooltip ?? 'Route'} (fallback${index > 0 ? ' continued' : ''})`)
+          .addTo(targetLayer);
+      });
+    }
+  };
+
+  const renderDraftRoutesOnMap = async (
+    preview: AutoRoutePreview,
+    focusId: string | null,
+    confirmed: string[]
+  ) => {
+    if (!leafletMapRef.current || !draftPreviewLayerRef.current) return;
+
+    draftPreviewLayerRef.current.clearLayers();
+    applyDraftBinHighlights(preview, focusId, confirmed);
+
+    const depotLat = boundaryData?.depotLat ?? 6.775080;
+    const depotLng = boundaryData?.depotLng ?? 79.882289;
+    const bounds = L.latLngBounds([[depotLat, depotLng]]);
+
+    const activeDrafts = preview.draftRoutes.filter((d) => !confirmed.includes(d.draftId));
+    const draftsToShow = focusId
+      ? activeDrafts.filter((d) => d.draftId === focusId)
+      : activeDrafts;
+
+    await Promise.all(
+      draftsToShow.map(async (draft, idx) => {
+        const color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
+        const stops: [number, number][] = [];
+
+        for (const binId of draft.binIds) {
+          const entry = markers.get(String(binId));
+          if (entry?.data.lat && entry?.data.lng) {
+            stops.push([entry.data.lat, entry.data.lng]);
+            bounds.extend([entry.data.lat, entry.data.lng]);
+          }
+        }
+
+        if (stops.length === 0) return;
+
+        const path: [number, number][] = [[depotLat, depotLng], ...stops, [depotLat, depotLng]];
+        await drawRoadSnappedPath(path, draftPreviewLayerRef.current!, {
+          color,
+          weight: 5,
+          opacity: 0.9,
+          dashArray: '12, 8',
+          className: 'animate-route-flow',
+          tooltip: `Route ${idx + 1} · ${draft.binCount} bins`,
+        });
+
+        stops.forEach(([lat, lng]) => {
+          L.circleMarker([lat, lng], {
+            radius: 7,
+            color,
+            fillColor: color,
+            fillOpacity: 0.35,
+            weight: 2,
+          })
+            .bindTooltip(`Route ${idx + 1}`)
+            .addTo(draftPreviewLayerRef.current!);
+        });
+      })
+    );
+
+    if (bounds.isValid() && draftsToShow.length > 0) {
+      leafletMapRef.current.fitBounds(bounds.pad(0.12), { animate: true, maxZoom: 16 });
+    }
+  };
+
   const isPointInsideCouncil = (lat: number, lng: number) => {
     if (!turfPolyRef.current) return true;
     return booleanPointInPolygon(point([lng, lat]), turfPolyRef.current);
@@ -647,7 +855,294 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     } catch { return 1; }
   };
 
-  // Builds a road-snapped polyline for one vehicle's stops using OSRM, falling back to straight lines on failure
+  const closeMapSidePanels = (except?: 'history' | 'legend' | 'routePlanner') => {
+    if (except !== 'history') setShowHistorySheet(false);
+    if (except !== 'legend') setShowLegend(false);
+    if (except !== 'routePlanner') {
+      setShowRoutePlanner(false);
+      setRoutePlannerTab('manual');
+      setSelectionMode(false);
+      setAutoRoutePreview(null);
+      setDraftAssignments({});
+      setFocusedDraftId(null);
+      setConfirmedDraftIds([]);
+      clearDraftRoutePreview();
+      clearSelectedBinIcons(selectedBins);
+      setSelectedBins([]);
+    }
+  };
+
+  const closeRoutePlanner = () => {
+    setShowRoutePlanner(false);
+    setRoutePlannerTab('manual');
+    setSelectionMode(false);
+    setAutoRoutePreview(null);
+    setDraftAssignments({});
+    setFocusedDraftId(null);
+    setConfirmedDraftIds([]);
+    clearDraftRoutePreview();
+    clearSelectedBinIcons(selectedBins);
+    setSelectedBins([]);
+  };
+
+  const loadAutoRoutePreview = async () => {
+    const councilName = council?.name;
+    if (!councilName) {
+      toast.error('Select a council first');
+      return;
+    }
+    setAutoRouteLoading(true);
+    try {
+      const res = await fetch(AUTO_ROUTE_PREVIEW_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          council: councilName,
+          minFillStatus: ['full', 'half'],
+          useZones: true,
+        }),
+      });
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = 'Auto route preview failed';
+        try {
+          const body = JSON.parse(raw) as { error?: string; message?: string };
+          message = body.error || body.message || message;
+        } catch {
+          if (raw) message = raw;
+        }
+        throw new Error(message);
+      }
+      const preview = (await res.json()) as AutoRoutePreview;
+      setAutoRoutePreview(preview);
+      const initial: Record<string, DraftAssignment> = {};
+      for (const d of preview.draftRoutes) {
+        initial[d.draftId] = { vehicleId: '', driverId: '' };
+      }
+      setDraftAssignments(initial);
+      setConfirmedDraftIds([]);
+      setFocusedDraftId(preview.draftRoutes[0]?.draftId ?? null);
+      if (preview.draftRoutes.length === 0) {
+        toast.warning('No route drafts generated — check bins and vehicles');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Could not generate auto route preview');
+    } finally {
+      setAutoRouteLoading(false);
+    }
+  };
+
+  const openRoutePlanner = (tab: 'manual' | 'auto' = 'manual') => {
+    if (!council?.name) {
+      toast.error('Select a council first');
+      return;
+    }
+    closeMapSidePanels('routePlanner');
+    setAddMode(false);
+    setDeleteSelectionMode(false);
+    clearSelectedBinIcons(selectedBinsToDelete);
+    setSelectedBinsToDelete([]);
+    setShowRoutePlanner(true);
+    setRoutePlannerTab(tab);
+    if (tab === 'manual') {
+      setSelectionMode(true);
+      setAutoRoutePreview(null);
+      setSelectedBins([]);
+    } else {
+      setSelectionMode(false);
+      clearSelectedBinIcons(selectedBins);
+      setSelectedBins([]);
+      setAutoRoutePreview(null);
+      setConfirmedDraftIds([]);
+      setFocusedDraftId(null);
+      clearDraftRoutePreview();
+    }
+  };
+
+  const switchRoutePlannerTab = (tab: 'manual' | 'auto') => {
+    if (tab === routePlannerTab) return;
+    setRoutePlannerTab(tab);
+    if (tab === 'manual') {
+      setSelectionMode(true);
+      setAutoRoutePreview(null);
+      setDraftAssignments({});
+      setConfirmedDraftIds([]);
+      setFocusedDraftId(null);
+      clearDraftRoutePreview();
+    } else {
+      setSelectionMode(false);
+      clearSelectedBinIcons(selectedBins);
+      setSelectedBins([]);
+      setAutoRoutePreview(null);
+      setConfirmedDraftIds([]);
+      setFocusedDraftId(null);
+      clearDraftRoutePreview();
+    }
+  };
+
+  const createRouteSession = async (
+    selectedBinIds: number[],
+    vehicleId: string,
+    driverId: string
+  ) => {
+    const vehicle = vehicles.find((v) => String(v.id) === vehicleId);
+    const capacity = vehicle ? getVehicleMaxBins(vehicle) : DEFAULT_VEHICLE_MAX_BINS;
+    const res = await fetch(ROUTE_SESSION_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({
+        userId: getCurrentUserId(),
+        vehicleCount: 1,
+        vehicleCapacities: [capacity],
+        depotLat: boundaryData?.depotLat ?? 6.775080,
+        depotLng: boundaryData?.depotLng ?? 79.882289,
+        selectedBinIds,
+        vehicleId: Number(vehicleId),
+        driverId: Number(driverId),
+      }),
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(errorText || 'Failed to create route session');
+    }
+    const snapshot = (await res.json()) as RouteSessionSnapshot;
+    setRouteStatus(snapshot.status || 'PROCESSING');
+    setRouteError('');
+    setActiveSessionId(snapshot.sessionId);
+    if (snapshot.status === 'READY') await visualizeRoutes(snapshot);
+    const driver = drivers.find((d) => String(d.empId) === driverId);
+    const newRouteItem = {
+      id: Date.now(),
+      sessionId: snapshot.sessionId,
+      vehicleCode: vehicle?.licensePlate || vehicle?.vehicleCode || 'Unknown',
+      driverName: driver?.empName || 'Unnamed',
+      status: snapshot.status || 'READY',
+      createdDate: new Date().toISOString(),
+    };
+    setAssignedRoutes((prev) => [newRouteItem, ...prev]);
+    loadRouteHistory();
+    connectRouteSocket(snapshot.sessionId);
+    return snapshot;
+  };
+
+  const handleGenerateManualRoute = async () => {
+    if (selectedBins.length === 0) {
+      toast.error('Please select at least one bin');
+      return;
+    }
+    if (!selectedVehicleId) {
+      toast.error('Please select a vehicle');
+      return;
+    }
+    if (!selectedDriverId) {
+      toast.error('Please select a driver');
+      return;
+    }
+    const vehicle = vehicles.find((v) => String(v.id) === selectedVehicleId);
+    if (vehicle && !isVehicleCapacitySufficient(vehicle, selectedBins.length)) {
+      toast.error(`Vehicle capacity too low (needs ${selectedBins.length} bins)`);
+      return;
+    }
+    setIsGeneratingRoute(true);
+    try {
+      const selectedBinIds = selectedBins.map((id) => Number(id)).filter((id) => Number.isFinite(id));
+      await createRouteSession(selectedBinIds, selectedVehicleId, selectedDriverId);
+      closeRoutePlanner();
+      toast.success('Route generated successfully!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Error generating routes');
+    } finally {
+      setIsGeneratingRoute(false);
+    }
+  };
+
+  const handleConfirmSingleDraft = async (draft: DraftRoute, routeLabel: string) => {
+    const assignment = draftAssignments[draft.draftId];
+    if (!assignment?.vehicleId) {
+      toast.error(`Select a vehicle for ${routeLabel}`);
+      return;
+    }
+    if (!assignment?.driverId) {
+      toast.error(`Select a driver for ${routeLabel}`);
+      return;
+    }
+    const vehicle = vehicles.find((v) => String(v.id) === assignment.vehicleId);
+    if (vehicle && !isVehicleCapacitySufficient(vehicle, draft.binCount)) {
+      toast.error(`${routeLabel}: vehicle capacity too low (${draft.binCount} bins)`);
+      return;
+    }
+    setConfirmingDraftId(draft.draftId);
+    try {
+      await createRouteSession(draft.binIds, assignment.vehicleId, assignment.driverId);
+      setConfirmedDraftIds((prev) => {
+        const next = [...prev, draft.draftId];
+        const remaining = (autoRoutePreview?.draftRoutes ?? []).filter(
+          (d) => !next.includes(d.draftId)
+        );
+        if (remaining.length === 0) {
+          setTimeout(() => closeRoutePlanner(), 0);
+        } else {
+          setFocusedDraftId(remaining[0]?.draftId ?? null);
+        }
+        return next;
+      });
+      toast.success(`${routeLabel} confirmed and optimized`);
+    } catch (e) {
+      console.error(e);
+      toast.error(`Failed to confirm ${routeLabel}`);
+    } finally {
+      setConfirmingDraftId(null);
+    }
+  };
+
+  const renderVehicleOptions = (requiredBins: number, selectedId: string) => (
+    <>
+      <option value="">-- Vehicle --</option>
+      {vehicles.map((v) => {
+        const sufficient = isVehicleCapacitySufficient(v, requiredBins);
+        const label = `${v.licensePlate || v.vehicleCode} (${vehicleCapacityLabel(v)})`;
+        return (
+          <option
+            key={v.id}
+            value={v.id}
+            disabled={!sufficient}
+            title={
+              sufficient
+                ? label
+                : `Not enough capacity (needs ${requiredBins}, max ${getVehicleMaxBins(v)})`
+            }
+            className={sufficient ? '' : 'text-slate-400'}
+          >
+            {sufficient ? label : `${label} — insufficient`}
+          </option>
+        );
+      })}
+    </>
+  );
+
+  const routeSessionFooter =
+    routeStatus || routeError || activeSessionId ? (
+      <div className="text-xs text-slate-700 space-y-1">
+        <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          Active Route Session
+        </div>
+        {activeSessionId && (
+          <div className="text-[10px] text-slate-500 font-mono truncate">ID: {activeSessionId}</div>
+        )}
+        {routeStatus && (
+          <div>
+            Status:{' '}
+            <span className="font-semibold text-emerald-700 uppercase">{routeStatus}</span>
+          </div>
+        )}
+        {routeError && <div className="text-red-600 font-medium">{routeError}</div>}
+      </div>
+    ) : null;
+
+  // Builds a road-snapped polyline for one vehicle's stops (confirmed / history routes)
   const buildRoadPolyline = async (
     stops: RouteBinStop[],
     strokeColor: string,
@@ -657,65 +1152,52 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   ) => {
     if (!leafletMapRef.current || stops.length === 0) return;
 
-    // Use council-specific depot coordinates if available, otherwise fall back to Moratuwa defaults
     const depotLat = boundaryData?.depotLat ?? 6.775080;
     const depotLng = boundaryData?.depotLng ?? 79.882289;
-
-    // Route starts and ends at the depot, with bin stops in between
     const pathCoordinates: [number, number][] = [
       [depotLat, depotLng],
-      ...stops.map(stop => [stop.lat, stop.lng] as [number, number]),
-      [depotLat, depotLng] // Return to depot at the end of the route
+      ...stops.map((stop) => [stop.lat, stop.lng] as [number, number]),
+      [depotLat, depotLng],
     ];
 
-    // OSRM expects coordinates as lng,lat pairs in the URL
-    const osrmCoordString = pathCoordinates.map(([lat, lng]) => `${lng},${lat}`).join(';');
+    await drawRoadSnappedPath(pathCoordinates, targetLayer, {
+      color: strokeColor,
+      tooltip: `Vehicle ${vehicleId}`,
+      isCompleted,
+    });
+  };
 
-    // Visual configurations based on completed vs active routes
-    const routeColor = isCompleted ? '#475569' : strokeColor;
-    const className = isCompleted ? '' : 'animate-route-flow';
-    const dashArray = isCompleted ? undefined : '10, 10';
+  const renderManualRoutePreview = async () => {
+    if (!leafletMapRef.current || !draftPreviewLayerRef.current) return;
+    draftPreviewLayerRef.current.clearLayers();
+    if (selectedBins.length === 0) return;
 
-    try {
-      const osrmRes = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${osrmCoordString}?overview=full&geometries=geojson`
-      );
-      if (!osrmRes.ok) throw new Error(`OSRM failed for vehicle ${vehicleId}`);
-      const osrmJson = await osrmRes.json();
-      const coords = osrmJson?.routes?.[0]?.geometry?.coordinates;
-      if (!coords || !Array.isArray(coords) || coords.length === 0) throw new Error('No geometry from OSRM');
-      const latLngs: [number, number][] = coords.map((c: [number, number]) => [c[1], c[0]]); // Convert GeoJSON [lng,lat] → Leaflet [lat,lng]
+    const depotLat = boundaryData?.depotLat ?? 6.775080;
+    const depotLng = boundaryData?.depotLng ?? 79.882289;
+    const stops: [number, number][] = [];
+    const bounds = L.latLngBounds([[depotLat, depotLng]]);
 
-      const clippedSegments = clipPolylineToCouncil(latLngs);
-      if (clippedSegments.length === 0) return;
+    for (const id of selectedBins) {
+      const entry = markers.get(id);
+      if (entry?.data.lat && entry?.data.lng) {
+        stops.push([entry.data.lat, entry.data.lng]);
+        bounds.extend([entry.data.lat, entry.data.lng]);
+      }
+    }
+    if (stops.length === 0) return;
 
-      clippedSegments.forEach((segment, index) => {
-        L.polyline(segment, {
-          color: routeColor,
-          weight: 5,
-          opacity: 0.85,
-          className,
-          dashArray
-        })
-          .bindTooltip(`Vehicle ${vehicleId}${index > 0 ? ' (continued)' : ''}`)
-          .addTo(targetLayer);
-      });
-    } catch {
-      // Fallback: draw a straight-line polyline
-      const clippedSegments = clipPolylineToCouncil(pathCoordinates);
-      if (clippedSegments.length === 0) return;
+    const path: [number, number][] = [[depotLat, depotLng], ...stops, [depotLat, depotLng]];
+    await drawRoadSnappedPath(path, draftPreviewLayerRef.current, {
+      color: ROUTE_COLORS[0],
+      weight: 5,
+      opacity: 0.9,
+      dashArray: '12, 8',
+      className: 'animate-route-flow',
+      tooltip: `Manual route · ${stops.length} bins`,
+    });
 
-      clippedSegments.forEach((segment, index) => {
-        L.polyline(segment, {
-          color: routeColor,
-          weight: 4,
-          opacity: 0.75,
-          dashArray: isCompleted ? undefined : '10, 10',
-          className
-        })
-          .bindTooltip(`Vehicle ${vehicleId} (fallback${index > 0 ? ' continued' : ''})`)
-          .addTo(targetLayer);
-      });
+    if (bounds.isValid()) {
+      leafletMapRef.current.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
     }
   };
 
@@ -912,7 +1394,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       });
       if (res.ok) {
         setAssignedRoutes([]);
+        setRouteStatus('');
+        setActiveSessionId('');
         clearRouteVisualization();
+        clearDraftRoutePreview();
         toast.success("Route history cleared successfully");
       } else {
         const json = await res.json();
@@ -1043,6 +1528,21 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     });
   }, [assignedRoutes, historyTab]);
 
+  const eligibleCollectionBins = useMemo(() => {
+    let count = 0;
+    markers.forEach((entry) => {
+      const status = (entry.data.status || '').toLowerCase();
+      if (status === 'full' || status === 'half') count += 1;
+    });
+    return count;
+  }, [markers]);
+
+  const fleetCapacitySummary = useMemo(() => {
+    const totalMaxBins = vehicles.reduce((sum, v) => sum + getVehicleMaxBins(v), 0);
+    const largest = vehicles.reduce((max, v) => Math.max(max, getVehicleMaxBins(v)), 0);
+    return { availableVehicles: vehicles.length, totalMaxBins, largestVehicleBins: largest };
+  }, [vehicles]);
+
   // ── MAP INIT — wait for boundary data ─────────────────────────────────────
   useEffect(() => {
     if (boundaryLoading) return; // Defer until boundary API response is resolved
@@ -1074,6 +1574,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     // Initialize boundary and route layers
     boundaryLayerRef.current = L.featureGroup().addTo(map);
     routeLayerRef.current = L.featureGroup().addTo(map);
+    draftPreviewLayerRef.current = L.featureGroup().addTo(map);
 
     map.on('click', (e: L.LeafletMouseEvent) => {
       setContextMenu(null); // Dismiss any open context menu on map click
@@ -1146,9 +1647,31 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     return () => {
       disconnectRouteSocket(); // Clean up WebSocket on component unmount
       if (routeLayerRef.current) routeLayerRef.current.clearLayers();
+      if (draftPreviewLayerRef.current) draftPreviewLayerRef.current.clearLayers();
       if (boundaryLayerRef.current) boundaryLayerRef.current.clearLayers();
     };
   }, [boundaryLoading]);
+
+  // Road-snapped preview for manual bin selection
+  useEffect(() => {
+    if (!showRoutePlanner || routePlannerTab !== 'manual' || boundaryLoading) return;
+    void renderManualRoutePreview();
+  }, [showRoutePlanner, routePlannerTab, selectedBins, markers, boundaryData, boundaryLoading]);
+
+  // Draw auto-route drafts on map (one focused route at a time) before confirm
+  useEffect(() => {
+    if (!showRoutePlanner || routePlannerTab !== 'auto' || !autoRoutePreview || boundaryLoading) return;
+    void renderDraftRoutesOnMap(autoRoutePreview, focusedDraftId, confirmedDraftIds);
+  }, [
+    showRoutePlanner,
+    autoRoutePreview,
+    routePlannerTab,
+    focusedDraftId,
+    confirmedDraftIds,
+    markers,
+    boundaryData,
+    boundaryLoading,
+  ]);
 
   // ── Helper: compute combined bounds of all councils (cached) ──
   const getAllCouncilBounds = (): L.LatLngBounds | null => {
@@ -1412,7 +1935,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(BINS_API, {
         method: "POST", headers,
-        body: JSON.stringify({ location: newBin.location, type: newBin.type, zone: newBin.zone, fillLevel: 0, priority: 'medium', status: 'empty', council: newBin.council })
+        body: JSON.stringify({ location: newBin.location, type: newBin.type, fillLevel: 0, priority: 'medium', status: 'empty', council: newBin.council })
       });
       if (!res.ok) {
         let errMessage = 'Failed to create bin';
@@ -1432,7 +1955,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       });
       setIsCreateModalOpen(false);
       setNewBin({ location: '', type: 'General Waste', zone: '', council: '' });
-      toast.success("Bin created successfully");
+      const zoneLabel = saved.zone ? ` (Zone ${saved.zone})` : '';
+      toast.success(`Bin created successfully${zoneLabel}`);
     } catch (err) {
       const e = err as Error;
       toast.error(e.message || "Error creating bin");
@@ -1699,12 +2223,26 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
       {/* HORIZONTAL TOOLBAR — responsive, compact, consistent */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/70 backdrop-blur-xl border border-white/30 rounded-2xl shadow-xl px-2 py-1.5 gap-1 transition-all w-max max-w-[calc(100vw-2rem)]">
-        {/* Council badge — filter controlled globally via top bar (F1) */}
+        {/* Council — superadmin selects here; council-admin sees read-only badge */}
         <div className="flex items-center gap-1.5 px-2 py-1.5 bg-emerald-50/80 text-emerald-700 border border-emerald-200/40 rounded-xl text-[11px] font-semibold shrink-0">
           <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="truncate max-w-[160px]">
-            {council?.name || 'All Councils'}
-          </span>
+          {isSuperadmin ? (
+            <select
+              value={selectedCouncilId === 'all' ? '' : selectedCouncilId}
+              onChange={(e) => setSelectedCouncilId(e.target.value || 'all')}
+              className="bg-transparent border-0 outline-none text-emerald-800 font-semibold text-[11px] max-w-[140px] truncate cursor-pointer"
+              title="Select council"
+            >
+              <option value="">Select council…</option>
+              {councils.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="truncate max-w-[160px]">{council?.name || 'Council'}</span>
+          )}
         </div>
 
         <div className="w-px h-5 bg-gray-300/40 shrink-0" />
@@ -1733,36 +2271,26 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
         <div className="w-px h-4 bg-gray-300/40 shrink-0" />
 
-        {/* Create Route */}
+        {/* Routes — manual + auto in one right-side panel (tabs) */}
         <button
-          title={selectionMode ? 'Selecting bins for route' : 'Create Route'}
+          title={showRoutePlanner ? 'Close route planner' : 'Plan collection routes'}
           onClick={() => {
-            const nextSelect = !selectionMode;
-            setSelectionMode(nextSelect);
-            if (nextSelect) {
-              setAddMode(false);
-              setDeleteSelectionMode(false);
-              clearSelectedBinIcons(selectedBinsToDelete);
-              setSelectedBinsToDelete([]);
-              setShowHistorySheet(false);
+            if (showRoutePlanner) {
+              closeRoutePlanner();
+            } else {
               clearRouteVisualization();
               setRouteStatus('');
               setRouteError('');
-              setSelectedBins([]);
-              setIsPlannerExpanded(true);
-            } else {
-              clearSelectedBinIcons(selectedBins);
-              setSelectedBins([]);
-              setIsPlannerExpanded(false);
+              openRoutePlanner('manual');
             }
           }}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${selectionMode
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showRoutePlanner
             ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
             : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
             }`}
         >
           <Navigation className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline">{selectionMode ? 'Selecting...' : 'Route'}</span>
+          <span className="hidden sm:inline">{showRoutePlanner ? 'Routes…' : 'Routes'}</span>
         </button>
 
         <div className="w-px h-4 bg-gray-300/40 shrink-0" />
@@ -1806,14 +2334,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           title="Route History"
           onClick={() => {
             const nextShow = !showHistorySheet;
-            setShowHistorySheet(nextShow);
             if (nextShow) {
-              setShowLegend(false);
+              closeMapSidePanels('history');
               setAddMode(false);
-              setSelectionMode(false);
-              clearSelectedBinIcons(selectedBins);
-              setSelectedBins([]);
+              setShowHistorySheet(true);
               loadRouteHistory();
+            } else {
+              setShowHistorySheet(false);
             }
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showHistorySheet
@@ -1850,8 +2377,12 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           title="Map Legend"
           onClick={() => {
             const next = !showLegend;
-            setShowLegend(next);
-            if (next) setShowHistorySheet(false);
+            if (next) {
+              closeMapSidePanels('legend');
+              setShowLegend(true);
+            } else {
+              setShowLegend(false);
+            }
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showLegend
             ? 'bg-slate-800 text-white shadow-sm hover:bg-slate-900'
@@ -1863,24 +2394,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         </button>
       </div>
 
-      {/* MAP LEGEND OVERLAY CARD */}
-      {showLegend && (
-        <div
-          style={{ zIndex: 999 }}
-          className="absolute top-20 right-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl p-5 gap-3 animate-in fade-in zoom-in-95 duration-200"
-        >
-          <div className="flex justify-between items-center border-b border-white/20 pb-2 shrink-0">
-            <span className="font-bold text-slate-800 text-sm">Map Legend</span>
-            <button
-              type="button"
-              onClick={() => setShowLegend(false)}
-              className="p-1 rounded-lg hover:bg-slate-200/50 text-slate-500 hover:text-slate-700 transition-colors text-xs"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-3 text-xs text-slate-700">
+      {/* MAP LEGEND SIDE PANEL */}
+      <MapSidePanel
+        open={showLegend}
+        onClose={() => setShowLegend(false)}
+        title="Map Legend"
+        icon={<Info className="w-5 h-5 text-slate-600 shrink-0" />}
+      >
+        <div className="p-5 flex flex-col gap-3 text-xs text-slate-700">
             {/* Bin markers — matches field-staff report statuses */}
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Bin markers (fill status)
@@ -1975,9 +2496,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                 <span>Council boundary outline</span>
               </div>
             </div>
-          </div>
         </div>
-      )}
+      </MapSidePanel>
 
       {/* CREATE BIN DIALOG */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
@@ -1995,11 +2515,9 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               <Input placeholder="lat, lng" value={newBin.location}
                 onChange={(e) => setNewBin({ ...newBin, location: e.target.value })} required />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Zone</label>
-              <Input type="number" min="1" placeholder="e.g. 1" value={newBin.zone}
-                onChange={(e) => setNewBin({ ...newBin, zone: e.target.value })} required />
-            </div>
+            <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+              Zone is assigned automatically from coordinates when you save.
+            </p>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Type</label>
               <Select value={newBin.type} onValueChange={(val) => setNewBin({ ...newBin, type: val })}>
@@ -2017,191 +2535,305 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         </DialogContent>
       </Dialog>
 
-      {/* COLLAPSIBLE ROUTE PLANNER BOTTOM DRAWER */}
-      {selectionMode && (
-        <div
-          style={{ zIndex: 999 }}
-          className={`absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] transition-all duration-300 ease-in-out flex flex-col ${isPlannerExpanded ? 'h-[280px]' : 'h-14'
-            }`}
-        >
-          {/* Header/Collapsed Panel Bar */}
-          <div
-            className="flex items-center justify-between px-6 h-14 border-b border-gray-100 shrink-0 cursor-pointer select-none bg-gray-50/50 hover:bg-gray-50/80 transition-colors"
-            onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
-          >
-            <div className="flex items-center gap-3">
-              {isPlannerExpanded ? (
-                <ChevronDown className="w-5 h-5 text-gray-500 animate-bounce" />
-              ) : (
-                <ChevronUp className="w-5 h-5 text-gray-500 animate-bounce" />
-              )}
-              <span className="font-semibold text-gray-800 text-sm">Route Planner & Setup</span>
-              <span className="bg-green-100 text-green-800 text-xs px-2.5 py-0.5 rounded-full font-semibold">
-                {selectedBins.length} Bins Selected
-              </span>
-            </div>
-            <div className="flex items-center gap-4" onClick={e => e.stopPropagation()}>
-              {!isPlannerExpanded && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs font-semibold"
-                  onClick={() => {
-                    setSelectionMode(false);
-                    clearSelectedBinIcons(selectedBins);
-                    setSelectedBins([]);
-                    setIsPlannerExpanded(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              )}
-              <button
-                onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
-                className="text-xs font-bold text-green-700 hover:text-green-800 transition-colors"
-              >
-                {isPlannerExpanded ? "Collapse" : "Expand Configuration"}
-              </button>
-            </div>
-          </div>
+      {/* ROUTE PLANNER SIDE PANEL (manual + auto) */}
+      <MapSidePanel
+        open={showRoutePlanner}
+        onClose={closeRoutePlanner}
+        title="Route Planner"
+        icon={<Navigation className="w-5 h-5 text-green-600 shrink-0" />}
+        headerExtra={
+          routePlannerTab === 'manual' ? (
+            <span className="bg-green-100 text-green-800 text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0">
+              {selectedBins.length} bins
+            </span>
+          ) : autoRoutePreview ? (
+            <span className="bg-green-100 text-green-800 text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0">
+              {autoRoutePreview.draftRoutes.filter((d) => !confirmedDraftIds.includes(d.draftId)).length} routes
+            </span>
+          ) : null
+        }
+        footer={routeSessionFooter ?? undefined}
+        bodyClassName="flex flex-col overflow-hidden"
+      >
+        {/* Manual / Auto tabs */}
+        <div className="px-5 pt-3 pb-2 border-b border-white/20 flex gap-2 shrink-0">
+          {(['manual', 'auto'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => switchRoutePlannerTab(tab)}
+              className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all ${routePlannerTab === tab
+                ? 'bg-green-600 text-white shadow-sm'
+                : 'bg-white/55 text-slate-600 border border-slate-200/50 hover:bg-white/80'
+                }`}
+            >
+              {tab === 'manual' ? 'Manual Route' : 'Auto Route'}
+            </button>
+          ))}
+        </div>
 
-          {/* Expanded Configuration Details */}
-          {isPlannerExpanded && (
-            <div className="p-5 flex flex-col md:flex-row gap-6 overflow-hidden flex-1 bg-white">
-              {/* Left Column: Selected Bins Tag Chips */}
-              <div className="flex-1 flex flex-col gap-2 min-w-0">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Selected Bins</span>
-                {selectedBins.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                    <MapPin className="w-6 h-6 text-gray-300 mb-1" />
-                    <p className="text-gray-400 text-xs text-center">Click bins on the map to add them to this route</p>
+        <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
+          {routePlannerTab === 'auto' ? (
+            <>
+              {autoRouteLoading ? (
+                <div className="flex flex-col items-center py-12 gap-3">
+                  <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+                  <p className="text-xs text-slate-500">Analysing bins and fleet capacity...</p>
+                </div>
+              ) : !autoRoutePreview ? (
+                <>
+                  <div className="text-[11px] text-slate-600 bg-slate-50/60 rounded-xl p-3 border border-white/40 space-y-2">
+                    <p className="font-semibold text-slate-800">Auto Route</p>
+                    <p>
+                      <strong>{eligibleCollectionBins}</strong> bins need collection (full / half)
+                    </p>
+                    <p>
+                      Fleet: <strong>{fleetCapacitySummary.availableVehicles}</strong> vehicles ·{' '}
+                      <strong>{fleetCapacitySummary.totalMaxBins}</strong> total bin capacity
+                    </p>
+                    <p className="text-slate-500">
+                      Click generate — bins are auto-selected by fill level and map clustering. You assign vehicle & driver per route, then confirm one by one.
+                    </p>
                   </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] p-2 border border-gray-100 rounded-xl bg-slate-50/50">
-                    {selectedBins.map(id => {
-                      const entry = markers.get(id);
-                      return (
-                        <div key={id} className="flex items-center gap-1.5 bg-white text-gray-800 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 shadow-sm shrink-0">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}></span>
-                          <span>{entry?.data.binCode || id}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleBinSelection(id)}
-                            className="text-gray-400 hover:text-red-500 font-bold ml-1 transition-colors"
-                          >
-                            ✕
-                          </button>
+                  <Button
+                    className="w-full bg-green-600 hover:bg-green-700 text-white text-sm font-semibold h-11"
+                    disabled={autoRouteLoading || eligibleCollectionBins === 0 || fleetCapacitySummary.availableVehicles === 0}
+                    onClick={() => void loadAutoRoutePreview()}
+                  >
+                    <Navigation className="w-4 h-4 mr-2" />
+                    Generate Routes
+                  </Button>
+                  {eligibleCollectionBins === 0 && (
+                    <p className="text-[10px] text-amber-700 text-center">No full or half bins in this council yet.</p>
+                  )}
+                </>
+              ) : autoRoutePreview ? (
+                <>
+                  <div className="text-[11px] text-slate-600 bg-slate-50/60 rounded-xl p-3 border border-white/40 space-y-2">
+                    <p className="font-semibold text-slate-800">Generated routes — confirm one at a time</p>
+                    <p>
+                      <strong>{autoRoutePreview.totalBinsNeedingCollection}</strong> bins need collection →{' '}
+                      <strong>{autoRoutePreview.draftRoutes.length}</strong> route(s) created
+                    </p>
+                    <p>
+                      Fleet: <strong>{autoRoutePreview.fleetSummary.availableVehicles}</strong> vehicles ·{' '}
+                      <strong>{autoRoutePreview.fleetSummary.totalMaxBins}</strong> total bin capacity
+                    </p>
+                    <p className="text-slate-500">Bins auto-selected by fill level + map clustering. Assign vehicle & driver per route.</p>
+                  </div>
+                  {autoRoutePreview.warnings.map((w) => (
+                    <p key={w} className="text-[11px] text-amber-700 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
+                      {w}
+                    </p>
+                  ))}
+                  <div className="space-y-3">
+                    {autoRoutePreview.draftRoutes
+                      .filter((d) => !confirmedDraftIds.includes(d.draftId))
+                      .map((draft, idx) => {
+                        const routeColor = ROUTE_COLORS[idx % ROUTE_COLORS.length];
+                        const isFocused = focusedDraftId === draft.draftId;
+                        return (
+                      <div
+                        key={draft.draftId}
+                        className={`rounded-xl border p-3 space-y-2 shadow-sm transition-all cursor-pointer ${isFocused
+                          ? 'border-green-300/80 bg-green-50/40 ring-1 ring-green-200/60'
+                          : 'border-white/40 bg-white/55 hover:bg-white/70'
+                          }`}
+                        onClick={() => setFocusedDraftId(draft.draftId)}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0 border border-white shadow-sm"
+                              style={{ backgroundColor: routeColor }}
+                            />
+                            <span className="text-xs font-bold text-slate-800 truncate">
+                              Route {idx + 1}
+                              {draft.suggestedZone ? ` · Zone ${draft.suggestedZone}` : ''}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full shrink-0">
+                            {draft.binCount} bins
+                          </span>
                         </div>
-                      );
+                        {isFocused && (
+                          <p className="text-[10px] text-green-700">Shown on map — road route + highlighted bins</p>
+                        )}
+                        <div className="grid grid-cols-1 gap-2">
+                          <div>
+                            <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                              Vehicle
+                            </label>
+                            <select
+                              value={draftAssignments[draft.draftId]?.vehicleId ?? ''}
+                              onChange={(e) =>
+                                setDraftAssignments((prev) => ({
+                                  ...prev,
+                                  [draft.draftId]: {
+                                    vehicleId: e.target.value,
+                                    driverId: prev[draft.draftId]?.driverId ?? '',
+                                  },
+                                }))
+                              }
+                              className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                            >
+                              {renderVehicleOptions(draft.binCount, draftAssignments[draft.draftId]?.vehicleId ?? '')}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                              Driver
+                            </label>
+                            <select
+                              value={draftAssignments[draft.draftId]?.driverId ?? ''}
+                              onChange={(e) =>
+                                setDraftAssignments((prev) => ({
+                                  ...prev,
+                                  [draft.draftId]: {
+                                    vehicleId: prev[draft.draftId]?.vehicleId ?? '',
+                                    driverId: e.target.value,
+                                  },
+                                }))
+                              }
+                              className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                            >
+                              <option value="">-- Driver --</option>
+                              {drivers.map((d) => (
+                                <option key={d.empId} value={d.empId}>
+                                  {d.empName || 'Unnamed'}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <Button
+                          disabled={confirmingDraftId === draft.draftId}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white text-xs font-semibold h-9 disabled:opacity-50 flex items-center justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleConfirmSingleDraft(draft, `Route ${idx + 1}`);
+                          }}
+                        >
+                          {confirmingDraftId === draft.draftId ? (
+                            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Navigation className="w-3.5 h-3.5 mr-1.5" />
+                          )}
+                          {confirmingDraftId === draft.draftId ? 'Optimizing...' : 'Confirm This Route'}
+                        </Button>
+                      </div>
+                    );
                     })}
                   </div>
-                )}
-              </div>
-
-              {/* Right Column: Setup Dropdowns and Actions */}
-              <div className="w-full md:w-80 flex flex-col justify-between gap-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-gray-500 mb-1 text-[10px] font-bold uppercase tracking-wider">Select Vehicle</label>
-                    <select value={selectedVehicleId} onChange={e => setSelectedVehicleId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 shadow-sm transition-colors">
-                      <option value="">-- Vehicle --</option>
-                      {vehicles.map(v => <option key={v.id} value={v.id}>{v.licensePlate || v.vehicleCode} (Cap: {v.capacity || 25})</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-500 mb-1 text-[10px] font-bold uppercase tracking-wider">Select Driver</label>
-                    <select value={selectedDriverId} onChange={e => setSelectedDriverId(e.target.value)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 shadow-sm transition-colors">
-                      <option value="">-- Driver --</option>
-                      {drivers.map(d => <option key={d.empId} value={d.empId}>{d.empName || 'Unnamed'}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 mt-auto">
                   <Button
                     variant="outline"
-                    className="flex-1 text-xs h-10 border-gray-200"
-                    onClick={() => {
-                      clearSelectedBinIcons(selectedBins);
-                      setSelectedBins([]);
-                    }}
+                    className="w-full text-xs h-10"
+                    onClick={() => void loadAutoRoutePreview()}
+                    disabled={autoRouteLoading}
                   >
-                    Clear All
+                    Regenerate Routes
                   </Button>
-                  <Button
-                    disabled={isGeneratingRoute}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold h-10 transition-all shadow-md disabled:opacity-50 flex items-center justify-center"
-                    onClick={async () => {
-                      if (selectedBins.length === 0) { toast.error("Please select at least one bin"); return; }
-                      if (!selectedVehicleId) { toast.error("Please select a vehicle"); return; }
-                      if (!selectedDriverId) { toast.error("Please select a driver"); return; }
-                      const vehicle = vehicles.find(v => String(v.id) === selectedVehicleId);
-                      const capacity = vehicle?.capacity || DEFAULT_VEHICLE_CAPACITY;
-                      setIsGeneratingRoute(true);
-                      try {
-                        const selectedBinIds = selectedBins.map(id => Number(id)).filter(id => Number.isFinite(id));
-                        const res = await fetch(ROUTE_SESSION_API, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            userId: getCurrentUserId(), vehicleCount: 1,
-                            vehicleCapacities: [capacity],
-                            depotLat: boundaryData?.depotLat ?? 6.775080,
-                            depotLng: boundaryData?.depotLng ?? 79.882289,
-                            selectedBinIds,
-                            vehicleId: Number(selectedVehicleId),
-                            driverId: Number(selectedDriverId)
-                          })
-                        });
-                        if (!res.ok) { const errorText = await res.text(); throw new Error(errorText || 'Failed to create route session'); }
-                        const snapshot = await res.json() as RouteSessionSnapshot;
-                        setRouteStatus(snapshot.status || 'PROCESSING');
-                        setRouteError('');
-                        setActiveSessionId(snapshot.sessionId);
-                        if (snapshot.status === 'READY') await visualizeRoutes(snapshot);
-                        
-                        // Prepend newly created route to history in real time
-                        const driver = drivers.find(d => String(d.empId) === selectedDriverId);
-                        const newRouteItem = {
-                          id: Date.now(),
-                          sessionId: snapshot.sessionId,
-                          vehicleCode: vehicle?.licensePlate || vehicle?.vehicleCode || "Unknown",
-                          driverName: driver?.empName || "Unnamed",
-                          status: snapshot.status || "READY",
-                          createdDate: new Date().toISOString()
-                        };
-                        setAssignedRoutes(prev => [newRouteItem, ...prev]);
-                        loadRouteHistory();
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Selected Bins</span>
+              {selectedBins.length === 0 ? (
+                <div className="flex flex-col items-center justify-center border border-dashed border-slate-200/80 rounded-xl p-6 bg-slate-50/30">
+                  <MapPin className="w-6 h-6 text-slate-300 mb-1" />
+                  <p className="text-slate-400 text-xs text-center">Click bins on the map to add them to this route</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2 max-h-[160px] overflow-y-auto p-2 border border-white/40 rounded-xl bg-white/40">
+                  {selectedBins.map((id) => {
+                    const entry = markers.get(id);
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center gap-1.5 bg-white/90 text-slate-800 px-3 py-1 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm shrink-0"
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}
+                        />
+                        <span>{entry?.data.binCode || id}</span>
+                        <button
+                          type="button"
+                          onClick={() => toggleBinSelection(id)}
+                          className="text-slate-400 hover:text-red-500 font-bold ml-1"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                        connectRouteSocket(snapshot.sessionId);
-                        setSelectionMode(false);
-                        clearSelectedBinIcons(selectedBins);
-                        setSelectedBins([]);
-                        setIsPlannerExpanded(false);
-                        toast.success("Route generated successfully!");
-                      } catch (e) { 
-                        console.error(e); 
-                        toast.error("Error generating routes"); 
-                      } finally {
-                        setIsGeneratingRoute(false);
-                      }
-                    }}
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                    Vehicle
+                  </label>
+                  <select
+                    value={selectedVehicleId}
+                    onChange={(e) => setSelectedVehicleId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
                   >
-                    {isGeneratingRoute ? (
-                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <Navigation className="w-3.5 h-3.5 mr-1.5" />
-                    )}
-                    {isGeneratingRoute ? "Generating..." : "Generate Route"}
-                  </Button>
+                    {renderVehicleOptions(selectedBins.length, selectedVehicleId)}
+                  </select>
+                  {selectedBins.length > 0 && vehicles.every((v) => !isVehicleCapacitySufficient(v, selectedBins.length)) && (
+                    <p className="text-[10px] text-red-600 mt-1">No vehicle has enough capacity for {selectedBins.length} bins</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                    Driver
+                  </label>
+                  <select
+                    value={selectedDriverId}
+                    onChange={(e) => setSelectedDriverId(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                  >
+                    <option value="">-- Driver --</option>
+                    {drivers.map((d) => (
+                      <option key={d.empId} value={d.empId}>
+                        {d.empName || 'Unnamed'}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1 text-xs h-10"
+                  onClick={() => {
+                    clearSelectedBinIcons(selectedBins);
+                    setSelectedBins([]);
+                  }}
+                >
+                  Clear All
+                </Button>
+                <Button
+                  disabled={isGeneratingRoute}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold h-10 disabled:opacity-50 flex items-center justify-center"
+                  onClick={handleGenerateManualRoute}
+                >
+                  {isGeneratingRoute ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Navigation className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  {isGeneratingRoute ? 'Generating...' : 'Generate Route'}
+                </Button>
+              </div>
+            </>
           )}
         </div>
-      )}
+      </MapSidePanel>
 
       {/* COLLAPSIBLE BULK BIN DELETION BOTTOM DRAWER */}
       {deleteSelectionMode && (
@@ -2313,27 +2945,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         </div>
       )}
 
-      {/* ROUTE HISTORY SIDE FLOATING PANEL */}
-      <div
-        style={{ zIndex: 999 }}
-        className={`absolute right-4 top-20 bottom-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl transition-all duration-300 transform ${showHistorySheet
-          ? 'translate-x-0 opacity-100'
-          : 'translate-x-[110%] opacity-0 pointer-events-none'
-          }`}
+      {/* ROUTE HISTORY SIDE PANEL */}
+      <MapSidePanel
+        open={showHistorySheet}
+        onClose={() => setShowHistorySheet(false)}
+        title="Route History & Active Sessions"
+        icon={<Clock className="w-5 h-5 text-green-600 shrink-0" />}
+        bodyClassName="flex flex-col overflow-hidden"
       >
-        <div className="p-5 border-b border-white/20 shrink-0 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-green-600" />
-            <h3 className="text-sm font-bold text-slate-800">Route History & Active Sessions</h3>
-          </div>
-          <button
-            onClick={() => setShowHistorySheet(false)}
-            className="p-1 rounded-lg hover:bg-slate-200/50 text-slate-500 hover:text-slate-700 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
         {/* History filter tabs */}
         <div className="px-5 py-3 border-b border-white/20 bg-slate-50/20 flex items-center justify-between shrink-0">
           <div className="flex gap-2">
@@ -2482,24 +3101,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
             })
           )}
         </div>
-      </div>
-
-      {/* ROUTE SESSION STATUS FLOATING BANNER */}
-      {(routeStatus || routeError || activeSessionId) && (
-        <div
-          style={{ zIndex: 999 }}
-          className={`absolute ${selectionMode ? 'bottom-20' : 'bottom-4'
-            } left-4 bg-white/95 border border-slate-200 rounded-xl shadow-lg px-4 py-3 text-xs max-w-sm transition-all duration-300`}
-        >
-          <div className="font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Active Route Session
-          </div>
-          {activeSessionId && <div className="text-[10px] text-slate-500 font-mono">ID: {activeSessionId}</div>}
-          {routeStatus && <div className="mt-1">Status: <span className="font-semibold text-emerald-700 uppercase">{routeStatus}</span></div>}
-          {routeError && <div className="mt-1 text-red-600 font-medium">{routeError}</div>}
-        </div>
-      )}
+      </MapSidePanel>
 
       {/* CONTEXT MENU — appears on right-click of a bin marker */}
       {contextMenu && contextMenuPos && (
@@ -2519,15 +3121,12 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               <option value="high">High</option>
             </select>
           </div>
-          <div className="px-2 py-0.5">
-            <label className="text-[10px] text-gray-500 font-bold block mb-1 uppercase tracking-wider">Zone (Number)</label>
-            <input type="number" min="1" placeholder="e.g. 1"
-              className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-green-200 outline-none"
-              value={markers.get(contextMenu.binId)?.data.zone || ''}
-              onBlur={(e) => updateZone(contextMenu.binId, e.target.value)} // Persist on blur for a smoother UX
-              onChange={(e) => updateBinLocally(contextMenu.binId, { zone: e.target.value })} // Update locally on each keystroke
-              onKeyDown={(e) => { if (e.key === 'Enter') { updateZone(contextMenu.binId, e.currentTarget.value); setContextMenu(null); } }} // Also persist and close on Enter
-            />
+          <div className="px-2 py-0.5 text-xs text-slate-600">
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Zone</span>
+            <p className="mt-1 font-medium text-slate-800">
+              {markers.get(contextMenu.binId)?.data.zone || '—'}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Assigned by system</p>
           </div>
           <hr className="my-1 border-gray-100" />
           <button onClick={() => removeBin(contextMenu.binId)}

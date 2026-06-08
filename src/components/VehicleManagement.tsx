@@ -15,6 +15,7 @@ interface Vehicle {
   vehicleCode?: string | null;
   type: string;
   capacity: number | null;
+  maxBins: number | null;
   status: string;
   assignedCouncil: string;
   assignedDriverId: number | null;
@@ -377,8 +378,10 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
                       <span className="text-gray-900">{vehicle.type}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Capacity</span>
-                      <span className="text-gray-900">{vehicle.capacity ? `${vehicle.capacity} tons` : '—'}</span>
+                      <span className="text-gray-600">Max bins / trip</span>
+                      <span className="text-gray-900">
+                        {vehicle.maxBins ?? (vehicle.capacity ? Math.round(vehicle.capacity) : '—')}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 flex items-center gap-1"><User className="w-3 h-3" /> Driver</span>
@@ -488,7 +491,7 @@ function VehicleFormModal({
   const [form, setForm] = useState({
     licensePlate: vehicle?.licensePlate || '',
     type: vehicle?.type || VEHICLE_TYPES[0],
-    capacity: vehicle?.capacity?.toString() || '',
+    maxBins: vehicle?.maxBins?.toString() || (vehicle?.capacity ? String(Math.round(vehicle.capacity)) : ''),
     status: vehicle?.status || 'available',
     assignedCouncil: vehicle?.assignedCouncil || defaultCouncil,
   });
@@ -519,7 +522,7 @@ function VehicleFormModal({
 
       licensePlate: form.licensePlate,
       type: form.type,
-      capacity: form.capacity ? parseFloat(form.capacity) : null,
+      maxBins: form.maxBins ? parseInt(form.maxBins, 10) : null,
       status: form.status,
       // Enforce council ownership server payload for admins.
       assignedCouncil: (isAdmin ? defaultCouncil : form.assignedCouncil) || null,
@@ -568,8 +571,8 @@ function VehicleFormModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Capacity (tons)</label>
-              <Input type="number" step="0.1" value={form.capacity} onChange={e => setForm({...form, capacity: e.target.value})} placeholder="5.0" />
+              <label className="block text-sm text-gray-600 mb-1">Max bins per trip</label>
+              <Input type="number" min="1" step="1" value={form.maxBins} onChange={e => setForm({...form, maxBins: e.target.value})} placeholder="50" />
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-4">

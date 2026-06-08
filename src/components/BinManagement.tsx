@@ -100,17 +100,19 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         return;
       }
 
+      const { zone: _zone, ...rest } = newBin;
       const binDataToSubmit = {
-        ...newBin,
+        ...rest,
         status: 'empty'
       };
 
-      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string }>(
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string; data?: { zone?: string } }>(
         BINS_API,
         { method: 'POST', body: JSON.stringify(binDataToSubmit) }
       );
-      if (result.success) {
-        toast.success("Bin created successfully");
+      if (response.ok && result.success) {
+        const assignedZone = result.data?.zone;
+        toast.success(assignedZone ? `Bin created successfully (Zone ${assignedZone})` : "Bin created successfully");
         setIsCreateModalOpen(false);
         setNewBin({
           binCode: '',
@@ -250,19 +252,11 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Zone</label>
-                <Input 
-                  type="number"
-                  min="1"
-                  placeholder="e.g. 1" 
-                  value={newBin.zone}
-                  onChange={(e) => setNewBin({...newBin, zone: e.target.value})}
-                  required
-                />
-              </div>
+              <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                Zone is assigned automatically from coordinates when you save.
+              </p>
 
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
+              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
                 Save Bin
               </Button>
             </form>
