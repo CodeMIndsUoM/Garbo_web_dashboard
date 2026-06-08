@@ -7,7 +7,7 @@
 
 - **Repo:** `Garbo_web_dashboard/`
 - **Status:** `[ ]` todo · `[~]` in progress · `[x]` done · `[⏸]` blocked (waiting on backend)
-- **Last updated:** 2026-06-08 (W1 ✅ · W3 ✅)
+- **Last updated:** 2026-06-08 (W0 ✅ · W1 ✅ · W3 ✅ · W4 ✅)
 
 ---
 
@@ -121,18 +121,18 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 **Create shared API layer**
 
-- [ ] Create `src/lib/api.ts`:
-  - [ ] `getApiBase()` from `process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'`
-  - [ ] `getAuthHeaders()` reading `sessionStorage.token`
-  - [ ] `apiFetch(path, options)` wrapper with JSON parse + basic error handling
-- [ ] Create `src/lib/auth.ts` helpers: `getRole()`, `getCouncil()`, `isSuperadmin()`
-- [ ] Migrate **one** component first (e.g. `InternalUsers.tsx`) to prove the pattern
-- [ ] Gradually migrate other components as you touch them (don't big-bang refactor)
+- [x] Create `src/lib/api.ts`:
+  - [x] `getApiBase()` from `process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'`
+  - [x] `getAuthHeaders()` reading `sessionStorage.token`
+  - [x] `apiFetch(path, options)` wrapper with JSON parse + basic error handling
+- [x] Create `src/lib/auth.ts` helpers: `getRole()`, `getCouncil()`, `isSuperadmin()`
+- [x] Migrate **one** component first (`InternalUsers.tsx`) to prove the pattern
+- [x] Also migrated `BinManagement.tsx` + `VehicleManagement.tsx` (touched in W3)
 
 **Optional but helpful**
 
-- [ ] Create `src/lib/types.ts` for shared types (`Council`, `Bin`, `Vehicle`, `UserRole`)
-- [ ] Document env var in `Garbo_web_dashboard/README.md`: `NEXT_PUBLIC_API_BASE`
+- [x] Create `src/lib/types.ts` for shared types (`Council`, `Bin`, `Vehicle`, `UserRole`)
+- [x] Document env var in `Garbo_web_dashboard/README.md`: `NEXT_PUBLIC_API_BASE`
 
 **Acceptance:** New code uses `apiFetch`; no new copy-paste of `API_BASE` + auth headers.
 
@@ -286,26 +286,75 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 **Checklist**
 
-- [ ] On load: fetch active sessions but render **only the latest** (sort by `createdAt` desc)
-- [ ] Refactor route layers: `Map<sessionId, L.LayerGroup>` instead of one shared `routeLayerRef`
-- [ ] Assign distinct color per route (reuse or extend existing color logic)
-- [ ] Add **Routes panel** (toolbar or side panel):
-  - [ ] List each active route: vehicle name/code + color swatch
-  - [ ] Per-route visibility toggle (checkbox/switch)
-  - [ ] Master "Show all" / "Hide all" buttons
-- [ ] Toggling off removes only that session's layer (no full map redraw)
-- [ ] Route History panel: cooperate with visibility model (preview vs persistent toggle)
-- [ ] Default state: only latest route visible; others in list but hidden
+- [x] On load: fetch active sessions but render **only the latest** (sort by `createdAt` desc)
+- [x] Refactor route layers: `Map<sessionId, L.FeatureGroup>` per session
+- [x] Assign distinct color per route (ROUTE_COLORS per session)
+- [x] Route visibility integrated into **History** panel (no separate Routes tab):
+  - [x] Per-session checkbox + color swatch on each history card
+  - [x] "Show all" / "Hide all" in History panel header area
+- [x] Toggling off removes only that session's layer (no full map redraw)
+- [x] Route History panel: hover preview restores visibility model on mouse leave
+- [x] Default state: only latest route visible; others in list but hidden
 
 **Test checklist**
 
-- [ ] Open Map with multiple active routes → only one line drawn initially
-- [ ] Toggle route B on → B appears without breaking A
-- [ ] Show all → all routes visible with distinct colors
-- [ ] Hide all → no route lines (bins still visible)
-- [ ] Council filter from W1 still scopes routes correctly
+- [x] Open Map with multiple active routes → only one line drawn initially
+- [x] Toggle route B on → B appears without breaking A
+- [x] Show all → all routes visible with distinct colors
+- [x] Hide all → no route lines (bins still visible)
+- [x] Council filter from W1 still scopes routes correctly
 
 **Acceptance:** Readable map by default; user controls which routes are visible.
+
+**Legend (aligned with map):** `[x]` Updated — bin statuses, selection badges, multi-route colours, History visibility, depot & council boundary.
+
+---
+
+### W4A — Auto route generation (planned — feasibility ✅)
+
+**Goal:** Add **Auto Generate Route** alongside manual **Route** (select bins → optimize). No ML model required.
+
+#### Current manual flow (keep)
+1. Admin clicks **Route** → selects bins on map (green badge)
+2. Chooses vehicle + driver in bottom planner
+3. Backend `POST /api/route-sessions` → OR-Tools + OSRM optimizes stop order
+
+#### Proposed auto flow (add)
+1. Admin clicks **Auto Route** (new toolbar button)
+2. System picks bins automatically for active council:
+   - **Priority:** `full` → `half` → skip `empty` / `not_checked` (configurable)
+   - **Scope:** bins inside council boundary; optional zone clusters (F5)
+   - **Capacity:** respect vehicle capacity + available vehicles
+3. Same backend optimizer (`RouteSessionService.solveRoute`) — only **bin selection** changes
+
+#### Is this feasible without a model?
+
+| Piece | Already exists? | Notes |
+|---|---|---|
+| Bin coordinates | ✅ | `Bin.lat` / `Bin.lng` |
+| Fill level / status | ✅ | `status`, `fillLevel` from field-staff reports |
+| Route optimizer | ✅ | Google OR-Tools CVRP + OSRM (`ORToolsWrapper`, `OSRMClient`) |
+| Zone clustering | ⏳ F5 planned | K-means per council — improves accuracy for many bins |
+| ML / AI model | ❌ Not needed | Classical VRP + priority rules is industry standard |
+
+**Verdict: Worth building.** Clustering runs in background (F5); auto-route is a **selection policy** on top of existing optimizer.
+
+#### Suggested implementation order
+1. **Backend** `POST /api/route-sessions/auto` — accept `council`, `vehicleCount`, `minFillStatus`, `maxBins`
+2. **Backend** query: bins where `status IN ('full','half')` AND `council = ?` ORDER BY priority
+3. **Optional:** one route per zone cluster (after F5)
+4. **Web** Map toolbar: **Auto Route** button → confirm dialog → same WebSocket READY flow as manual
+
+**Web tasks (when approved):**
+- [ ] Add **Auto Route** button next to **Route** in `Map.tsx`
+- [ ] Call new auto endpoint; show which bins were auto-selected before confirm
+- [ ] Reuse existing route planner / WebSocket visualization
+
+**Backend tasks (separate branch `feature/web-dashboard-update` in `Garbo_backend`):**
+- [ ] `AutoRouteService` — bin selection by fill + council + zone
+- [ ] Endpoint wired to existing `optimizeAndBroadcast`
+
+**Status:** `[ ]` not started — awaiting approval after Sprint 3
 
 ---
 
@@ -603,11 +652,11 @@ When you need backend work, send this table row to the other developer. Wait for
 
 ## 7. Web definition of done
 
-- [ ] **W0** Shared API client in use for new/edited code
+- [x] **W0** Shared API client in use for new/edited code
 - [x] **W1** Home removed; global council dropdown for superadmin
 - [ ] **W2** Bin Collection page removed; labour in Vehicle Management
 - [x] **W3** Click-to-filter on Bin + Vehicle cards; correct bin counts
-- [ ] **W4** Map shows latest route by default; per-route toggles work
+- [x] **W4** Map shows latest route by default; per-route toggles work
 - [ ] **W5** No manual zone input on bin create
 - [ ] **W6** External Users page with Citizens + Collectors sub-tabs
 - [ ] **W7** Internal user create works; superadmin council picker; success message

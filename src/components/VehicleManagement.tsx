@@ -6,8 +6,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+import { apiFetch } from '@/lib/api';
 
 interface Vehicle {
   id: number;
@@ -79,16 +78,11 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState('');
 
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const fetchDrivers = useCallback(async () => {
     try {
-      const url = `${API_BASE}/api/admins/staff`;
-      const res = await fetch(url, { headers: authHeaders() });
-      const json = await res.json();
+      const { data: json } = await apiFetch<{ success?: boolean; data?: any[] }>(
+        '/api/admins/staff'
+      );
       if (json.success) {
         const staff: any[] = Array.isArray(json.data) ? json.data : [];
         const collectors = staff.filter(s => (s.role || '').toString().toUpperCase() === 'BIN_COLLECTOR');
@@ -111,9 +105,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const fetchVehicles = useCallback(async () => {
     try {
       const councilQuery = council?.name || council?.id || '';
-      const url = `${API_BASE}/api/vehicles${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
-      const res = await fetch(url, { headers: authHeaders() });
-      const json = await res.json();
+      const path = `/api/vehicles${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
+      const { data: json } = await apiFetch<{ success?: boolean; data?: Vehicle[] }>(path);
       if (json.success) {
         const rawVehicles: Vehicle[] = Array.isArray(json.data) ? json.data : [];
         if (council?.name) {
@@ -192,9 +185,11 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const handleDelete = async () => {
     if (!deletingVehicle) return;
     try {
-      const res = await fetch(`${API_BASE}/api/vehicles/${deletingVehicle.id}`, { method: 'DELETE', headers: authHeaders() });
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
+      const { response, data: json } = await apiFetch<{ message?: string }>(
+        `/api/vehicles/${deletingVehicle.id}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) {
         throw new Error(json?.message || 'Failed to delete vehicle');
       }
       setDeletingVehicle(null);
@@ -207,9 +202,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
   const handleStatusChange = async (vehicle: Vehicle, newStatus: string) => {
     try {
-      await fetch(`${API_BASE}/api/vehicles/${vehicle.id}/status`, {
+      await apiFetch(`/api/vehicles/${vehicle.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ status: newStatus }),
       });
       fetchVehicles();
@@ -500,11 +494,6 @@ function VehicleFormModal({
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     if (!isAdmin) return;
     if (!defaultCouncil) return;
@@ -537,14 +526,12 @@ function VehicleFormModal({
     };
 
     try {
-      const url = isEditing ? `${API_BASE}/api/vehicles/${vehicle!.id}` : `${API_BASE}/api/vehicles`;
+      const path = isEditing ? `/api/vehicles/${vehicle!.id}` : '/api/vehicles';
       const method = isEditing ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      const { data: json } = await apiFetch<{ success?: boolean; message?: string }>(path, {
         method,
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
       if (json.success) {
         onSaved();
       } else {
@@ -611,10 +598,6 @@ function DriversListModal({
   onClose: () => void;
   council?: { name?: string; id?: string } | null;
 }) {
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
