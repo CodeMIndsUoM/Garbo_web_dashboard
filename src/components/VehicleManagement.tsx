@@ -73,6 +73,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const [deletingDriver, setDeletingDriver] = useState<BinCollector | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
@@ -153,17 +154,40 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     fetchDrivers();
   };
 
-  const filteredVehicles = vehicles.filter(v =>
-    v.licensePlate.toLowerCase().includes(search.toLowerCase()) ||
-    v.type.toLowerCase().includes(search.toLowerCase())
+  const stats = useMemo(
+    () => ({
+      total: vehicles.length,
+      available: vehicles.filter((v) => v.status === 'available').length,
+      onRoute: vehicles.filter((v) => v.status === 'on_route').length,
+      maintenance: vehicles.filter((v) => v.status === 'maintenance').length,
+    }),
+    [vehicles]
   );
 
-  const stats = {
-    total: vehicles.length,
-    available: vehicles.filter(v => v.status === 'available').length,
-    onRoute: vehicles.filter(v => v.status === 'on_route').length,
-    maintenance: vehicles.filter(v => v.status === 'maintenance').length,
+  const filteredVehicles = useMemo(() => {
+    let result = vehicles;
+    if (statusFilter) {
+      result = result.filter((v) => v.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (v) =>
+          v.licensePlate.toLowerCase().includes(q) ||
+          v.type.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [vehicles, statusFilter, search]);
+
+  const handleStatusCardClick = (filter: string | null) => {
+    setStatusFilter((prev) => (prev === filter ? null : filter));
   };
+
+  const statCardClass = (active: boolean) =>
+    `cursor-pointer transition-all hover:shadow-md ${
+      active ? 'ring-2 ring-blue-500 shadow-md' : ''
+    }`;
 
   const handleDelete = async () => {
     if (!deletingVehicle) return;
@@ -220,9 +244,15 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
-      {/* Stats */}
+      {/* Stats — click a card to filter the grid below */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === null)}
+          onClick={() => handleStatusCardClick(null)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick(null)}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -233,7 +263,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === 'available')}
+          onClick={() => handleStatusCardClick('available')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('available')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -244,7 +280,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === 'on_route')}
+          onClick={() => handleStatusCardClick('on_route')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('on_route')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -255,7 +297,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === 'maintenance')}
+          onClick={() => handleStatusCardClick('maintenance')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('maintenance')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>

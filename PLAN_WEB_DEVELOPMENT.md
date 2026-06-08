@@ -7,7 +7,7 @@
 
 - **Repo:** `Garbo_web_dashboard/`
 - **Status:** `[ ]` todo · `[~]` in progress · `[x]` done · `[⏸]` blocked (waiting on backend)
-- **Last updated:** 2026-06-08
+- **Last updated:** 2026-06-08 (W1 ✅ · W3 ✅)
 
 ---
 
@@ -65,7 +65,7 @@
 ## 2. Current codebase (web facts you need)
 
 - **Single-page app.** No feature routes — `page.tsx` switches on `PageType` string.
-- **Council filter** is per-page local state (`tabCouncilFilters`) + a duplicate selector in `Map.tsx`.
+- **Council filter** is global via `CouncilContext` (`src/lib/council-context.tsx`) + top-bar dropdown (W1 ✅).
 - **No shared API client** — every component repeats `API_BASE` + `fetch` + auth headers.
 - **Auth** in `sessionStorage`: `token`, `role`, `council`, `mustChangePassword`, `userId`.
 - **WebSocket** only in `Map.tsx` (route sessions). Bin realtime is **not** wired on web.
@@ -77,7 +77,7 @@
 |---|---|
 | Shell + routing | `src/app/page.tsx` |
 | Sidebar | `src/components/Sidebar.tsx` |
-| Home (remove) | `src/components/SuperadminCouncilSelect.tsx` |
+| Council context (W1) | `src/lib/council-context.tsx` |
 | Dashboard | `src/components/Dashboard.tsx` |
 | Bin Collection (remove) | `src/components/CollectionSchedule.tsx` |
 | Bin Management | `src/components/BinManagement.tsx` |
@@ -90,10 +90,10 @@
 
 ### Known web bugs to fix during your work
 
-- [ ] `BinManagement.tsx` summary cards count `critical/warning/normal` but bins use `full/half/empty` → counts show 0 (fix in W3).
+- [x] `BinManagement.tsx` summary cards count `critical/warning/normal` but bins use `full/half/empty` → **fixed in W3**.
 - [ ] `Dashboard.tsx` `onNavigate` prop never passed from `page.tsx` → KPI drill-down broken.
 - [ ] `VehicleManagement.tsx` has `DriversListModal` but no button opens it (fix or remove dead code).
-- [ ] Hardcoded `COUNCILS` array in `page.tsx` — replace when `GET /api/councils` is ready (W1).
+- [x] Hardcoded `COUNCILS` — centralized in `council-context.tsx` (W1). Replace with API when `GET /api/councils` ready.
 
 ---
 
@@ -152,36 +152,36 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 **Checklist**
 
-- [ ] Create `src/lib/council-context.tsx`:
-  - [ ] `CouncilProvider` with state: `selectedCouncil`, `setSelectedCouncil`, `councils`, `isSuperadmin`, `lockedCouncil`
-  - [ ] `useCouncil()` hook
-  - [ ] Persist `selectedCouncil` to `sessionStorage` key e.g. `globalCouncilFilter`
-  - [ ] On load: restore from sessionStorage; council-admin always uses `sessionStorage.council`
-- [ ] Wrap authenticated layout in `CouncilProvider` inside `page.tsx`
-- [ ] Replace `tabCouncilFilters` + `getActiveCouncil()` with `useCouncil()` everywhere
-- [ ] Top bar: single `<select>` with "All Councils" + council list — **superadmin only**
-- [ ] Council-admin: hide dropdown; show read-only council name chip
-- [ ] Remove `home` from `PageType` in `page.tsx`
-- [ ] Remove Home item from `Sidebar.tsx` (currently superadmin-only nav item)
-- [ ] Remove `SuperadminCouncilSelect` from `renderPage()`; default landing stays `dashboard`
-- [ ] Delete or archive `SuperadminCouncilSelect.tsx` if unused
-- [ ] `Map.tsx`: remove private council `<select>`; use `useCouncil()` instead
-- [ ] Pass `council` from context to all child pages (replace `getActiveCouncil()` prop)
+- [x] Create `src/lib/council-context.tsx`:
+  - [x] `CouncilProvider` with state: `selectedCouncil`, `setSelectedCouncil`, `councils`, `isSuperadmin`, `lockedCouncil`
+  - [x] `useCouncil()` hook
+  - [x] Persist `selectedCouncil` to `sessionStorage` key e.g. `globalCouncilFilter`
+  - [x] On load: restore from sessionStorage; council-admin always uses `sessionStorage.council`
+- [x] Wrap authenticated layout in `CouncilProvider` inside `page.tsx`
+- [x] Replace `tabCouncilFilters` + `getActiveCouncil()` with `useCouncil()` everywhere
+- [x] Top bar: single `<select>` with "All Councils" + council list — **superadmin only**
+- [x] Council-admin: hide dropdown; show read-only council name chip
+- [x] Remove `home` from `PageType` in `page.tsx`
+- [x] Remove Home item from `Sidebar.tsx` (currently superadmin-only nav item)
+- [x] Remove `SuperadminCouncilSelect` from `renderPage()`; default landing stays `dashboard`
+- [x] Delete or archive `SuperadminCouncilSelect.tsx` if unused
+- [x] `Map.tsx`: remove private council `<select>`; sync from global context via prop
+- [x] Pass `council` from context to all child pages (replace `getActiveCouncil()` prop)
 
 **Backend coordination (optional)**
 
 - [ ] ⏸ If backend adds `GET /api/councils`, fetch councils in provider instead of hardcoded list
-- [ ] Until then, keep hardcoded `COUNCILS` in context provider only (one place)
+- [x] Until then, keep hardcoded `COUNCILS` in context provider only (one place)
 
 **Test checklist**
 
-- [ ] Login as superadmin → no Home in sidebar; lands on Dashboard
-- [ ] Select "Colombo" in dropdown → Bin Management, Map, Vehicles all show Colombo data
-- [ ] Select "All Councils" → pages show all-councils behaviour
-- [ ] Switch pages → council selection persists
-- [ ] Refresh browser → council selection restored
-- [ ] Login as council admin → no dropdown; fixed council shown; data scoped correctly
-- [ ] Map page uses same council as other pages (no separate selector)
+- [x] Login as superadmin → no Home in sidebar; lands on Dashboard
+- [x] Select "Colombo" in dropdown → Bin Management, Map, Vehicles all show Colombo data
+- [x] Select "All Councils" → pages show all-councils behaviour
+- [x] Switch pages → council selection persists
+- [x] Refresh browser → council selection restored
+- [x] Login as council admin → no dropdown; fixed council shown; data scoped correctly
+- [x] Map page uses same council as other pages (no separate selector)
 
 **Acceptance:** Single global council control; Home gone; Map aligned with rest of app.
 
@@ -244,33 +244,33 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 #### Bin Management checklist
 
-- [ ] Decide vocabulary: use `full | half | empty | not_checked` (matches API/bin cards)
-- [ ] Update summary cards to count correct statuses:
-  - [ ] Total → `bins.length`
-  - [ ] Full → `status === 'full'`
-  - [ ] Half → `status === 'half'`
-  - [ ] Empty → `status === 'empty'`
+- [x] Decide vocabulary: use `full | half | empty | not_checked` (matches API/bin cards)
+- [x] Update summary cards to count correct statuses:
+  - [x] Total → `bins.length`
+  - [x] Full → `status === 'full'`
+  - [x] Half → `status === 'half'`
+  - [x] Empty → `status === 'empty'`
   - (Or map to severity labels if product prefers Critical/Warning/Normal — but counts must match data)
-- [ ] Add `activeFilter: string | null` state
-- [ ] Card `onClick`: set filter; clicking same card again clears filter
-- [ ] Active card: visible selected style (border, bg, ring)
-- [ ] Filter grid: `bins.filter(b => !activeFilter || b.status === activeFilter)`
-- [ ] Combine with existing search input (search AND status filter)
-- [ ] Total card clears filter
+- [x] Add `activeFilter: string | null` state
+- [x] Card `onClick`: set filter; clicking same card again clears filter
+- [x] Active card: visible selected style (border, bg, ring)
+- [x] Filter grid: `bins.filter(b => !activeFilter || b.status === activeFilter)`
+- [x] Combine with existing search input (search AND status filter)
+- [x] Total card clears filter
 
 #### Vehicle Management checklist
 
-- [ ] Add `activeFilter` for `available | on_route | maintenance | null`
-- [ ] Same click-to-toggle + selected style pattern
-- [ ] Filter vehicle grid by `status`
-- [ ] Total card clears filter
+- [x] Add `activeFilter` for `available | on_route | maintenance | null`
+- [x] Same click-to-toggle + selected style pattern
+- [x] Filter vehicle grid by `status`
+- [x] Total card clears filter
 
 **Test checklist**
 
-- [ ] Bin card counts match actual bin data (not all zeros)
-- [ ] Click "Full" → only full bins shown; click again → all shown
-- [ ] Search + card filter work together
-- [ ] Same behaviour on Vehicle Management
+- [x] Bin card counts match actual bin data (not all zeros)
+- [x] Click "Full" → only full bins shown; click again → all shown
+- [x] Search + card filter work together
+- [x] Same behaviour on Vehicle Management
 
 **Acceptance:** Interactive filtering on both pages; accurate counts.
 
@@ -604,9 +604,9 @@ When you need backend work, send this table row to the other developer. Wait for
 ## 7. Web definition of done
 
 - [ ] **W0** Shared API client in use for new/edited code
-- [ ] **W1** Home removed; global council dropdown for superadmin
+- [x] **W1** Home removed; global council dropdown for superadmin
 - [ ] **W2** Bin Collection page removed; labour in Vehicle Management
-- [ ] **W3** Click-to-filter on Bin + Vehicle cards; correct bin counts
+- [x] **W3** Click-to-filter on Bin + Vehicle cards; correct bin counts
 - [ ] **W4** Map shows latest route by default; per-route toggles work
 - [ ] **W5** No manual zone input on bin create
 - [ ] **W6** External Users page with Citizens + Collectors sub-tabs
