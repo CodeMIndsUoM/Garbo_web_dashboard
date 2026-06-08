@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Truck, MapPin, Wrench, Search, Plus, Pencil, X, Check, User, Trash2, Users } from 'lucide-react';
+import { Truck, MapPin, Wrench, Search, Plus, Pencil, X, Check, User, Trash2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -35,12 +35,6 @@ interface BinCollector {
   assignedCouncil?: string;
 }
 
-interface CollectorLabour {
-  id: number;
-  name: string;
-  council: string;
-}
-
 const COUNCILS = [
   'Colombo',
   'Dehiwala-Mt. Lavinia',
@@ -71,12 +65,7 @@ function getStatusLabel(status: string) {
 
 export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [drivers, setDrivers] = useState<BinCollector[]>([]);
   const [allDrivers, setAllDrivers] = useState<BinCollector[]>([]);
-  const [driversLoading, setDriversLoading] = useState(true);
-  const [showDriversListModal, setShowDriversListModal] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<BinCollector | null>(null);
-  const [deletingDriver, setDeletingDriver] = useState<BinCollector | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -84,10 +73,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState('');
-  const [labours, setLabours] = useState<CollectorLabour[]>([]);
-  const [labourLoading, setLabourLoading] = useState(true);
-  const [newLabourName, setNewLabourName] = useState('');
-  const [creatingLabour, setCreatingLabour] = useState(false);
 
   const fetchDrivers = useCallback(async () => {
     try {
@@ -98,18 +83,9 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         const staff: any[] = Array.isArray(json.data) ? json.data : [];
         const collectors = staff.filter(s => (s.role || '').toString().toUpperCase() === 'BIN_COLLECTOR');
         setAllDrivers(collectors);
-        
-        if (council?.name) {
-          const councilName = council.name.toLowerCase();
-          setDrivers(collectors.filter((d) => (d.assignedCouncil || '').toLowerCase() === councilName));
-        } else {
-          setDrivers(collectors);
-        }
       }
     } catch {
       console.error('Failed to fetch drivers (bin collectors)');
-    } finally {
-      setDriversLoading(false);
     }
   }, [council]);
 
@@ -134,67 +110,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     }
   }, [council]);
 
-  const fetchLabours = useCallback(async () => {
-    setLabourLoading(true);
-    try {
-      const { data: json } = await apiFetch<{ success?: boolean; data?: CollectorLabour[] }>(
-        '/api/collector-labours'
-      );
-      if (json.success) {
-        const all: CollectorLabour[] = Array.isArray(json.data) ? json.data : [];
-        if (council?.name) {
-          const councilName = council.name.toLowerCase();
-          setLabours(all.filter((l) => (l.council || '').toLowerCase() === councilName));
-        } else {
-          setLabours(all);
-        }
-      }
-    } catch {
-      console.error('Failed to fetch collector labour');
-    } finally {
-      setLabourLoading(false);
-    }
-  }, [council]);
-
   useEffect(() => { fetchVehicles(); }, [fetchVehicles]);
   useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
-  useEffect(() => { fetchLabours(); }, [fetchLabours]);
-
-  const handleAddLabour = async () => {
-    const name = newLabourName.trim();
-    if (!name) return;
-    setCreatingLabour(true);
-    try {
-      const { response } = await apiFetch('/api/collector-labours', {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      });
-      if (response.ok) {
-        setNewLabourName('');
-        fetchLabours();
-      } else {
-        setError('Failed to add route crew member');
-      }
-    } catch {
-      setError('Error adding route crew member');
-    } finally {
-      setCreatingLabour(false);
-    }
-  };
-
-  const handleDeleteLabour = async (id: number) => {
-    if (!window.confirm('Remove this route crew member?')) return;
-    try {
-      const { response } = await apiFetch(`/api/collector-labours/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        fetchLabours();
-      } else {
-        setError('Failed to delete route crew member');
-      }
-    } catch {
-      setError('Error deleting route crew member');
-    }
-  };
 
   const driversById = useMemo(() => {
     const map = new Map<number, BinCollector>();
@@ -211,11 +128,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     if (!driver) return `#${assignedDriverId}`;
     return driver.empName || `Staff #${assignedDriverId}`;
   }, [driversById]);
-
-  const handleDriverUpdated = () => {
-    setEditingDriver(null);
-    fetchDrivers();
-  };
 
   const stats = useMemo(
     () => ({
@@ -289,22 +201,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           <h2 className="text-gray-900 mb-2">Vehicle Management</h2>
           <p className="text-gray-600">Manage collection vehicles, assignments, and availability</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowDriversListModal(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Users className="w-4 h-4" />
-            View Collectors
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Vehicle
-          </button>
-        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Vehicle
+        </button>
       </div>
 
       {error && (
@@ -385,15 +288,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           </CardContent>
         </Card>
       </div>
-
-      {showDriversListModal && (
-        <DriversListModal
-          drivers={drivers}
-          loading={driversLoading}
-          council={council}
-          onClose={() => setShowDriversListModal(false)}
-        />
-      )}
 
       {/* Search */}
       <div className="mb-6">
@@ -498,64 +392,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           ))}
         </div>
       )}
-
-      {/* Route crew / collector labour (migrated from Bin Collection page) */}
-      <Card className="mt-10 border-gray-100">
-        <CardContent className="pt-6">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div>
-              <h3 className="text-gray-900 font-medium">Route Crew / Collector Labour</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Extra crew members assigned to collection routes{council?.name ? ` in ${council.name}` : ''}.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 mb-4">
-            <Input
-              placeholder="Crew member name"
-              value={newLabourName}
-              onChange={(e) => setNewLabourName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddLabour()}
-            />
-            <button
-              type="button"
-              onClick={handleAddLabour}
-              disabled={creatingLabour || !newLabourName.trim()}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 shrink-0"
-            >
-              {creatingLabour ? 'Adding...' : 'Add Crew Member'}
-            </button>
-          </div>
-          {labourLoading ? (
-            <p className="text-sm text-gray-500">Loading crew list...</p>
-          ) : labours.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">No route crew members added yet.</p>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {labours.map((labour) => (
-                <div
-                  key={labour.id}
-                  className="flex items-center justify-between p-3 border border-gray-100 rounded-lg bg-gray-50/50"
-                >
-                  <div className="min-w-0">
-                    <span className="text-sm font-medium text-gray-800">{labour.name}</span>
-                    {!council?.name && labour.council && (
-                      <p className="text-xs text-gray-500 mt-0.5">{labour.council}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteLabour(labour.id)}
-                    className="text-sm text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors shrink-0"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {showCreateModal && (
         <VehicleFormModal
@@ -716,58 +552,6 @@ function VehicleFormModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-/* ── Drivers List Modal ────────────────────────────────────────── */
-
-function DriversListModal({
-  drivers,
-  loading,
-  onClose,
-  council,
-}: {
-  drivers: BinCollector[];
-  loading: boolean;
-  onClose: () => void;
-  council?: { name?: string; id?: string } | null;
-}) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg text-gray-900 font-medium">Bin Collectors (Staff Drivers)</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-        </div>
-
-
-
-        {loading ? (
-          <div className="text-sm text-gray-500 py-8 text-center">Loading staff members...</div>
-        ) : drivers.length === 0 ? (
-          <div className="text-sm text-gray-500 py-8 text-center">No bin collectors found for {council?.name || 'this council'}.</div>
-        ) : (
-          <div className="space-y-2">
-            {drivers.map((d) => (
-              <div key={d.empId} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3 bg-gray-50/50">
-                <div className="min-w-0">
-                  <div className="text-sm text-gray-900 font-semibold">{d.empName || 'Unnamed Staff'}</div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                    <div className="text-xs text-gray-500 font-mono">ID: #{d.empId}</div>
-                    {d.email && <div className="text-xs text-blue-600 truncate max-w-[200px]">{d.email}</div>}
-                  </div>
-                </div>
-                <Badge className="bg-green-100 text-green-700 border-green-200">Staff</Badge>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-end pt-6">
-          <button onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
-        </div>
       </div>
     </div>
   );
