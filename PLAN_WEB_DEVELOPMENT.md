@@ -205,15 +205,7 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 **Checklist — migrate collector-labour**
 
-- [x] Copy labour CRUD UI from `CollectionSchedule.tsx`:
-  - `GET /api/collector-labours`
-  - `POST /api/collector-labours`
-  - `DELETE /api/collector-labours/{id}`
-- [x] Add section to `VehicleManagement.tsx` — "Route Crew / Collector Labour"
-  - [x] Input + Add button for labour name
-  - [x] List with Delete per row
-- [x] Style to match Vehicle Management cards
-- [x] **View Collectors** button opens staff drivers modal (fixes dead `DriversListModal`)
+- [x] Labour CRUD was briefly added to Vehicle Management, then removed — crew/staff managed via **Internal Users** only
 
 **Checklist — remove page**
 
