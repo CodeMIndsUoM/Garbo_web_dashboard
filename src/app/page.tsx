@@ -1,8 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { decodeJwtPayload } from '@/lib/jwt';
+import {
+  CouncilProvider,
+  CouncilTopBar,
+  useCouncil,
+  type Council,
+} from '@/lib/council-context';
 import { Dashboard } from '@/components/Dashboard';
-import { CollectionSchedule } from '@/components/CollectionSchedule';
 import { BinManagement } from '@/components/BinManagement';
 import { VehicleManagement } from '@/components/VehicleManagement';
 import { WasteAnalytics } from '@/components/WasteAnalytics';
@@ -10,220 +16,164 @@ import { Reports } from '@/components/Reports';
 import { Sidebar } from '@/components/Sidebar';
 import { Login } from '@/components/Login';
 import { AdminAssignment } from '@/components/AdminAssignment';
-import { SuperadminCouncilSelect } from '@/components/SuperadminCouncilSelect';
 import AdminEditPassword from '@/components/AdminEditPassword';
 import CreateAdminPage from '@/components/CreateAdminPage';
+import { TotalCollection } from '@/components/TotalCollection';
+import { BinAnalytics } from '@/components/BinAnalytics';
+import { StaffAnalytics } from '@/components/StaffAnalytics';
+import { ComplaintAnalytics } from '@/components/ComplaintAnalytics';
+import { ThirdPartyAnalytics } from '@/components/ThirdPartyAnalytics';
+import { VehicleAnalytics } from '@/components/VehicleAnalytics';
+import { BinReportAnalytics } from '@/components/BinReportAnalytics';
+import { ExternalUsers } from '@/components/ExternalUsers';
+import { GamificationManagement } from '@/components/GamificationManagement';
+import { InternalUsers } from '@/components/InternalUsers';
 import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
-export type PageType = 'home' | 'dashboard' | 'schedule' | 'bins' | 'vehicles' | 'map' | 'analytics' | 'reports' | 'admin-assignment' | 'admin-edit-password' | 'create-admin';
+export type PageType =
+  | 'dashboard'
+  | 'bins'
+  | 'map'
+  | 'vehicles'
+  | 'analytics'
+  | 'external-users'
+  | 'gamification'
+  | 'internal-users'
+  | 'reports'
+  | 'admin-assignment'
+  | 'admin-edit-password'
+  | 'create-admin'
+  | 'total-collection'
+  | 'bin-analytics'
+  | 'staff-analytics'
+  | 'complaint-analytics'
+  | 'third-party-analytics'
+  | 'vehicle-analytics'
+  | 'bin-report-analytics';
 export type UserRole = 'admin' | 'superadmin' | null;
 
-export default function Home() {
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
-  const [userRole, setUserRole] = useState<UserRole>(null);
-  const [selectedCouncil, setSelectedCouncil] = useState<{ id: string; name: string; description?: string } | null>(null);
+interface AuthenticatedShellProps {
+  currentPage: PageType;
+  setCurrentPage: (page: PageType) => void;
+  userRole: UserRole;
+  onLogout: () => void;
+  onLoginAfterPasswordChange: (opts?: { mustChangePassword?: boolean }) => void;
+}
 
-  // Mock councils for demo; replace with API call if needed
-  const councils = [
-    { id: '1', name: 'Colombo Municipal Council', description: 'Colombo city region' },
-    { id: '2', name: 'Kandy Municipal Council', description: 'Kandy city region' },
-    { id: '3', name: 'Galle Municipal Council', description: 'Galle city region' },
-  ];
+function AuthenticatedShell({
+  currentPage,
+  setCurrentPage,
+  userRole,
+  onLogout,
+  onLoginAfterPasswordChange,
+}: AuthenticatedShellProps) {
+  const { activeCouncil } = useCouncil();
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
-
-  useEffect(() => {
-    const checkToken = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setIsAuthenticated(false);
-        setCheckingAuth(false);
-        setUserRole(null);
-        return;
-      }
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const res = await fetch(`${API_BASE}/api/auth/validate`, {
-          headers: { Authorization: `Bearer ${token}` },
-          method: 'GET',
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-        const json = await res.json();
-        if (res.ok && json?.success && json?.data === true) {
-          setIsAuthenticated(true);
-          // Get role from localStorage
-          const role = localStorage.getItem('role') as UserRole;
-          setUserRole(role);
-        } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('admin');
-          localStorage.removeItem('role');
-          setIsAuthenticated(false);
-          setUserRole(null);
-        }
-      } catch (err) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('admin');
-        localStorage.removeItem('role');
-        setIsAuthenticated(false);
-        setUserRole(null);
-      }
-
-      setCheckingAuth(false);
-    };
-
-    checkToken();
-  }, [API_BASE]);
-
-  const handleLogout = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      if (token) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        await fetch(`${API_BASE}/api/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-      }
-    } catch (err) {
-      // ignore network errors on logout
-    }
-
-    localStorage.removeItem('token');
-    localStorage.removeItem('admin');
-    localStorage.removeItem('role');
-    setIsAuthenticated(false);
-    setUserRole(null);
+  const openCreateAdmin = () => {
+    setCurrentPage('create-admin');
   };
-
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-    setCurrentPage('dashboard');
-    // Set userRole from localStorage after login
-    const role = localStorage.getItem('role') as UserRole;
-    setUserRole(role);
-  };
-
-  if (checkingAuth) {
-    return <div className="min-h-screen flex items-center justify-center">Checking authentication...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  // Superadmin: show sidebar and all-council summary if on 'home' tab or no council selected
-  if (userRole === 'superadmin' && (currentPage === 'home' || !selectedCouncil)) {
-    // Special case: allow admin-assignment page to render as normal
-    if (currentPage === 'admin-assignment') {
-      return (
-        <div className="flex h-screen bg-gray-50">
-          <Sidebar
-            currentPage={currentPage}
-            onPageChange={(page) => {
-              setCurrentPage(page);
-              if (page === 'home') setSelectedCouncil(null);
-            }}
-            onLogout={handleLogout}
-            userRole={userRole}
-            selectedCouncil={selectedCouncil}
-          />
-          <main className="flex-1 overflow-auto">
-            <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />
-          </main>
-        </div>
-      );
-    }
-
-    // Show all councils' details inside each tab
-    const renderAllCouncilsTab = () => {
-      switch (currentPage) {
-        case 'dashboard':
-          return <Dashboard />;
-        case 'schedule':
-          return <CollectionSchedule />;
-        case 'bins':
-          return <BinManagement />;
-        case 'vehicles':
-          return <VehicleManagement />;
-        case 'map':
-          return <MapView />;
-        case 'analytics':
-          return <WasteAnalytics />;
-        case 'reports':
-          return <Reports />;
-        default:
-          return <Dashboard />;
-      }
-    };
-
-    return (
-      <div className="flex h-screen bg-gray-50">
-        <Sidebar
-          currentPage={currentPage}
-          onPageChange={(page) => {
-            setCurrentPage(page);
-            if (page === 'home') setSelectedCouncil(null);
-          }}
-          onLogout={handleLogout}
-          userRole={userRole}
-          selectedCouncil={selectedCouncil}
-        />
-        <main className="flex-1 overflow-auto">
-          <div className="p-4 bg-gray-100 border-b text-lg font-semibold text-gray-700">
-            All Municipal Councils
-          </div>
-          <SuperadminCouncilSelect
-            councils={councils}
-            onSelect={(council) => {
-              setSelectedCouncil(council);
-              setCurrentPage('dashboard');
-            }}
-          />
-          <div className="mt-6">{renderAllCouncilsTab()}</div>
-        </main>
-      </div>
-    );
-  }
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard />;
-      case 'schedule':
-        return <CollectionSchedule />;
+        return <Dashboard council={activeCouncil} />;
       case 'bins':
-        return <BinManagement />;
+        return (
+          <BinManagement council={activeCouncil} userRole={userRole} />
+        );
       case 'vehicles':
-        return <VehicleManagement />;
+        return (
+          <VehicleManagement council={activeCouncil} userRole={userRole} />
+        );
       case 'map':
-        return <MapView />;
+        return <MapView council={activeCouncil} />;
       case 'analytics':
-        return <WasteAnalytics />;
+        return (
+          <WasteAnalytics
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+            council={activeCouncil}
+          />
+        );
+      case 'external-users':
+        return <ExternalUsers council={activeCouncil} />;
+      case 'gamification':
+        return <GamificationManagement />;
+      case 'internal-users':
+        return <InternalUsers council={activeCouncil} />;
+      case 'total-collection':
+        return (
+          <TotalCollection
+            onBack={() => setCurrentPage('analytics')}
+            council={activeCouncil}
+          />
+        );
+      case 'bin-analytics':
+        return (
+          <BinAnalytics
+            onBack={() => setCurrentPage('analytics')}
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+            council={activeCouncil}
+          />
+        );
+      case 'staff-analytics':
+        return (
+          <StaffAnalytics
+            onBack={() => setCurrentPage('analytics')}
+            council={activeCouncil}
+          />
+        );
+      case 'complaint-analytics':
+        return (
+          <ComplaintAnalytics
+            onBack={() => setCurrentPage('analytics')}
+            council={activeCouncil}
+          />
+        );
+      case 'third-party-analytics':
+        return (
+          <ThirdPartyAnalytics
+            onBack={() => setCurrentPage('analytics')}
+            council={activeCouncil}
+          />
+        );
+      case 'vehicle-analytics':
+        return (
+          <VehicleAnalytics
+            onBack={() => setCurrentPage('analytics')}
+            council={activeCouncil}
+          />
+        );
+      case 'bin-report-analytics':
+        return (
+          <BinReportAnalytics
+            onBack={() => setCurrentPage('analytics')}
+            council={activeCouncil}
+          />
+        );
       case 'reports':
-        return <Reports />;
+        return <Reports council={activeCouncil} />;
       case 'admin-assignment':
-        return <AdminAssignment onAddNewAdmin={() => setCurrentPage('create-admin')} />;
+        return (
+          <AdminAssignment
+            onAddNewAdmin={openCreateAdmin}
+            onLogout={onLogout}
+          />
+        );
       case 'admin-edit-password':
-        return <AdminEditPassword />;
+        return (
+          <AdminEditPassword
+            onPasswordChanged={onLoginAfterPasswordChange}
+            onLogout={onLogout}
+          />
+        );
       case 'create-admin':
-        return <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />;
+        return (
+          <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />
+        );
       default:
-        return <Dashboard />;
+        return <Dashboard council={activeCouncil} />;
     }
   };
 
@@ -232,19 +182,180 @@ export default function Home() {
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}
-        onLogout={handleLogout}
+        onLogout={onLogout}
         userRole={userRole}
-        selectedCouncil={selectedCouncil}
+        selectedCouncil={activeCouncil}
       />
       <main className="flex-1 overflow-auto">
-        {/* Show selected council name for superadmin */}
-        {userRole === 'superadmin' && selectedCouncil && (
-          <div className="p-4 bg-gray-100 border-b text-lg font-semibold text-gray-700">
-            {selectedCouncil.name}
-          </div>
-        )}
+        <CouncilTopBar />
         {renderPage()}
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  const [mounted, setMounted] = useState(false);
+  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+  const [userRole, setUserRole] = useState<UserRole>(null);
+  const [lockedCouncil, setLockedCouncil] = useState<Council | null>(null);
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const checkToken = async () => {
+      const token = sessionStorage.getItem('token');
+      if (!token) {
+        setIsAuthenticated(false);
+        setCheckingAuth(false);
+        setUserRole(null);
+        return;
+      }
+
+      try {
+        const payload = decodeJwtPayload(token);
+        if (payload && payload.exp) {
+          const currentTimestamp = Math.floor(Date.now() / 1000);
+          if (currentTimestamp >= payload.exp) {
+            sessionStorage.removeItem('token');
+            sessionStorage.removeItem('admin');
+            sessionStorage.removeItem('role');
+            sessionStorage.removeItem('council');
+            setIsAuthenticated(false);
+            setUserRole(null);
+            setCheckingAuth(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse token client-side', e);
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const res = await fetch(`${API_BASE}/api/auth/validate`, {
+          headers: { Authorization: `Bearer ${token}` },
+          method: 'GET',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const json = await res.json();
+        if (
+          res.ok &&
+          (json?.success === true || json?.message === 'Token is valid')
+        ) {
+          setIsAuthenticated(true);
+          const payload = decodeJwtPayload(token);
+          const roleFromToken = payload?.role || payload?.roles || null;
+          const role =
+            (roleFromToken as UserRole) ||
+            (sessionStorage.getItem('role') as UserRole);
+          setUserRole(role);
+          if (role === 'admin') {
+            try {
+              const storedCouncil = sessionStorage.getItem('council');
+              if (storedCouncil) setLockedCouncil(JSON.parse(storedCouncil));
+            } catch {
+              setLockedCouncil(null);
+            }
+          }
+        } else {
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('admin');
+          sessionStorage.removeItem('role');
+          setIsAuthenticated(false);
+          setUserRole(null);
+        }
+      } catch {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('admin');
+        sessionStorage.removeItem('role');
+        setIsAuthenticated(false);
+        setUserRole(null);
+      }
+
+      setCheckingAuth(false);
+    };
+
+    checkToken();
+  }, [API_BASE, mounted]);
+
+  const handleLogout = async () => {
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('admin');
+    sessionStorage.removeItem('role');
+    sessionStorage.removeItem('council');
+    setLockedCouncil(null);
+    setIsAuthenticated(false);
+    setUserRole(null);
+  };
+
+  const handleLogin = (opts?: { mustChangePassword?: boolean }) => {
+    setIsAuthenticated(true);
+    let mustChange = opts?.mustChangePassword;
+    if (typeof mustChange === 'undefined') {
+      try {
+        mustChange = JSON.parse(
+          sessionStorage.getItem('mustChangePassword') || 'false'
+        );
+      } catch {
+        mustChange = false;
+      }
+    }
+
+    if (mustChange) {
+      setCurrentPage('admin-edit-password');
+    } else {
+      setCurrentPage('dashboard');
+    }
+
+    const role = sessionStorage.getItem('role') as UserRole;
+    setUserRole(role);
+    if (role === 'admin') {
+      try {
+        const stored = sessionStorage.getItem('council');
+        if (stored) setLockedCouncil(JSON.parse(stored));
+        else setLockedCouncil(null);
+      } catch {
+        setLockedCouncil(null);
+      }
+    } else {
+      setLockedCouncil(null);
+    }
+  };
+
+  if (!mounted || checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Checking authentication...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  return (
+    <CouncilProvider userRole={userRole} lockedCouncil={lockedCouncil}>
+      <AuthenticatedShell
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        userRole={userRole}
+        onLogout={handleLogout}
+        onLoginAfterPasswordChange={handleLogin}
+      />
+    </CouncilProvider>
   );
 }

@@ -1,0 +1,48 @@
+{
+  "Colombo": {
+    "council": "Colombo",
+    "depotLat": 6.91186,
+    "depotLng": 79.84983,
+    "boundaryPoints": [
+      {
+        "lat": 6.96766,
+        "lng": 79.82906
+      },
+      {
+        "lat": 6.95382,
+        "lng": 79.89799
+      },
+      {
+        "lat": 6.89577,
+        "lng": 79.90462
+      },
+      {
+        "lat": 6.86397,
+        "lng": 79.85597
+      }
+    ]
+  },
+  "Moratuwa": {
+    "council": "Moratuwa",
+    "depotLat": 6.77508,
+    "depotLng": 79.882289,
+    "boundaryPoints": [
+      {
+        "lat": 6.811952,
+        "lng": 79.867387
+      },
+      {
+        "lat": 6.82722,
+        "lng": 79.93127
+      },
+      {
+        "lat": 6.76338,
+        "lng": 79.9669
+      },
+      {
+        "lat": 6.716461,
+        "lng": 79.901547
+      }
+    ]
+  }
+}

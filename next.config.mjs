@@ -1,19 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Enable experimental features if needed
-  // experimental: {},
+
+  staticPageGenerationTimeout: 120,
   
-  // Proxy API calls to backend during development
+  // Restrict backend proxying to local development only.
   async rewrites() {
-    return {
-      fallback: [
-        {
-          source: '/api/:path*',
-          destination: 'http://localhost:8081/api/:path*'
-        }
-      ]
-    };
+    if (process.env.NODE_ENV !== 'development') {
+      return [];
+    }
+
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:8080/api/:path*'
+      }
+    ];
   }
 };
 
