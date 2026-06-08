@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { HardHat, Trash2, Users } from 'lucide-react';
+import { EyeOff, HardHat, Trash2, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 import { isSuperadmin } from '@/lib/auth';
 import { COUNCILS } from '@/lib/council-context';
@@ -158,6 +159,29 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
     setSuccess('');
   };
 
+  const hideUser = async (id: string | number) => {
+    if (!confirm('Hide this user from the admin list?')) return;
+    setListError('');
+    try {
+      const { response, data } = await apiFetch<ApiListResponse<unknown>>(
+        `/api/admins/staff/${id}/hide`,
+        { method: 'POST' }
+      );
+      if (response.status === 403) {
+        toast.error('Not allowed to hide this user');
+        return;
+      }
+      if (!response.ok) {
+        toast.error(data?.message || 'Failed to hide user');
+        return;
+      }
+      toast.success('User hidden');
+      void loadData();
+    } catch {
+      toast.error('Network error while hiding user');
+    }
+  };
+
   const deleteUser = async (id: string | number) => {
     if (!confirm('Delete this internal user? This action cannot be undone.')) return;
     setListError('');
@@ -167,25 +191,26 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
         { method: 'DELETE' }
       );
       if (response.status === 403) {
-        setListError('Not allowed');
+        toast.error('Not allowed to delete this user');
         return;
       }
       if (response.status === 404) {
-        setListError('User not found');
+        toast.error('User not found');
         void loadData();
         return;
       }
       if (response.status === 409) {
-        setListError('Cannot delete due to constraints');
+        toast.error('Cannot delete due to linked records');
         return;
       }
       if (!response.ok) {
-        setListError(data?.message || 'Failed to delete internal user');
+        toast.error(data?.message || 'Failed to delete internal user');
         return;
       }
+      toast.success('User deleted');
       void loadData();
     } catch {
-      setListError('Network error while deleting user');
+      toast.error('Network error while deleting user');
     }
   };
 
@@ -363,13 +388,16 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {superadmin ? (
-                          '—'
-                        ) : (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => void hideUser(user.empId)}>
+                            <EyeOff className="w-3.5 h-3.5 mr-1" />
+                            Hide
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => void deleteUser(user.empId)}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
                             Delete
                           </Button>
-                        )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
