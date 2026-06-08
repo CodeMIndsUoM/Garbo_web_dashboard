@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, Map as MapIcon, Shield, Users, Building2 } from 'lucide-react';
+import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, Map as MapIcon, Shield, Users, Building2, Trophy } from 'lucide-react';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -24,6 +24,7 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
     { id: 'analytics' as PageType, label: 'Analytics', icon: BarChart3 },
     { id: 'citizen-management' as PageType, label: 'Citizen Management', icon: Users },
     { id: 'third-party-collectors' as PageType, label: '3rd Party Collectors', icon: Building2 },
+    { id: 'gamification' as PageType, label: 'Gamification', icon: Trophy },
     { id: 'internal-users' as PageType, label: 'Internal Users', icon: Shield },
   ];
 
