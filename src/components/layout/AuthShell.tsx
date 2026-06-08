@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { GarboLogo } from '@/components/brand/GarboLogo';
+import { AuthBrandLogo } from '@/components/brand/AuthBrandLogo';
 import { AuthHeroRotator } from '@/components/layout/AuthHeroRotator';
 import { typography } from '@/theme';
+import { cn } from '@/components/ui/utils';
 
 interface AuthShellProps {
   children: React.ReactNode;
@@ -18,7 +19,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
       <div className="garbo-auth-form-column">
         <div className="garbo-auth-form-stack">
           <div className="garbo-auth-brand-header">
-            <GarboLogo variant="onBrand" size="lg" showMark={false} />
+            <AuthBrandLogo />
             <p className={`${typography.caption} mt-5 max-w-sm leading-relaxed text-muted-foreground`}>
               Council operations dashboard for bins, routes, and field teams.
             </p>
@@ -44,7 +45,9 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
 
         <div className="garbo-auth-hero-inner">
           <header className="garbo-auth-hero-header">
-            <GarboLogo variant="inverse" size="md" showMark={false} />
+            <p className={cn(typography.caption, 'font-medium text-white/90')}>
+              Waste Management System
+            </p>
           </header>
 
           <div className="garbo-auth-hero-main">
@@ -52,7 +55,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
           </div>
 
           <footer className="garbo-auth-hero-footer">
-            <p>© Garbo Management System</p>
+            <p>© Waste Management System</p>
           </footer>
         </div>
       </div>

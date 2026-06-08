@@ -1,18 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { TrendingUp, Trash2, Users, Truck, Loader2, AlertCircle, Briefcase, FileText } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
+import { Trash2, Users, Truck, AlertCircle, Briefcase, FileText, Loader2 } from 'lucide-react';
+import {
+  AnalyticsChartCard,
+  AnalyticsPageHeader,
+  AnalyticsSegmentFilter,
+  AnalyticsStatCard,
+  CHART,
+} from './layout/analytics-ui';
 import {
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from 'recharts';
+import { AnalyticsDonutChart } from './layout/AnalyticsDonutChart';
+import type { PieChartEntry } from './layout/analytics-ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Zone-level waste collection aggregates for the bar chart.
@@ -30,8 +39,16 @@ interface DaySummary {
 
 // Staff attendance and on-duty status snapshot.
 interface StaffSummary {
+  totalStaff: number;
   onDutyCount: number;
+  onLeaveCount: number;
   attendanceRate: number;
+}
+
+interface ActivityPoint {
+  time: string;
+  collected: number;
+  missed: number;
 }
 
 // Citizen complaints today with resolution rate.
@@ -65,7 +82,9 @@ interface BinSummary {
   totalBins: number;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+import { apiFetch, getApiBase } from '@/lib/api';
+
+const BASE_URL = getApiBase();
 
 // Safely extract council id/name for API query parameters.
 const getCouncilParam = (council?: { id?: string; name?: string } | null) => {
@@ -103,6 +122,10 @@ export function WasteAnalytics({
   const [vehicleLoading, setVehicleLoading] = useState(true);
   const [binLoading, setBinLoading]         = useState(true);
   const [error, setError]                   = useState<string | null>(null);
+  const [activityData, setActivityData]     = useState<ActivityPoint[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [citizenCount, setCitizenCount]     = useState(0);
+  const [citizenLoading, setCitizenLoading] = useState(true);
 
   // Fetch collection by zone with time filter; updates whenever filter or council changes.
   useEffect(() => {
@@ -144,10 +167,18 @@ export function WasteAnalytics({
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
         setSummary({ assigned: json.assigned, collected: json.collected, missed: json.missed });
+        setActivityData(
+          (json.chartData ?? []).map((point: ActivityPoint & { assigned?: number }) => ({
+            time: point.time,
+            collected: point.collected,
+            missed: point.missed,
+          }))
+        );
       } catch (err: any) {
         setError(err.message ?? 'Failed to load');
       } finally {
         setLoading(false);
+        setActivityLoading(false);
       }
     };
     fetchDaySummary();
@@ -164,10 +195,42 @@ export function WasteAnalytics({
         const res = await fetch(`${BASE_URL}/api/admin/staffanalytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setStaffSummary({ onDutyCount: json.summary.onDutyCount, attendanceRate: json.summary.attendanceRate });
+        setStaffSummary({
+          totalStaff: json.summary.totalStaff,
+          onDutyCount: json.summary.onDutyCount,
+          onLeaveCount: json.summary.onLeaveCount,
+          attendanceRate: json.summary.attendanceRate,
+        });
       } catch { } finally { setStaffLoading(false); }
     };
     fetchStaffSummary();
+  }, [council]);
+
+  // External citizen count for users pie chart.
+  useEffect(() => {
+    const fetchCitizens = async () => {
+      setCitizenLoading(true);
+      try {
+        const params = new URLSearchParams();
+        const councilParam = getCouncilParam(council);
+        if (councilParam) params.set('council', councilParam);
+
+        const path = `/api/admin/citizens${params.toString() ? `?${params.toString()}` : ''}`;
+        const { data: json } = await apiFetch<{ success?: boolean; data?: unknown[] } | unknown[]>(path);
+        const list =
+          json && typeof json === 'object' && 'data' in json && Array.isArray(json.data)
+            ? json.data
+            : Array.isArray(json)
+              ? json
+              : [];
+        setCitizenCount(list.length);
+      } catch {
+        setCitizenCount(0);
+      } finally {
+        setCitizenLoading(false);
+      }
+    };
+    fetchCitizens();
   }, [council]);
 
   // Fetch today's new complaints and their resolution rate.
@@ -182,7 +245,10 @@ export function WasteAnalytics({
         const res = await fetch(`${BASE_URL}/api/admin/complaintanalytics?${params.toString()}`);
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         const json = await res.json();
-        setComplaintSummary({ newCount: json.summary.newCount, resolutionRate: json.summary.resolutionRate });
+        setComplaintSummary({
+          newCount: json.summary.pendingCount ?? json.summary.newCount ?? 0,
+          resolutionRate: json.summary.resolutionRate,
+        });
       } catch { } finally { setComplaintLoading(false); }
     };
     fetchComplaintSummary();
@@ -254,349 +320,224 @@ export function WasteAnalytics({
       } catch { } finally { setBinLoading(false); }
     };
     fetchBinSummary();
-  }, []);
+  }, [council]);
 
   // Derived KPI: daily collection rate as percentage.
   const collectionRate = summary && summary.assigned > 0
     ? Math.round((summary.collected / summary.assigned) * 100)
     : 0;
 
+  const otherStaff = Math.max(
+    0,
+    (staffSummary?.totalStaff ?? 0) -
+      (staffSummary?.onDutyCount ?? 0) -
+      (staffSummary?.onLeaveCount ?? 0)
+  );
+
+  const usersPie: PieChartEntry[] = [
+    { name: 'External Users', value: citizenCount, color: CHART.brand },
+    { name: 'Staff On Duty', value: staffSummary?.onDutyCount ?? 0, color: '#22c55e' },
+    { name: 'Staff On Leave', value: staffSummary?.onLeaveCount ?? 0, color: CHART.neutral },
+    ...(otherStaff > 0
+      ? [{ name: 'Other Staff', value: otherStaff, color: '#d1d5db' } as PieChartEntry]
+      : []),
+  ].filter((item) => item.value > 0);
+
+  const fleetPie: PieChartEntry[] = [
+    { name: 'On Route', value: vehicleSummary?.onRoute ?? 0, color: CHART.brand },
+    { name: 'Available', value: vehicleSummary?.available ?? 0, color: '#22c55e' },
+    { name: 'Maintenance', value: vehicleSummary?.maintenance ?? 0, color: CHART.neutral },
+  ].filter((item) => item.value > 0);
+
+  const totalUsers =
+    citizenCount + (staffSummary?.totalStaff ?? 0);
+
   return (
     <div className="p-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Waste Analytics</h1>
-          <p className="text-gray-500 text-lg">Detailed insights and trends from waste collection operations</p>
-        </div>
-        <Button onClick={() => onNavigate?.('reports')} className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-colors rounded-lg px-4 py-2 flex items-center gap-2">
-          <FileText className="w-4 h-4" />
-          View Report
-        </Button>
-      </div>
+      <AnalyticsPageHeader
+        title="Dashboard"
+        subtitle="Monitor your waste management operations in real-time"
+        actions={
+          <button
+            type="button"
+            onClick={() => onNavigate?.('reports')}
+            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700"
+          >
+            <FileText className="w-4 h-4" />
+            View Report
+          </button>
+        }
+      />
 
-      {/* KPI Cards Row 1 */}
-      {/* Top-level metrics: collection totals, bins on site, staff status, complaints. */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-
-        {/* Total Collected */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-blue-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        <AnalyticsStatCard
+          label="Total Collected"
+          value={summary?.collected ?? 0}
+          detail={`${collectionRate}% efficiency · ${summary?.assigned ?? 0} assigned · ${summary?.missed ?? 0} missed today`}
+          icon={Trash2}
+          loading={loading}
+          error={error ?? undefined}
           onClick={() => onNavigate?.('total-collection')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Collected</CardTitle>
-            <div className="p-2.5 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition-colors shadow-sm">
-              <Trash2 className="w-5 h-5 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : error ? (
-              <div className="text-sm text-red-500 py-1">{error}</div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold text-gray-900 mb-3 tracking-tight">
-                  {summary?.collected ?? 0}
-                  <span className="text-base font-medium text-gray-500 ml-1">bins</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex items-center gap-1 text-green-700 font-medium bg-green-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    {collectionRate}% rate
-                  </span>
-                  <span className="text-gray-500">today</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Bins Onsite */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-green-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        />
+        <AnalyticsStatCard
+          label="Bins Onsite"
+          value={binSummary?.totalBins ?? 0}
+          detail="Active across all zones"
+          icon={Trash2}
+          loading={binLoading}
           onClick={() => onNavigate?.('bin-analytics')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Bins Onsite</CardTitle>
-            <div className="p-2.5 bg-green-50 rounded-xl group-hover:bg-green-100 transition-colors shadow-sm">
-              <Trash2 className="w-5 h-5 text-green-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {binLoading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
-                  {binSummary?.totalBins ?? 0}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex items-center gap-1 text-green-700 font-medium bg-green-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    Active
-                  </span>
-                  <span className="text-gray-500">across all zones</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Collecting Staff */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-emerald-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        />
+        <AnalyticsStatCard
+          label="Collecting Staff"
+          value={staffSummary?.onDutyCount ?? 0}
+          detail={`${staffSummary?.attendanceRate ?? 0}% active today`}
+          icon={Users}
+          loading={staffLoading}
           onClick={() => onNavigate?.('staff-analytics')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Collecting Staff</CardTitle>
-            <div className="p-2.5 bg-emerald-50 rounded-xl group-hover:bg-emerald-100 transition-colors shadow-sm">
-              <Users className="w-5 h-5 text-emerald-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {staffLoading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
-                  {staffSummary?.onDutyCount ?? 0}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex items-center gap-1 text-green-700 font-medium bg-green-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    {staffSummary?.attendanceRate ?? 0}%
-                  </span>
-                  <span className="text-gray-500">active today</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Complaints */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-red-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        />
+        <AnalyticsStatCard
+          label="Complaints"
+          value={complaintSummary?.newCount ?? 0}
+          detail={`${complaintSummary?.resolutionRate ?? 0}% resolution rate`}
+          icon={AlertCircle}
+          loading={complaintLoading}
           onClick={() => onNavigate?.('complaint-analytics')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Complaints</CardTitle>
-            <div className="p-2.5 bg-red-50 rounded-xl group-hover:bg-red-100 transition-colors shadow-sm">
-              <AlertCircle className="w-5 h-5 text-red-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {complaintLoading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
-                  {complaintSummary?.newCount ?? 0}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex items-center gap-1 text-red-700 font-medium bg-red-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    {complaintSummary?.resolutionRate ?? 0}%
-                  </span>
-                  <span className="text-gray-500">resolution rate</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        />
       </div>
 
-      {/* KPI Cards Row 2 */}
-      {/* Secondary metrics: third-party completions, vehicle fleet status, bin reports. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-
-        {/* Third Party */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-indigo-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        <AnalyticsStatCard
+          label="Third Party Collectors"
+          value={thirdPartySummary?.totalRequests.toLocaleString() ?? 0}
+          detail={`${thirdPartySummary?.completionRate ?? 0}% last month`}
+          icon={Briefcase}
+          loading={thirdPartyLoading}
           onClick={() => onNavigate?.('third-party-analytics')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Third Party Collectors</CardTitle>
-            <div className="p-2.5 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors shadow-sm">
-              <Briefcase className="w-5 h-5 text-indigo-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {thirdPartyLoading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
-                  {thirdPartySummary?.totalRequests.toLocaleString() ?? 0}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex items-center gap-1 text-indigo-700 font-medium bg-indigo-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    {thirdPartySummary?.completionRate ?? 0}%
-                  </span>
-                  <span className="text-gray-500">last month</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Bin Reports */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-teal-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        />
+        <AnalyticsStatCard
+          label="Bin Reports"
+          value={binReportSummary?.totalReportsToday ?? 0}
+          detail={`${binReportSummary?.affectedBinsToday ?? 0} affected bins today`}
+          icon={FileText}
+          loading={binReportLoading}
           onClick={() => onNavigate?.('bin-report-analytics')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Bin Reports</CardTitle>
-            <div className="p-2.5 bg-teal-50 rounded-xl group-hover:bg-teal-100 transition-colors shadow-sm">
-              <FileText className="w-5 h-5 text-teal-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {binReportLoading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : (
-              <>
-                <div className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">
-                  {binReportSummary?.totalReportsToday ?? 0}
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="flex items-center gap-1 text-teal-700 font-medium bg-teal-100 px-2 py-0.5 rounded-full">
-                    <TrendingUp className="w-3.5 h-3.5" />
-                    {binReportSummary?.affectedBinsToday ?? 0}
-                  </span>
-                  <span className="text-gray-500">affected bins today</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Vehicle Performance */}
-        <Card
-          className="hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-none bg-gradient-to-br from-white to-amber-50/30 shadow-md ring-1 ring-gray-100 relative overflow-hidden group cursor-pointer"
+        />
+        <AnalyticsStatCard
+          label="Vehicle Performance"
+          value={vehicleSummary?.onRoute ?? 0}
+          detail={`${vehicleSummary?.available ?? 0} available · ${vehicleSummary?.totalFleet ?? 0} total fleet`}
+          icon={Truck}
+          loading={vehicleLoading}
           onClick={() => onNavigate?.('vehicle-analytics')}
-        >
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Vehicle Performance</CardTitle>
-            <div className="p-2.5 bg-amber-50 rounded-xl group-hover:bg-amber-100 transition-colors shadow-sm">
-              <Truck className="w-5 h-5 text-amber-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {vehicleLoading ? (
-              <div className="flex items-center gap-2 py-2">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                <span className="text-sm text-gray-400">Loading...</span>
-              </div>
-            ) : (
-              <>
-                <div className="flex justify-between items-end mb-3">
-                  <div className="text-3xl font-bold text-gray-900 tracking-tight">
-                    {vehicleSummary && vehicleSummary.totalFleet > 0
-                      ? Math.round((vehicleSummary.onRoute / vehicleSummary.totalFleet) * 100)
-                      : 0}%
-                  </div>
-                  <div className="text-lg font-semibold text-green-600">
-                    {vehicleSummary && vehicleSummary.totalFleet > 0
-                      ? Math.round((vehicleSummary.available / vehicleSummary.totalFleet) * 100)
-                      : 0}%
-                  </div>
-                </div>
-                <div className="flex justify-between items-center text-xs mb-4">
-                  <span className="text-gray-500 font-medium uppercase tracking-wider">Active</span>
-                  <span className="text-gray-500 font-medium uppercase tracking-wider">Available</span>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        />
       </div>
 
-      {/* Zone Collection Chart */}
-      {/* Bar chart showing bins collected by zone across the selected time window. */}
-      <div className="grid grid-cols-1 gap-6">
-        <Card className="shadow-sm border border-gray-100 overflow-hidden">
-          <CardHeader className="border-b border-gray-50 bg-gray-50/30 pb-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0">
-              <div>
-                <CardTitle className="text-lg font-semibold text-gray-800">Collection by Zone</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">
-                  Distribution of total waste collected across municipal zones ({zoneFilter.toLowerCase()})
-                </p>
-              </div>
-              <div className="flex bg-gray-100/50 p-1 rounded-lg border border-gray-200/50">
-                {(['Daily', 'Weekly', 'Monthly'] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setZoneFilter(f)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
-                      zoneFilter === f
-                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200/50'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <AnalyticsChartCard
+          title="System Users"
+          subtitle="External citizens and internal staff breakdown"
+        >
+          {citizenLoading || staffLoading ? (
+            <div className="flex h-[260px] items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
             </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {zoneLoading ? (
-              <div className="flex items-center justify-center h-[350px]">
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-              </div>
-            ) : zoneData.length === 0 ? (
-              <div className="flex items-center justify-center h-[350px] text-gray-400 text-sm">
-                No data available for the selected period.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={zoneData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1} />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.8} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dx={-10} />
-                  <Tooltip
-                    cursor={{ fill: '#f9fafb' }}
-                    contentStyle={{
-                      borderRadius: '8px',
-                      border: '1px solid #e5e7eb',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      padding: '12px',
-                    }}
-                  />
-                  <Bar dataKey="collected" fill="url(#colorCollected)" name="Bins Collected" radius={[6, 6, 0, 0]} barSize={48} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+          ) : (
+            <AnalyticsDonutChart
+              data={usersPie}
+              centerValue={totalUsers}
+              centerLabel="Total users"
+              height={260}
+            />
+          )}
+        </AnalyticsChartCard>
+
+        <AnalyticsChartCard
+          title="Today's Field Activity"
+          subtitle="Bins collected through the app today (hourly)"
+        >
+          {activityLoading ? (
+            <div className="flex h-[260px] items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+          ) : activityData.length === 0 ? (
+            <div className="flex h-[260px] items-center justify-center text-sm text-gray-400">
+              No collection activity recorded today
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={activityData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
+                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={CHART.tooltipStyle} />
+                <Area
+                  type="monotone"
+                  dataKey="collected"
+                  name="Collected"
+                  stroke={CHART.brand}
+                  fill={CHART.brand}
+                  fillOpacity={0.15}
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </AnalyticsChartCard>
+
+        <AnalyticsChartCard
+          title="Fleet Status"
+          subtitle="Vehicles on route, available, and in maintenance"
+        >
+          {vehicleLoading ? (
+            <div className="flex h-[260px] items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+          ) : (
+            <AnalyticsDonutChart
+              data={fleetPie}
+              centerValue={vehicleSummary?.totalFleet ?? 0}
+              centerLabel="Total fleet"
+              height={260}
+            />
+          )}
+        </AnalyticsChartCard>
       </div>
+
+      <AnalyticsChartCard
+        title="Collection by Zone"
+        subtitle={`Distribution of total waste collected across municipal zones (${zoneFilter.toLowerCase()})`}
+        actions={
+          <AnalyticsSegmentFilter
+            options={[
+              { label: 'Daily', value: 'Daily' },
+              { label: 'Weekly', value: 'Weekly' },
+              { label: 'Monthly', value: 'Monthly' },
+            ]}
+            value={zoneFilter}
+            onChange={setZoneFilter}
+          />
+        }
+      >
+        {zoneLoading ? (
+          <div className="flex h-[300px] items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
+        ) : zoneData.length === 0 ? (
+          <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">
+            No data available for the selected period.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={zoneData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
+              <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} dy={10} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 12 }} dx={-10} />
+              <Tooltip cursor={{ fill: '#f9fafb' }} contentStyle={CHART.tooltipStyle} />
+              <Bar dataKey="collected" fill={CHART.brand} name="Bins Collected" radius={[6, 6, 0, 0]} barSize={48} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </AnalyticsChartCard>
     </div>
   );
 }

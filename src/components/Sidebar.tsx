@@ -1,6 +1,7 @@
 'use client';
 
-import { LayoutDashboard, Trash2, Truck, BarChart3, Map as MapIcon, Shield, UserCircle, Trophy } from 'lucide-react';
+import { LayoutDashboard, Trash2, Truck, Map as MapIcon, Shield, UserCircle, Trophy } from 'lucide-react';
+import { AuthBrandLogo } from '@/components/brand/AuthBrandLogo';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -11,13 +12,22 @@ interface SidebarProps {
   selectedCouncil?: { name?: string } | null;
 }
 
+const DASHBOARD_DRILL_PAGES: PageType[] = [
+  'total-collection',
+  'bin-analytics',
+  'staff-analytics',
+  'complaint-analytics',
+  'third-party-analytics',
+  'vehicle-analytics',
+  'bin-report-analytics',
+];
+
 export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selectedCouncil }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
     { id: 'vehicles' as PageType, label: 'Vehicle Management', icon: Truck },
     { id: 'map' as PageType, label: 'Map', icon: MapIcon },
-    { id: 'analytics' as PageType, label: 'Analytics', icon: BarChart3 },
     { id: 'external-users' as PageType, label: 'External Users', icon: UserCircle },
     { id: 'gamification' as PageType, label: 'Gamification', icon: Trophy },
     { id: 'internal-users' as PageType, label: 'Internal Users', icon: Shield },
@@ -26,15 +36,7 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-            <Trash2 className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-gray-900">Garbo</h1>
-            <p className="text-xs text-gray-500">Management System</p>
-          </div>
-        </div>
+        <AuthBrandLogo size="sm" />
         {/* Council name display */}
         {selectedCouncil && selectedCouncil.name && (
           <div className="mt-4 text-sm font-semibold text-green-700 truncate" title={selectedCouncil.name}>
@@ -47,7 +49,10 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
         <ul className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentPage === item.id;
+            const isActive =
+              item.id === 'dashboard'
+                ? currentPage === 'dashboard' || DASHBOARD_DRILL_PAGES.includes(currentPage)
+                : currentPage === item.id;
             
             return (
               <li key={item.id}>
