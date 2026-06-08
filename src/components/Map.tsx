@@ -33,6 +33,8 @@ import { Switch } from "./ui/switch";
 import { GarboLoader } from "./GarboLoader";
 import { MapSidePanel } from "./map/MapSidePanel";
 import { useCouncil } from "@/lib/council-context";
+import { useBinRealtime } from "@/hooks/useBinRealtime";
+import { applyCollectionVisualUpdate, normalizeBinStatus } from "@/lib/bin-realtime";
 import { toast } from "sonner";
 import {
   DEFAULT_VEHICLE_MAX_BINS,
@@ -218,8 +220,6 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const sessionSnapshotsRef = useRef<Map<string, RouteSessionSnapshot>>(new Map());
   const visibleSessionIdsRef = useRef<Record<string, boolean>>({});
   const stompClientRef = useRef<Client | null>(null);           // Active STOMP client for the route WebSocket subscription
-  const collectionStompRef = useRef<Client | null>(null);       // STOMP client for live bin collection updates
-  const [routeCollectionStatus, setRouteCollectionStatus] = useState<Record<number, string>>({});
   const depotMarkerRef = useRef<L.Marker | null>(null);         // Reference to the depot marker for potential repositioning
   const turfPolyRef = useRef<ReturnType<typeof turfPolygon> | null>(null); // Turf polygon used for point-in-polygon boundary checks
   const boundaryLayerRef = useRef<L.FeatureGroup | null>(null);   // Holds the boundary outline polygons
@@ -1709,36 +1709,6 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     boundaryLoading,
   ]);
 
-  // Live bin collection status from collector mobile app
-  useEffect(() => {
-    const client = new Client({
-      webSocketFactory: () => new SockJS(`${API_ORIGIN}/ws`),
-      reconnectDelay: 3000,
-      debug: () => {},
-    });
-    client.onConnect = () => {
-      client.subscribe('/topic/route-collection', (message) => {
-        try {
-          const payload = JSON.parse(message.body) as { binId?: number; status?: string };
-          if (payload.binId && payload.status) {
-            setRouteCollectionStatus((prev) => ({ ...prev, [payload.binId!]: payload.status! }));
-            window.setTimeout(() => {
-              toast.info(`Bin ${payload.binId}: ${payload.status}`);
-            }, 0);
-          }
-        } catch (error) {
-          console.error('Failed to parse route collection update', error);
-        }
-      });
-    };
-    client.activate();
-    collectionStompRef.current = client;
-    return () => {
-      client.deactivate();
-      collectionStompRef.current = null;
-    };
-  }, []);
-
   // ── Helper: compute combined bounds of all councils (cached) ──
   const getAllCouncilBounds = (): L.LatLngBounds | null => {
     if (allBoundsRef.current) return allBoundsRef.current;
@@ -2129,15 +2099,47 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
   // Applies partial updates to a bin's data and refreshes its icon/tooltip
   const updateBinLocally = (id: string, updates: Partial<BinData>) => {
-    const entry = markers.get(id);
+    const entry = markersRef.current.get(id);
     if (!entry) return;
     const newData = { ...entry.data, ...updates };
     entry.data = newData;
     entry.marker.bindTooltip(renderTooltip(newData));
     const isSelected = selectedBins.includes(id) ? 'route' : (selectedBinsToDelete.includes(id) ? 'delete' : false);
     entry.marker.setIcon(getStatusIcon(id, newData.status, newData.fillLevel, isSelected));
-    setMarkers(new Map(markers));
+    setMarkers((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(id);
+      if (existing) {
+        existing.data = newData;
+      }
+      return next;
+    });
   };
+
+  useBinRealtime({
+    councilName: council?.name ?? null,
+    onUpdate: (msg) => {
+      const visual = applyCollectionVisualUpdate(msg);
+      const updates: Partial<BinData> = {};
+      const normalized = normalizeBinStatus(visual.status);
+      const statusMap: Record<string, BinData['status']> = {
+        full: 'full',
+        half: 'half',
+        empty: 'empty',
+        notChecked: 'not_checked',
+      };
+      if (statusMap[normalized]) {
+        updates.status = statusMap[normalized];
+      }
+      if (visual.fillLevel != null) updates.fillLevel = visual.fillLevel;
+      if (Object.keys(updates).length > 0) {
+        updateBinLocally(String(msg.binId), updates);
+      }
+      if (msg.type === 'BIN_COLLECTED' && msg.collectionStatus) {
+        toast.info(`Bin ${msg.binId}: ${msg.collectionStatus}`);
+      }
+    },
+  });
 
   // Update bin priority in DB
   const updatePriority = async (id: string, priority: BinData['priority']) => {

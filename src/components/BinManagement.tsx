@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Trash2, MapPin, AlertTriangle, Search, Plus, Loader2 } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -23,6 +23,9 @@ import {
 } from "./ui/select";
 import { toast } from "sonner";
 import { apiFetch } from '@/lib/api';
+import { useBinRealtime } from '@/hooks/useBinRealtime';
+import { applyCollectionVisualUpdate, normalizeBinStatus } from '@/lib/bin-realtime';
+import { BinReportDetailDialog, type BinReportDetail } from './bin/BinReportDetailDialog';
 
 const BINS_API = '/api/bins';
 const COUNCILS = [
@@ -52,6 +55,14 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
+  const [selectedBin, setSelectedBin] = useState<Bin | null>(null);
+  const selectedBinRef = useRef<Bin | null>(null);
+  const [selectedReport, setSelectedReport] = useState<BinReportDetail | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  useEffect(() => {
+    selectedBinRef.current = selectedBin;
+  }, [selectedBin]);
   
   // Form State
   const [newBin, setNewBin] = useState({
@@ -88,9 +99,96 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
   useEffect(() => {
     fetchBins();
-  }, []);
+  }, [council?.name]);
 
+  const loadLatestReport = async (bin: Bin) => {
+    setReportLoading(true);
+    try {
+      const { data: result } = await apiFetch<{ success?: boolean; data?: BinReportDetail | null }>(
+        `${BINS_API}/${bin.id}/latest-report`
+      );
+      if (result.success && result.data) {
+        setSelectedReport(result.data);
+      } else {
+        setSelectedReport({
+          binId: bin.id,
+          binCode: bin.binCode,
+          council: bin.council,
+          status: bin.status,
+          fillLevel: bin.fillLevel,
+        });
+      }
+    } catch {
+      toast.error('Failed to load report details');
+      setSelectedReport(null);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
+  const openBinDetail = (bin: Bin) => {
+    setSelectedBin(bin);
+    setSelectedReport(null);
+    void loadLatestReport(bin);
+  };
+
+  const closeBinDetail = () => {
+    setSelectedBin(null);
+    setSelectedReport(null);
+    setReportLoading(false);
+  };
+
+  useBinRealtime({
+    councilName: council?.name ?? null,
+    onUpdate: (msg) => {
+      const visual = applyCollectionVisualUpdate(msg);
+      setBins((prev) => {
+        const idx = prev.findIndex((b) => b.id === msg.binId);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        const current = next[idx];
+        next[idx] = {
+          ...current,
+          status: visual.status ?? current.status,
+          fillLevel: visual.fillLevel ?? current.fillLevel,
+        };
+        return next;
+      });
+
+      const activeBin = selectedBinRef.current;
+      if (msg.type === 'BIN_STATUS_UPDATED' && activeBin?.id === msg.binId) {
+        if (msg.changeType === 'STATUS_UNDONE') {
+          setSelectedReport(null);
+        } else if (msg.changeType === 'STATUS_REPORTED' || msg.changeType === 'REPORT_PHOTO_ATTACHED') {
+          setSelectedReport((prev) => ({
+            reportId: msg.reportId ?? prev?.reportId,
+            binId: msg.binId,
+            binCode: activeBin.binCode,
+            council: activeBin.council,
+            status: normalizeBinStatus(visual.status ?? activeBin.status),
+            fillLevel: visual.fillLevel ?? activeBin.fillLevel,
+            notes: msg.notes ?? prev?.notes ?? null,
+            photoUrl: msg.photoUrl ?? prev?.photoUrl ?? null,
+            reporterName: msg.reporterName ?? prev?.reporterName ?? null,
+            reportedAt: msg.reportedAt ?? prev?.reportedAt ?? null,
+          }));
+        }
+        setSelectedBin((prev) =>
+          prev && prev.id === msg.binId
+            ? {
+                ...prev,
+                status: visual.status ?? prev.status,
+                fillLevel: visual.fillLevel ?? prev.fillLevel,
+              }
+            : prev
+        );
+      }
+
+      if (msg.type === 'BIN_COLLECTED' && msg.collectionStatus) {
+        toast.info(`Bin ${msg.binId}: ${msg.collectionStatus}`);
+      }
+    },
+  });
 
   const handleCreateBin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,8 +246,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     }
   };
 
-  const normalizeStatus = (status: string) =>
-    (status || '').toLowerCase().replace(/\s+/g, '_');
+  const normalizeStatus = (status: string) => normalizeBinStatus(status);
 
   const councilBins = useMemo(() => {
     if (!council?.name) return bins;
@@ -215,8 +312,39 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
 
 
+  const statusLabel = (status: string) => {
+    const key = normalizeBinStatus(status);
+    if (key === 'full') return 'Full';
+    if (key === 'half') return 'Half';
+    if (key === 'empty') return 'Empty';
+    return 'Not Checked';
+  };
+
+  const statusBarClass = (status: string) => {
+    const key = normalizeBinStatus(status);
+    if (key === 'full') return 'bg-red-500';
+    if (key === 'half') return 'bg-yellow-400';
+    if (key === 'empty') return 'bg-green-500';
+    return 'bg-white';
+  };
+
+  const statusTextClass = (status: string) => {
+    const key = normalizeBinStatus(status);
+    if (key === 'full') return 'text-red-600';
+    if (key === 'half') return 'text-yellow-600';
+    if (key === 'empty') return 'text-green-600';
+    return 'text-gray-400';
+  };
+
   return (
     <div className="p-8">
+      <BinReportDetailDialog
+        open={Boolean(selectedBin)}
+        onClose={closeBinDetail}
+        bin={selectedBin}
+        report={selectedReport}
+        loading={reportLoading}
+      />
       <div className="flex justify-between items-start mb-8">
         <div>
           <h2 className="text-gray-900 mb-2">Bin Management</h2>
@@ -380,13 +508,15 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {councilScopedBins.map((bin) => (
-            <Card key={bin.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 group overflow-hidden relative">
-              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
-                bin.status === 'full' ? 'bg-red-500' :
-                bin.status === 'half' ? 'bg-yellow-400' :
-                bin.status === 'empty' ? 'bg-green-500' :
-                'bg-white'
-              }`} />
+            <Card
+              key={bin.id}
+              className="hover:shadow-lg transition-all duration-300 border-gray-100 group overflow-hidden relative cursor-pointer"
+              onClick={() => openBinDetail(bin)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && openBinDetail(bin)}
+            >
+              <div className={`absolute top-0 left-0 right-0 h-1.5 ${statusBarClass(bin.status)}`} />
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -407,8 +537,11 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                     >
                       {bin.isAssigned ? 'Assigned' : 'Not Assigned'}
                     </Badge>
-                    <button 
-                      onClick={() => handleDeleteBin(bin.id)}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteBin(bin.id);
+                      }}
                       className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -421,16 +554,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-600">Fill Status</span>
-                      <span className={`text-sm font-bold ${
-                        bin.status === 'full' ? 'text-red-600' :
-                        bin.status === 'half' ? 'text-yellow-600' :
-                        bin.status === 'empty' ? 'text-green-600' :
-                        'text-gray-400'
-                      }`}>
-                        {bin.status === 'full' ? 'Full' :
-                         bin.status === 'half' ? 'Half' :
-                         bin.status === 'empty' ? 'Empty' :
-                         'Not Checked'}
+                      <span className={`text-sm font-bold ${statusTextClass(bin.status)}`}>
+                        {statusLabel(bin.status)}
                       </span>
                     </div>
                   </div>
