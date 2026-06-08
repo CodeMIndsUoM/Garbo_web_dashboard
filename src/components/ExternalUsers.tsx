@@ -37,6 +37,18 @@ interface EventItem {
   status?: string;
 }
 
+interface CitizenUser {
+  empId: number;
+  empName?: string;
+  email?: string;
+  phone?: string;
+  council?: string;
+  address?: string;
+  area?: string;
+  reportCount?: number;
+  createdAt?: string;
+}
+
 interface ThirdPartyCollector {
   empId: number;
   empName?: string;
@@ -59,14 +71,6 @@ interface ThirdPartyCollector {
   council?: string;
 }
 
-interface ActiveCollector {
-  empId?: number;
-  id?: number;
-  empName?: string;
-  email?: string;
-  role?: string;
-  council?: string;
-}
 
 function resolveMediaUrl(url?: string | null): string | null {
   if (!url) return null;
@@ -81,8 +85,11 @@ function matchesCouncil(
   ...values: (string | undefined | null)[]
 ): boolean {
   if (!councilName) return true;
-  const needle = councilName.toLowerCase();
-  return values.some((v) => (v || '').toLowerCase().includes(needle));
+  const needle = councilName.trim().toLowerCase();
+  return values.some((v) => {
+    if (!v) return false;
+    return v.split(',').some((part) => part.trim().toLowerCase() === needle);
+  });
 }
 
 function statusBadgeClass(status?: string) {
@@ -163,7 +170,12 @@ export function ExternalUsers({ council }: { council?: { name?: string } | null 
   );
 }
 
+function councilQuery(councilName?: string): string {
+  return councilName ? `?council=${encodeURIComponent(councilName)}` : '';
+}
+
 function CitizensTab({ council }: { council?: { name?: string } | null }) {
+  const [citizens, setCitizens] = useState<CitizenUser[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,13 +204,22 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [complaintsRes, eventsRes] = await Promise.all([
+      const [citizensRes, complaintsRes, eventsRes] = await Promise.all([
+        apiFetch<{ success?: boolean; data?: CitizenUser[] }>(`/api/admin/citizens${councilQuery(councilName)}`),
         apiFetch<ComplaintItem[]>('/api/complaints'),
         apiFetch<EventItem[]>('/api/events/suggestions'),
       ]);
+
+      const citizenList = citizensRes.data?.success && Array.isArray(citizensRes.data.data)
+        ? citizensRes.data.data
+        : Array.isArray(citizensRes.data)
+          ? (citizensRes.data as CitizenUser[])
+          : [];
+
       const rawComplaints = Array.isArray(complaintsRes.data) ? complaintsRes.data : [];
       const rawEvents = Array.isArray(eventsRes.data) ? eventsRes.data : [];
 
+      setCitizens(citizenList);
       setComplaints(
         councilName
           ? rawComplaints.filter((c) => matchesCouncil(councilName, c.location))
@@ -343,6 +364,39 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Citizen Users</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-gray-500">Loading citizens...</p>
+          ) : citizens.length === 0 ? (
+            <p className="text-gray-500">No citizens found for this council.</p>
+          ) : (
+            <div className="space-y-2">
+              {citizens.map((citizen) => (
+                <div
+                  key={citizen.empId}
+                  className="p-4 border border-gray-200 rounded-lg flex items-start justify-between gap-4"
+                >
+                  <div className="min-w-0">
+                    <p className="text-gray-900 font-medium">{citizen.empName || citizen.email}</p>
+                    <p className="text-sm text-gray-500">{citizen.email}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {[citizen.phone, citizen.area, citizen.address].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  {citizen.council && (
+                    <Badge variant="secondary">{citizen.council}</Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Citizen Complaints</CardTitle>
@@ -626,10 +680,14 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 
 function CollectorsTab({ council }: { council?: { name?: string } | null }) {
   const [pending, setPending] = useState<ThirdPartyCollector[]>([]);
-  const [active, setActive] = useState<ActiveCollector[]>([]);
+  const [active, setActive] = useState<ThirdPartyCollector[]>([]);
+  const [revoked, setRevoked] = useState<ThirdPartyCollector[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedPendingId, setExpandedPendingId] = useState<number | null>(null);
+  const [expandedActiveId, setExpandedActiveId] = useState<number | null>(null);
+  const [expandedRevokedId, setExpandedRevokedId] = useState<number | null>(null);
   const [rejectReasons, setRejectReasons] = useState<Record<number, string>>({});
+  const [revokeReasons, setRevokeReasons] = useState<Record<number, string>>({});
   const [actingId, setActingId] = useState<number | null>(null);
 
   const councilName = council?.name;
@@ -637,9 +695,11 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [pendingRes, usersRes] = await Promise.all([
-        apiFetch<{ success?: boolean; data?: ThirdPartyCollector[] }>('/api/auth/thirdparty-register/pending'),
-        apiFetch<{ data?: ActiveCollector[] }>('/api/users'),
+      const query = councilQuery(councilName);
+      const [pendingRes, activeRes, revokedRes] = await Promise.all([
+        apiFetch<{ success?: boolean; data?: ThirdPartyCollector[] }>(`/api/auth/thirdparty-register/pending${query}`),
+        apiFetch<{ success?: boolean; data?: ThirdPartyCollector[] }>(`/api/auth/thirdparty-register/active${query}`),
+        apiFetch<{ success?: boolean; data?: ThirdPartyCollector[] }>(`/api/auth/thirdparty-register/revoked${query}`),
       ]);
 
       const pendingList = pendingRes.data?.success && Array.isArray(pendingRes.data.data)
@@ -648,21 +708,21 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           ? (pendingRes.data as ThirdPartyCollector[])
           : [];
 
-      const users = Array.isArray(usersRes.data?.data) ? usersRes.data.data : [];
-      const thirdParty = users.filter((u) =>
-        (u.role || '').toString().toUpperCase().includes('THIRD')
-      );
+      const activeList = activeRes.data?.success && Array.isArray(activeRes.data.data)
+        ? activeRes.data.data
+        : Array.isArray(activeRes.data)
+          ? (activeRes.data as ThirdPartyCollector[])
+          : [];
 
-      setPending(
-        councilName
-          ? pendingList.filter((p) => matchesCouncil(councilName, p.assignedCouncils, p.council))
-          : pendingList
-      );
-      setActive(
-        councilName
-          ? thirdParty.filter((u) => matchesCouncil(councilName, u.council))
-          : thirdParty
-      );
+      const revokedList = revokedRes.data?.success && Array.isArray(revokedRes.data.data)
+        ? revokedRes.data.data
+        : Array.isArray(revokedRes.data)
+          ? (revokedRes.data as ThirdPartyCollector[])
+          : [];
+
+      setPending(pendingList);
+      setActive(activeList);
+      setRevoked(revokedList);
     } catch {
       toast.error('Failed to load collector data');
     } finally {
@@ -674,8 +734,16 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
     void loadData();
   }, [loadData]);
 
-  const toggleExpanded = (empId: number) => {
-    setExpandedId((current) => (current === empId ? null : empId));
+  const togglePendingExpanded = (empId: number) => {
+    setExpandedPendingId((current) => (current === empId ? null : empId));
+  };
+
+  const toggleActiveExpanded = (empId: number) => {
+    setExpandedActiveId((current) => (current === empId ? null : empId));
+  };
+
+  const toggleRevokedExpanded = (empId: number) => {
+    setExpandedRevokedId((current) => (current === empId ? null : empId));
   };
 
   const approve = async (empId: number) => {
@@ -684,7 +752,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
       const { response } = await apiFetch(`/api/auth/thirdparty-register/${empId}/approve`, { method: 'POST' });
       if (!response.ok) throw new Error('Approve failed');
       toast.success('Registration approved');
-      setExpandedId(null);
+      setExpandedPendingId(null);
       void loadData();
     } catch {
       toast.error('Failed to approve registration');
@@ -703,7 +771,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
       });
       if (!response.ok) throw new Error('Reject failed');
       toast.success('Registration rejected');
-      setExpandedId(null);
+      setExpandedPendingId(null);
       setRejectReasons((prev) => {
         const next = { ...prev };
         delete next[empId];
@@ -712,6 +780,45 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
       void loadData();
     } catch {
       toast.error('Failed to reject registration');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const unrevoke = async (empId: number) => {
+    setActingId(empId);
+    try {
+      const { response } = await apiFetch(`/api/auth/thirdparty-register/${empId}/unrevoke`, { method: 'POST' });
+      if (!response.ok) throw new Error('Unrevoke failed');
+      toast.success('Collector access restored');
+      setExpandedRevokedId(null);
+      void loadData();
+    } catch {
+      toast.error('Failed to restore collector access');
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const revoke = async (empId: number) => {
+    setActingId(empId);
+    try {
+      const reason = revokeReasons[empId] || 'Revoked by admin';
+      const { response } = await apiFetch(`/api/auth/thirdparty-register/${empId}/revoke`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+      if (!response.ok) throw new Error('Revoke failed');
+      toast.success('Collector access revoked');
+      setExpandedActiveId(null);
+      setRevokeReasons((prev) => {
+        const next = { ...prev };
+        delete next[empId];
+        return next;
+      });
+      void loadData();
+    } catch {
+      toast.error('Failed to revoke collector access');
     } finally {
       setActingId(null);
     }
@@ -731,7 +838,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           ) : (
             <div className="space-y-2">
               {pending.map((item) => {
-                const isOpen = expandedId === item.empId;
+                const isOpen = expandedPendingId === item.empId;
                 const nicFront = resolveMediaUrl(item.nicPhotoUrl);
                 const nicBack = resolveMediaUrl(item.nicPhotoBackUrl);
                 const isActing = actingId === item.empId;
@@ -744,7 +851,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                   >
                     <button
                       type="button"
-                      onClick={() => toggleExpanded(item.empId)}
+                      onClick={() => togglePendingExpanded(item.empId)}
                       className={`w-full text-left p-4 flex items-center justify-between gap-4 ${
                         isOpen ? 'bg-green-50/40' : 'hover:bg-gray-50'
                       }`}
@@ -808,7 +915,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
                           }
                         />
                         <div className="flex gap-2 justify-end">
-                          <Button variant="outline" onClick={() => setExpandedId(null)} disabled={isActing}>
+                          <Button variant="outline" onClick={() => setExpandedPendingId(null)} disabled={isActing}>
                             Collapse
                           </Button>
                           <Button variant="outline" onClick={() => void reject(item.empId)} disabled={isActing}>
@@ -843,20 +950,161 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
             <p className="text-gray-500">No active third-party collectors.</p>
           ) : (
             <div className="space-y-2">
-              {active.map((collector) => (
-                <div
-                  key={collector.empId || collector.id}
-                  className="p-3 border border-gray-200 rounded-lg flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-gray-900 font-medium">{collector.empName || collector.email}</p>
-                    <p className="text-xs text-gray-500">{collector.email}</p>
+              {active.map((collector) => {
+                const isOpen = expandedActiveId === collector.empId;
+                const nicFront = resolveMediaUrl(collector.nicPhotoUrl);
+                const nicBack = resolveMediaUrl(collector.nicPhotoBackUrl);
+                const isActing = actingId === collector.empId;
+                return (
+                  <div
+                    key={collector.empId}
+                    className={`border rounded-lg overflow-hidden transition-colors ${
+                      isOpen ? 'border-green-400 shadow-sm' : 'border-gray-200'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleActiveExpanded(collector.empId)}
+                      className={`w-full text-left p-4 flex items-center justify-between gap-4 ${
+                        isOpen ? 'bg-green-50/40' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900">{collector.empName || collector.email}</p>
+                        <p className="text-sm text-gray-500">{collector.email}</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {[collector.company, collector.assignedCouncils].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge className="bg-green-100 text-green-800">ACTIVE</Badge>
+                        {isOpen ? (
+                          <ChevronUp className="w-5 h-5 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-500" />
+                        )}
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-gray-200 p-4 space-y-4 bg-white">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                          <div><span className="text-gray-500">Email:</span> {collector.email || '—'}</div>
+                          <div><span className="text-gray-500">Phone:</span> {collector.phone || '—'}</div>
+                          <div><span className="text-gray-500">NIC:</span> {collector.NIC || collector.nic || '—'}</div>
+                          <div><span className="text-gray-500">Company:</span> {collector.company || '—'}</div>
+                          <div><span className="text-gray-500">Contract ID:</span> {collector.contractId || '—'}</div>
+                          <div><span className="text-gray-500">Contract:</span> {[collector.contractStart, collector.contractEnd].filter(Boolean).join(' → ') || '—'}</div>
+                          <div className="sm:col-span-2"><span className="text-gray-500">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
+                          <div className="sm:col-span-2"><span className="text-gray-500">Address:</span> {collector.defaultAddress || '—'}</div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {nicFront ? (
+                            <a href={nicFront} target="_blank" rel="noreferrer">
+                              <img src={nicFront} alt="NIC front" className="rounded-lg border max-h-40 object-contain w-full bg-gray-50" />
+                            </a>
+                          ) : (
+                            <div className="text-xs text-gray-400 border border-dashed rounded-lg p-6 text-center">No NIC front photo</div>
+                          )}
+                          {nicBack ? (
+                            <a href={nicBack} target="_blank" rel="noreferrer">
+                              <img src={nicBack} alt="NIC back" className="rounded-lg border max-h-40 object-contain w-full bg-gray-50" />
+                            </a>
+                          ) : (
+                            <div className="text-xs text-gray-400 border border-dashed rounded-lg p-6 text-center">No NIC back photo</div>
+                          )}
+                        </div>
+                        <Input
+                          placeholder="Revoke reason (optional)"
+                          value={revokeReasons[collector.empId] || ''}
+                          onChange={(e) =>
+                            setRevokeReasons((prev) => ({ ...prev, [collector.empId]: e.target.value }))
+                          }
+                        />
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" onClick={() => setExpandedActiveId(null)} disabled={isActing}>
+                            Collapse
+                          </Button>
+                          <Button variant="outline" onClick={() => void revoke(collector.empId)} disabled={isActing}>
+                            Revoke Access
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {collector.council && (
-                    <Badge variant="secondary">{collector.council}</Badge>
-                  )}
-                </div>
-              ))}
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Revoked Collectors</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-gray-500">Loading revoked collectors...</p>
+          ) : revoked.length === 0 ? (
+            <p className="text-gray-500">No revoked third-party collectors.</p>
+          ) : (
+            <div className="space-y-2">
+              {revoked.map((collector) => {
+                const isOpen = expandedRevokedId === collector.empId;
+                const isActing = actingId === collector.empId;
+                return (
+                  <div
+                    key={collector.empId}
+                    className={`border rounded-lg overflow-hidden transition-colors ${
+                      isOpen ? 'border-amber-400 shadow-sm' : 'border-gray-200'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleRevokedExpanded(collector.empId)}
+                      className={`w-full text-left p-4 flex items-center justify-between gap-4 ${
+                        isOpen ? 'bg-amber-50/40' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900">{collector.empName || collector.email}</p>
+                        <p className="text-sm text-gray-500">{collector.email}</p>
+                        <p className="text-xs text-gray-400 mt-1">{collector.assignedCouncils || '—'}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge className="bg-red-100 text-red-800">REVOKED</Badge>
+                        {isOpen ? (
+                          <ChevronUp className="w-5 h-5 text-gray-500" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-gray-500" />
+                        )}
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-gray-200 p-4 space-y-4 bg-white">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                          <div><span className="text-gray-500">Email:</span> {collector.email || '—'}</div>
+                          <div><span className="text-gray-500">Phone:</span> {collector.phone || '—'}</div>
+                          <div><span className="text-gray-500">Company:</span> {collector.company || '—'}</div>
+                          <div className="sm:col-span-2"><span className="text-gray-500">Assigned councils:</span> {collector.assignedCouncils || '—'}</div>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" onClick={() => setExpandedRevokedId(null)} disabled={isActing}>
+                            Collapse
+                          </Button>
+                          <Button
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => void unrevoke(collector.empId)}
+                            disabled={isActing}
+                          >
+                            {isActing ? 'Processing...' : 'Restore Access'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
