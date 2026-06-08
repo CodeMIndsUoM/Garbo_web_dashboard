@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Calendar, Trash2, Truck, BarChart3, Map as MapIcon, Shield, Users, Building2 } from 'lucide-react';
+import { LayoutDashboard, Trash2, Truck, BarChart3, Map as MapIcon, Shield, Users, Building2 } from 'lucide-react';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -14,7 +14,6 @@ interface SidebarProps {
 export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selectedCouncil }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'schedule' as PageType, label: 'Bin Collection', icon: Calendar },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
     { id: 'vehicles' as PageType, label: 'Vehicle Management', icon: Truck },
     { id: 'map' as PageType, label: 'Map', icon: MapIcon },

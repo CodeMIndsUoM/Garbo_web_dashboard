@@ -9,7 +9,6 @@ import {
   type Council,
 } from '@/lib/council-context';
 import { Dashboard } from '@/components/Dashboard';
-import { CollectionSchedule } from '@/components/CollectionSchedule';
 import { BinManagement } from '@/components/BinManagement';
 import { VehicleManagement } from '@/components/VehicleManagement';
 import { WasteAnalytics } from '@/components/WasteAnalytics';
@@ -35,7 +34,6 @@ const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
 
 export type PageType =
   | 'dashboard'
-  | 'schedule'
   | 'bins'
   | 'map'
   | 'vehicles'
@@ -82,8 +80,6 @@ function AuthenticatedShell({
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard council={activeCouncil} />;
-      case 'schedule':
-        return <CollectionSchedule council={activeCouncil} />;
       case 'bins':
         return (
           <BinManagement council={activeCouncil} userRole={userRole} />

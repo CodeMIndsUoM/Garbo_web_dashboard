@@ -140,3 +140,8 @@ html {
   outline: none !important;
 }
 
+.draft-stop-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
