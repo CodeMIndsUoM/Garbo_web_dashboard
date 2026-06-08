@@ -24,7 +24,7 @@ export function ThirdPartyCollectors({ council }: { council?: { name?: string } 
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
 
   const tokenHeader = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
