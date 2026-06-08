@@ -1,6 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { AuthShell } from '@/components/layout/AuthShell';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { getApiBase } from '@/lib/api';
+import { typography } from '@/theme';
 
 interface LoginProps {
   onLogin?: (opts?: { mustChangePassword?: boolean }) => void;
@@ -13,8 +20,6 @@ export function Login({ onLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  
-  const API_BASE = (import.meta as any).env?.VITE_API_BASE || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -26,7 +31,7 @@ export function Login({ onLogin }: LoginProps) {
     try {
       const email = username.trim();
       const pwd = password;
-      const res = await fetch(`${ API_BASE }/api/auth/login`, {
+      const res = await fetch(`${getApiBase()}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -38,8 +43,6 @@ export function Login({ onLogin }: LoginProps) {
       });
 
       const data = await res.json();
-
-      // extract mustChangePassword if backend provides it (backwards compatible)
       const mustChangePassword = data?.mustChangePassword ?? data?.data?.mustChangePassword ?? false;
 
       if (!res.ok) {
@@ -48,8 +51,7 @@ export function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      // backend returns: { token: "...", role: "...", email: "..." }
-      const token = data.token||data.accessToken||data.data?.token;
+      const token = data.token || data.accessToken || data?.data?.token;
       if (!token) {
         setError('Login succeeded but no token returned');
         setLoading(false);
@@ -57,42 +59,31 @@ export function Login({ onLogin }: LoginProps) {
       }
 
       sessionStorage.setItem('token', token);
-      // Try to extract role and id from token if backend doesn't include them in response
       try {
-        // lazy-import to avoid SSR issues
-        // @ts-ignore
         const { decodeJwtPayload } = await import('@/lib/jwt');
         const payload = decodeJwtPayload(token);
         const roleFromToken = payload?.role || payload?.roles || payload?.roleName;
         const idFromToken = payload?.sub || payload?.id || payload?.userId;
-        const roleToStore = data.role||data.data?.role||roleFromToken||'admin';
+        const roleToStore = data.role || data.data?.role || roleFromToken || 'admin';
         sessionStorage.setItem('role', roleToStore);
         sessionStorage.setItem('userId', idFromToken || '');
         sessionStorage.setItem(
           'admin',
-          JSON.stringify({ username: data.email||data.data?.email, role: roleToStore, id: idFromToken || undefined })
+          JSON.stringify({ username: data.email || data.data?.email, role: roleToStore, id: idFromToken || undefined })
         );
-        // persist mustChangePassword flag for app-level routing (backwards compatible)
-        try { sessionStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword))); } catch (e) {}
-      } catch (e) {
-        sessionStorage.setItem('role', data.role||data.data?.role||'admin');
+        try {
+          sessionStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword)));
+        } catch {
+          /* ignore */
+        }
+      } catch {
+        sessionStorage.setItem('role', data.role || data.data?.role || 'admin');
         sessionStorage.setItem(
           'admin',
-          JSON.stringify({ username: data.email||data.data?.email, role: data.role||data.data?.role||'admin' })
+          JSON.stringify({ username: data.email || data.data?.email, role: data.role || data.data?.role || 'admin' })
         );
       }
-      try {
-        const council = data?.council ?? data?.data?.council;
-        if (council === null || council === undefined) {
-          sessionStorage.removeItem('council');
-        } else {
-          sessionStorage.setItem('council', JSON.stringify(council));
-        }
-      } catch (e) {}
 
-      // Enforce strict overwrite behavior for `council` returned by backend.
-      // Always clear previous council on every login. If backend returns null/undefined,
-      // remove `council` from sessionStorage; otherwise store the returned object.
       try {
         const council = data?.council ?? data?.data?.council;
         if (council === null || council === undefined) {
@@ -100,83 +91,86 @@ export function Login({ onLogin }: LoginProps) {
         } else {
           sessionStorage.setItem('council', JSON.stringify(council));
         }
-      } catch (e) {}
+      } catch {
+        /* ignore */
+      }
 
       setLoading(false);
       if (onLogin) onLogin({ mustChangePassword: Boolean(mustChangePassword) });
-    } catch (err: any) {
-      setError('Network error');
+    } catch {
+      setError('Network error. Please check your connection and try again.');
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm md:max-w-md bg-white rounded-lg shadow-md p-6 mx-auto">
-        <h2 className="text-2xl font-semibold mb-4 text-gray-900">Sign in to Garbo</h2>
-        <p className="text-sm text-gray-500 mb-6">Enter your credentials to continue.</p>
+    <AuthShell title="Sign in" subtitle="Enter your credentials to access the admin dashboard.">
+      <form onSubmit={submit} className="space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="login-email" className={typography.label}>
+            Email
+          </Label>
+          <Input
+            id="login-email"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            type="email"
+            autoComplete="username"
+            placeholder="admin@council.gov"
+            aria-label="Email"
+            disabled={loading}
+            className="h-11"
+          />
+        </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-green-500 focus:border-transparent p-2"
-              type="text"
-              placeholder="john@example.com"
-              aria-label="Username"
+        <div className="space-y-2">
+          <Label htmlFor="login-password" className={typography.label}>
+            Password
+          </Label>
+          <div className="relative">
+            <Input
+              id="login-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              aria-label="Password"
               disabled={loading}
+              className="h-11 pr-10"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
-            <div className="relative mt-1">
-              <input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-md border-gray-200 shadow-sm focus:ring-2 focus:ring-green-500 focus:border-transparent p-2 pr-10"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                aria-label="Password"
-                disabled={loading}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                disabled={loading}
-              >
-                {showPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7 1.05-2.02 2.74-3.69 4.73-4.7" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3l18 18" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
-
-          <div>
             <button
-              type="submit"
-              className="w-full inline-flex items-center justify-center rounded-md bg-green-600 text-white px-4 py-2 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+              type="button"
+              onClick={() => setShowPassword((s) => !s)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-        </form>
+        </div>
 
-      </div>
-    </div>
+        {error ? (
+          <p
+            className="rounded-lg border border-status-danger-border bg-status-danger-muted px-3 py-2 text-sm text-status-danger"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <Button type="submit" variant="brand" size="lg" className="w-full" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Signing in...
+            </>
+          ) : (
+            'Sign in'
+          )}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

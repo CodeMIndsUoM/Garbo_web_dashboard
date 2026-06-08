@@ -1,9 +1,18 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Truck, CheckCircle2, MapPin, Search, Settings } from 'lucide-react';
+import { Truck, CheckCircle2, MapPin, Search, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
+import {
+  AnalyticsChartCard,
+  AnalyticsErrorBanner,
+  AnalyticsPageHeader,
+  AnalyticsPageShell,
+  AnalyticsStatCard,
+  CHART,
+  type PieChartEntry,
+} from './layout/analytics-ui';
+import { AnalyticsDonutChart } from './layout/AnalyticsDonutChart';
 
 // Individual vehicle record from the fleet inventory.
 interface VehicleRowDTO {
@@ -27,16 +36,6 @@ interface Council {
   id: string;
   name: string;
   description?: string;
-}
-
-// Placeholder animation shown while KPI values load.
-function KpiSkeleton() {
-  return (
-    <div className="animate-pulse">
-      <div className="h-8 w-16 bg-gray-200 rounded mb-2" />
-      <div className="h-4 w-24 bg-gray-100 rounded" />
-    </div>
-  );
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
@@ -83,110 +82,76 @@ export function VehicleAnalytics({ onBack, council }: { onBack: () => void; coun
     return matchesSearch && matchesStatus;
   });
 
+  const fleetPie: PieChartEntry[] = [
+    { name: 'On Route', value: data?.onRoute ?? 0, color: CHART.brand },
+    { name: 'Available', value: data?.available ?? 0, color: '#22c55e' },
+    { name: 'Maintenance', value: data?.maintenance ?? 0, color: CHART.neutral },
+  ].filter((item) => item.value > 0);
+
   return (
-    <div className="p-8 bg-gray-50/30 min-h-screen">
+    <AnalyticsPageShell>
+      <AnalyticsPageHeader
+        title="Vehicle Analytics"
+        subtitle={
+          council?.name
+            ? `${council.name} — fleet status and operational efficiency`
+            : 'Monitoring fleet status and operational efficiency'
+        }
+        onBack={onBack}
+      />
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-full shadow-sm">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Vehicle Analytics</h1>
-            <p className="text-gray-500 text-lg">
-              {council?.name ? `${council.name} — fleet status and operational efficiency` : 'Monitoring fleet status and operational efficiency'}
-            </p>
-          </div>
-        </div>
-      </div>
+      {error ? <AnalyticsErrorBanner message={`${error} — check that the backend is running on port 8081`} /> : null}
 
-      {/* Error banner */}
-      {/* Non-blocking error message; user can still view KPIs and table or refresh. */}
-      {error && (
-        <div className="mb-6 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          ⚠ {error} — check that the backend is running on port 8081
-        </div>
-      )}
-
-      {/* KPI Row */}
-      {/* High-level fleet metrics: total, on route, available, maintenance. */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-
-        <Card className="border-none bg-white shadow-sm ring-1 ring-gray-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase">Total Fleet</CardTitle>
-            <Truck className="w-5 h-5 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            {loading ? <KpiSkeleton /> : (
-              <>
-                <div className="text-3xl font-bold text-gray-900">{data?.totalFleet ?? 0}</div>
-                <p className="text-sm text-gray-500 font-medium mt-1">Active vehicles</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-none bg-white shadow-sm ring-1 ring-gray-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase">On Route</CardTitle>
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <MapPin className="w-5 h-5 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? <KpiSkeleton /> : (
-              <>
-                <div className="text-3xl font-bold text-gray-900">{data?.onRoute ?? 0}</div>
-                <p className="text-sm text-blue-600 font-medium mt-1">Currently active</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-none bg-white shadow-sm ring-1 ring-gray-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase">Available</CardTitle>
-            <div className="p-2 bg-green-50 rounded-lg">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? <KpiSkeleton /> : (
-              <>
-                <div className="text-3xl font-bold text-gray-900">{data?.available ?? 0}</div>
-                <p className="text-sm text-green-600 font-medium mt-1">Ready for dispatch</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-none bg-white shadow-sm ring-1 ring-gray-100">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase">Maintenance</CardTitle>
-            <div className="p-2 bg-amber-50 rounded-lg">
-              <Settings className="w-5 h-5 text-amber-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? <KpiSkeleton /> : (
-              <>
-                <div className="text-3xl font-bold text-gray-900">{data?.maintenance ?? 0}</div>
-                <p className="text-sm text-amber-600 font-medium mt-1">In workshop</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
+        <AnalyticsStatCard
+          label="Total Fleet"
+          value={data?.totalFleet ?? 0}
+          detail="Active vehicles"
+          icon={Truck}
+          loading={loading}
+        />
+        <AnalyticsStatCard
+          label="On Route"
+          value={data?.onRoute ?? 0}
+          detail="Currently active"
+          icon={MapPin}
+          loading={loading}
+        />
+        <AnalyticsStatCard
+          label="Available"
+          value={data?.available ?? 0}
+          detail="Ready for dispatch"
+          icon={CheckCircle2}
+          loading={loading}
+        />
+        <AnalyticsStatCard
+          label="Maintenance"
+          value={data?.maintenance ?? 0}
+          detail="In workshop"
+          icon={Settings}
+          loading={loading}
+        />
       </div>
+
+      <AnalyticsChartCard
+        title="Fleet Status Distribution"
+        subtitle="Share of vehicles by operational status"
+        className="mb-8"
+      >
+        <AnalyticsDonutChart
+          data={fleetPie}
+          centerValue={data?.totalFleet ?? 0}
+          centerLabel="Total fleet"
+          height={280}
+        />
+      </AnalyticsChartCard>
 
       {/* Fleet Table */}
       {/* Searchable, filterable inventory of all vehicles with status badges. */}
       <Card className="border-none shadow-sm ring-1 ring-gray-100 bg-white overflow-hidden">
         <CardHeader className="border-b border-gray-50 bg-gray-50/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-lg font-bold text-gray-800">Fleet Overview & Status</CardTitle>
+            <CardTitle className="text-gray-900">Fleet Overview & Status</CardTitle>
             {/* Quick-filter buttons for status grouping. */}
             <div className="flex gap-2 mt-2">
               {['All', 'On Route', 'Available', 'Maintenance'].map((s) => (
@@ -194,7 +159,7 @@ export function VehicleAnalytics({ onBack, council }: { onBack: () => void; coun
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${statusFilter === s
-                    ? 'bg-blue-600 text-white shadow-md'
+                    ? 'bg-green-600 text-white shadow-sm'
                     : 'bg-white text-gray-500 hover:bg-gray-100 ring-1 ring-gray-200'
                     }`}
                 >
@@ -211,7 +176,7 @@ export function VehicleAnalytics({ onBack, council }: { onBack: () => void; coun
               placeholder="Search plate or ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+              className="pl-9 pr-4 py-2 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 w-full"
             />
           </div>
         </CardHeader>
@@ -246,7 +211,7 @@ export function VehicleAnalytics({ onBack, council }: { onBack: () => void; coun
                   ) : (
                     filteredVehicles.map((vehicle) => (
                       <tr key={vehicle.vehicleId} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-4 text-sm font-medium text-blue-600">{vehicle.vehicleId}</td>
+                        <td className="py-4 text-sm font-medium text-gray-900">{vehicle.vehicleId}</td>
                         <td className="py-4 text-sm font-bold text-gray-900 tracking-wider">{vehicle.plate}</td>
                         <td className="py-4 text-sm text-gray-600 font-medium">{vehicle.type}</td>
                         <td className="py-4">
@@ -268,6 +233,6 @@ export function VehicleAnalytics({ onBack, council }: { onBack: () => void; coun
         </CardContent>
       </Card>
 
-    </div>
+    </AnalyticsPageShell>
   );
 }

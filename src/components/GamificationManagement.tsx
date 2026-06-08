@@ -5,6 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { PageHeader } from './layout/PageHeader';
+import {
+  CodeBadge,
+  DetailField,
+  DetailGrid,
+  ExpandableRow,
+  FormField,
+  FormPanel,
+  FormSelect,
+} from './layout/management-ui';
+import { typography } from '@/theme';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
@@ -28,10 +40,26 @@ interface GamificationTask {
   family?: TaskFamily;
 }
 
+function formatRoleScope(role?: string) {
+  const value = (role || '').toUpperCase();
+  if (value === 'FIELD_MENTOR') return 'Field mentor';
+  if (value === 'COLLECTOR') return 'Collector';
+  if (value === 'ALL') return 'All roles';
+  return role || '—';
+}
+
+function taskStatusClass(status?: string) {
+  const value = (status || '').toUpperCase();
+  if (value === 'PUBLISHED') return 'border-green-200 bg-green-50 text-green-700';
+  if (value === 'DRAFT') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-border bg-muted text-muted-foreground';
+}
+
 export function GamificationManagement() {
   const [families, setFamilies] = useState<TaskFamily[]>([]);
   const [tasks, setTasks] = useState<GamificationTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
   const [familyForm, setFamilyForm] = useState({ code: '', name: '', description: '' });
   const [taskForm, setTaskForm] = useState({
     code: '',
@@ -119,29 +147,92 @@ export function GamificationManagement() {
     loadData();
   };
 
+  const toggleTaskExpanded = (taskId: number) => {
+    setExpandedTaskId((current) => (current === taskId ? null : taskId));
+  };
+
   return (
-    <div className="p-8 space-y-8">
-      <div>
-        <h2 className="text-gray-900 mb-2">Gamification</h2>
-        <p className="text-gray-600">Manage task families and gamification tasks for collectors and field mentors</p>
-      </div>
+    <div className="p-8 space-y-6">
+      <PageHeader
+        title="Gamification"
+        subtitle="Manage task families and gamification tasks for collectors and field mentors"
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>Task Families</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form className="grid grid-cols-1 md:grid-cols-4 gap-3" onSubmit={createFamily}>
-            <Input placeholder="Code" value={familyForm.code} onChange={(e) => setFamilyForm((p) => ({ ...p, code: e.target.value }))} />
-            <Input placeholder="Name" value={familyForm.name} onChange={(e) => setFamilyForm((p) => ({ ...p, name: e.target.value }))} />
-            <Input placeholder="Description" value={familyForm.description} onChange={(e) => setFamilyForm((p) => ({ ...p, description: e.target.value }))} />
-            <Button type="submit" className="bg-green-600 hover:bg-green-700">Add Family</Button>
+          <form onSubmit={createFamily}>
+            <FormPanel
+              footer={
+                <Button type="submit" variant="brand">
+                  Add Family
+                </Button>
+              }
+            >
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                <FormField label="Code" htmlFor="family-code">
+                  <Input
+                    id="family-code"
+                    placeholder="e.g. COLLECTION"
+                    value={familyForm.code}
+                    onChange={(e) => setFamilyForm((p) => ({ ...p, code: e.target.value }))}
+                    required
+                  />
+                </FormField>
+                <FormField label="Name" htmlFor="family-name">
+                  <Input
+                    id="family-name"
+                    placeholder="Family name"
+                    value={familyForm.name}
+                    onChange={(e) => setFamilyForm((p) => ({ ...p, name: e.target.value }))}
+                    required
+                  />
+                </FormField>
+                <FormField label="Description" htmlFor="family-description">
+                  <Input
+                    id="family-description"
+                    placeholder="Short description"
+                    value={familyForm.description}
+                    onChange={(e) => setFamilyForm((p) => ({ ...p, description: e.target.value }))}
+                  />
+                </FormField>
+              </div>
+            </FormPanel>
           </form>
-          <div className="flex flex-wrap gap-2">
-            {families.map((f) => (
-              <Badge key={f.id} variant="secondary">{f.name} ({f.code})</Badge>
-            ))}
-          </div>
+
+          {families.length > 0 ? (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {families.map((family) => (
+                    <TableRow key={family.id}>
+                      <TableCell>
+                        <CodeBadge>{family.code}</CodeBadge>
+                      </TableCell>
+                      <TableCell className="font-medium">{family.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{family.description || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/80 px-6 py-8 text-center">
+              <p className={typography.label}>No task families yet</p>
+              <p className={`${typography.caption} mt-1`}>
+                Use the form above to create your first family and group related tasks.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -150,56 +241,186 @@ export function GamificationManagement() {
           <CardTitle>Create Task</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid grid-cols-1 md:grid-cols-2 gap-3" onSubmit={createTask}>
-            <Input placeholder="Code" value={taskForm.code} onChange={(e) => setTaskForm((p) => ({ ...p, code: e.target.value }))} />
-            <Input placeholder="Title" value={taskForm.title} onChange={(e) => setTaskForm((p) => ({ ...p, title: e.target.value }))} />
-            <Input placeholder="Description" value={taskForm.description} onChange={(e) => setTaskForm((p) => ({ ...p, description: e.target.value }))} />
-            <Input placeholder="Role (COLLECTOR/FIELD_MENTOR/ALL)" value={taskForm.roleScope} onChange={(e) => setTaskForm((p) => ({ ...p, roleScope: e.target.value }))} />
-            <Input placeholder="Task type" value={taskForm.taskType} onChange={(e) => setTaskForm((p) => ({ ...p, taskType: e.target.value }))} />
-            <Input placeholder="Base points" value={taskForm.basePoints} onChange={(e) => setTaskForm((p) => ({ ...p, basePoints: e.target.value }))} />
-            <Input placeholder="Target progress" value={taskForm.targetProgress} onChange={(e) => setTaskForm((p) => ({ ...p, targetProgress: e.target.value }))} />
-            <select
-              className="border rounded-md px-3 py-2 text-sm"
-              value={taskForm.familyId}
-              onChange={(e) => setTaskForm((p) => ({ ...p, familyId: e.target.value }))}
+          <form onSubmit={createTask}>
+            <FormPanel
+              footer={
+                <Button type="submit" variant="brand">
+                  Create Task
+                </Button>
+              }
             >
-              <option value="">No family</option>
-              {families.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-            <Button type="submit" className="bg-green-600 hover:bg-green-700 md:col-span-2">Create Task</Button>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <FormField label="Code" htmlFor="task-code">
+                <Input
+                  id="task-code"
+                  placeholder="Task code"
+                  value={taskForm.code}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, code: e.target.value }))}
+                  required
+                />
+              </FormField>
+              <FormField label="Title" htmlFor="task-title">
+                <Input
+                  id="task-title"
+                  placeholder="Task title"
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, title: e.target.value }))}
+                  required
+                />
+              </FormField>
+              <FormField label="Description" htmlFor="task-description" className="md:col-span-2">
+                <Input
+                  id="task-description"
+                  placeholder="What the collector must do"
+                  value={taskForm.description}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, description: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Role scope" htmlFor="task-role">
+                <FormSelect
+                  id="task-role"
+                  value={taskForm.roleScope}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, roleScope: e.target.value }))}
+                >
+                  <option value="COLLECTOR">Collector</option>
+                  <option value="FIELD_MENTOR">Field mentor</option>
+                  <option value="ALL">All</option>
+                </FormSelect>
+              </FormField>
+              <FormField label="Task type" htmlFor="task-type">
+                <Input
+                  id="task-type"
+                  placeholder="BIN_COLLECTION"
+                  value={taskForm.taskType}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, taskType: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Base points" htmlFor="task-points">
+                <Input
+                  id="task-points"
+                  type="number"
+                  min={0}
+                  value={taskForm.basePoints}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, basePoints: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Target progress" htmlFor="task-target">
+                <Input
+                  id="task-target"
+                  type="number"
+                  min={1}
+                  value={taskForm.targetProgress}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, targetProgress: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Task family" htmlFor="task-family">
+                <FormSelect
+                  id="task-family"
+                  value={taskForm.familyId}
+                  onChange={(e) => setTaskForm((p) => ({ ...p, familyId: e.target.value }))}
+                >
+                  <option value="">No family</option>
+                  {families.map((family) => (
+                    <option key={family.id} value={family.id}>
+                      {family.name}
+                    </option>
+                  ))}
+                </FormSelect>
+              </FormField>
+              </div>
+            </FormPanel>
           </form>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
           <CardTitle>Tasks</CardTitle>
+          {!loading && tasks.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+                {tasks.filter((t) => (t.status || '').toUpperCase() === 'PUBLISHED').length} published
+              </Badge>
+              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                {tasks.filter((t) => (t.status || '').toUpperCase() !== 'PUBLISHED').length} draft
+              </Badge>
+            </div>
+          ) : null}
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-gray-500">Loading tasks...</div>
+            <p className={typography.caption}>Loading tasks...</p>
           ) : tasks.length === 0 ? (
-            <div className="text-gray-500">No tasks defined yet.</div>
+            <div className="rounded-lg border border-dashed border-border bg-muted/80 px-6 py-10 text-center">
+              <p className={typography.label}>No tasks defined yet</p>
+              <p className={`${typography.caption} mt-1`}>Create a task above to reward collectors and mentors.</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {tasks.map((task) => (
-                <div key={task.id} className="p-4 border border-gray-200 rounded-lg flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-gray-900 font-medium">{task.title}</p>
-                    <p className="text-sm text-gray-600">{task.code} · {task.roleScope} · {task.taskType}</p>
-                    <p className="text-sm text-gray-600">{task.basePoints} pts · target {task.targetProgress}</p>
-                    {task.family && <p className="text-xs text-gray-500">Family: {task.family.name}</p>}
-                    <Badge variant="secondary" className="mt-2">{task.status}</Badge>
-                  </div>
-                  {task.status !== 'PUBLISHED' && (
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => publishTask(task.id)}>
-                      Publish
-                    </Button>
-                  )}
-                </div>
-              ))}
+              {tasks.map((task) => {
+                const isOpen = expandedTaskId === task.id;
+                const isPublished = (task.status || '').toUpperCase() === 'PUBLISHED';
+                return (
+                  <ExpandableRow
+                    key={task.id}
+                    isOpen={isOpen}
+                    onToggle={() => toggleTaskExpanded(task.id)}
+                    title={task.title}
+                    subtitle={<CodeBadge>{task.code}</CodeBadge>}
+                    trailing={
+                      <>
+                        <Badge
+                          variant="outline"
+                          className="border-green-200 bg-green-50 font-semibold text-green-700"
+                        >
+                          {task.basePoints ?? 0} pts
+                        </Badge>
+                        <Badge variant="outline" className={taskStatusClass(task.status)}>
+                          {task.status || 'Unknown'}
+                        </Badge>
+                      </>
+                    }
+                  >
+                    {task.description ? (
+                      <DetailField label="Description">
+                        <span className="text-muted-foreground">{task.description}</span>
+                      </DetailField>
+                    ) : null}
+                    <DetailGrid>
+                      <DetailField label="Code">
+                        <CodeBadge>{task.code}</CodeBadge>
+                      </DetailField>
+                      <DetailField label="Role">
+                        <Badge variant="outline" className="border-border font-normal">
+                          {formatRoleScope(task.roleScope)}
+                        </Badge>
+                      </DetailField>
+                      <DetailField label="Type">
+                        {task.taskType?.replace(/_/g, ' ') || '—'}
+                      </DetailField>
+                      <DetailField label="Target">{task.targetProgress ?? '—'}</DetailField>
+                      <DetailField label="Family">{task.family?.name || '—'}</DetailField>
+                      <DetailField label="Points">
+                        <span className="font-semibold text-green-700">{task.basePoints ?? 0}</span>
+                      </DetailField>
+                    </DetailGrid>
+                    <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+                      <span className={typography.caption}>
+                        {isPublished ? 'This task is live for assigned roles.' : 'Draft — publish when ready.'}
+                      </span>
+                      {isPublished ? (
+                        <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+                          Live
+                        </Badge>
+                      ) : (
+                        <Button size="sm" variant="brand" onClick={() => publishTask(task.id)}>
+                          Publish
+                        </Button>
+                      )}
+                    </div>
+                  </ExpandableRow>
+                );
+              })}
             </div>
           )}
         </CardContent>
