@@ -12,7 +12,6 @@ import {
   DetailField,
   DetailGrid,
   ExpandableRow,
-  FormActions,
   FormField,
   FormPanel,
   FormSelect,
@@ -53,7 +52,7 @@ function taskStatusClass(status?: string) {
   const value = (status || '').toUpperCase();
   if (value === 'PUBLISHED') return 'border-green-200 bg-green-50 text-green-700';
   if (value === 'DRAFT') return 'border-amber-200 bg-amber-50 text-amber-800';
-  return 'border-gray-200 bg-gray-50 text-gray-600';
+  return 'border-border bg-muted text-muted-foreground';
 }
 
 export function GamificationManagement() {
@@ -165,45 +164,46 @@ export function GamificationManagement() {
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={createFamily}>
-            <FormPanel>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <FormField label="Code" htmlFor="family-code">
-                <Input
-                  id="family-code"
-                  placeholder="e.g. COLLECTION"
-                  value={familyForm.code}
-                  onChange={(e) => setFamilyForm((p) => ({ ...p, code: e.target.value }))}
-                  required
-                />
-              </FormField>
-              <FormField label="Name" htmlFor="family-name">
-                <Input
-                  id="family-name"
-                  placeholder="Family name"
-                  value={familyForm.name}
-                  onChange={(e) => setFamilyForm((p) => ({ ...p, name: e.target.value }))}
-                  required
-                />
-              </FormField>
-              <FormField label="Description" htmlFor="family-description">
-                <Input
-                  id="family-description"
-                  placeholder="Short description"
-                  value={familyForm.description}
-                  onChange={(e) => setFamilyForm((p) => ({ ...p, description: e.target.value }))}
-                />
-              </FormField>
-            </div>
+            <FormPanel
+              footer={
+                <Button type="submit" variant="brand">
+                  Add Family
+                </Button>
+              }
+            >
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                <FormField label="Code" htmlFor="family-code">
+                  <Input
+                    id="family-code"
+                    placeholder="e.g. COLLECTION"
+                    value={familyForm.code}
+                    onChange={(e) => setFamilyForm((p) => ({ ...p, code: e.target.value }))}
+                    required
+                  />
+                </FormField>
+                <FormField label="Name" htmlFor="family-name">
+                  <Input
+                    id="family-name"
+                    placeholder="Family name"
+                    value={familyForm.name}
+                    onChange={(e) => setFamilyForm((p) => ({ ...p, name: e.target.value }))}
+                    required
+                  />
+                </FormField>
+                <FormField label="Description" htmlFor="family-description">
+                  <Input
+                    id="family-description"
+                    placeholder="Short description"
+                    value={familyForm.description}
+                    onChange={(e) => setFamilyForm((p) => ({ ...p, description: e.target.value }))}
+                  />
+                </FormField>
+              </div>
             </FormPanel>
-            <FormActions>
-              <Button type="submit" variant="brand">
-                Add Family
-              </Button>
-            </FormActions>
           </form>
 
           {families.length > 0 ? (
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -226,7 +226,12 @@ export function GamificationManagement() {
               </Table>
             </div>
           ) : (
-            <p className={typography.caption}>No task families yet.</p>
+            <div className="rounded-lg border border-dashed border-border bg-muted/80 px-6 py-8 text-center">
+              <p className={typography.label}>No task families yet</p>
+              <p className={`${typography.caption} mt-1`}>
+                Use the form above to create your first family and group related tasks.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -237,8 +242,14 @@ export function GamificationManagement() {
         </CardHeader>
         <CardContent>
           <form onSubmit={createTask}>
-            <FormPanel>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <FormPanel
+              footer={
+                <Button type="submit" variant="brand">
+                  Create Task
+                </Button>
+              }
+            >
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label="Code" htmlFor="task-code">
                 <Input
                   id="task-code"
@@ -316,13 +327,8 @@ export function GamificationManagement() {
                   ))}
                 </FormSelect>
               </FormField>
-            </div>
+              </div>
             </FormPanel>
-            <FormActions>
-              <Button type="submit" variant="brand">
-                Create Task
-              </Button>
-            </FormActions>
           </form>
         </CardContent>
       </Card>
@@ -345,7 +351,7 @@ export function GamificationManagement() {
           {loading ? (
             <p className={typography.caption}>Loading tasks...</p>
           ) : tasks.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-6 py-10 text-center">
+            <div className="rounded-lg border border-dashed border-border bg-muted/80 px-6 py-10 text-center">
               <p className={typography.label}>No tasks defined yet</p>
               <p className={`${typography.caption} mt-1`}>Create a task above to reward collectors and mentors.</p>
             </div>
@@ -385,7 +391,7 @@ export function GamificationManagement() {
                         <CodeBadge>{task.code}</CodeBadge>
                       </DetailField>
                       <DetailField label="Role">
-                        <Badge variant="outline" className="border-gray-200 font-normal">
+                        <Badge variant="outline" className="border-border font-normal">
                           {formatRoleScope(task.roleScope)}
                         </Badge>
                       </DetailField>
@@ -398,7 +404,7 @@ export function GamificationManagement() {
                         <span className="font-semibold text-green-700">{task.basePoints ?? 0}</span>
                       </DetailField>
                     </DetailGrid>
-                    <div className="flex items-center justify-between gap-4 border-t border-gray-100 pt-3">
+                    <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
                       <span className={typography.caption}>
                         {isPublished ? 'This task is live for assigned roles.' : 'Draft — publish when ready.'}
                       </span>

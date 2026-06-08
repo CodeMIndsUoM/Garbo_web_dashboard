@@ -1,4 +1,4 @@
-export { brand, surface, status } from './colors';
+export { brand, surface, status, glass } from './colors';
 export { typography } from './typography';
 export { layout } from './layout';
 

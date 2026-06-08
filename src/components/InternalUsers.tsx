@@ -228,14 +228,14 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
     {
       id: 'field-staff',
       label: 'Field Staff',
-      icon: <HardHat className="w-4 h-4" />,
+      icon: <HardHat className="size-4" />,
       count: fieldStaff.length,
       description: 'Field mentors who supervise collection operations.',
     },
     {
       id: 'bin-collectors',
       label: 'Bin Collectors',
-      icon: <Trash2 className="w-4 h-4" />,
+      icon: <Trash2 className="size-4" />,
       count: binCollectors.length,
       description: 'Bin collectors assigned to council routes.',
     },
@@ -259,6 +259,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
         onChange={setSection}
       />
 
+      <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>{createLabel}</CardTitle>
@@ -318,20 +319,22 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
             </FormPanel>
 
             <FormActions>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button type="submit" variant="brand" disabled={loading}>
-                  {loading ? 'Creating...' : createLabel}
-                </Button>
-                <Button type="button" variant="outline" onClick={resetForm} disabled={loading}>
-                  Reset
-                </Button>
-              </div>
-              <Badge variant="outline" className="border-gray-200 text-gray-600">
+              <Badge variant="outline" className="border-border text-muted-foreground">
                 {activeRole}
               </Badge>
-              {error ? <p className="text-sm text-red-600">{error}</p> : null}
-              {success ? <p className="text-sm text-green-600">{success}</p> : null}
+              <Button type="button" variant="outline" onClick={resetForm} disabled={loading}>
+                Reset
+              </Button>
+              <Button type="submit" variant="brand" disabled={loading}>
+                {loading ? 'Creating...' : createLabel}
+              </Button>
             </FormActions>
+            {error ? (
+              <p className="mt-3 text-sm text-status-danger">{error}</p>
+            ) : null}
+            {success ? (
+              <p className="mt-3 text-sm text-status-success">{success}</p>
+            ) : null}
           </form>
         </CardContent>
       </Card>
@@ -345,11 +348,11 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
         </CardHeader>
         <CardContent>
           {listLoading ? (
-            <div className="text-gray-500">Loading users...</div>
+            <div className="text-muted-foreground">Loading users...</div>
           ) : listError ? (
             <div className="text-red-600">{listError}</div>
           ) : sectionUsers.length === 0 ? (
-            <div className="text-gray-500">No {sectionTitle.toLowerCase()} found for this council.</div>
+            <div className="text-muted-foreground">No {sectionTitle.toLowerCase()} found for this council.</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -369,7 +372,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                       <TableCell>{user.empName || '-'}</TableCell>
                       <TableCell>{user.email || '-'}</TableCell>
                       <TableCell>
-                        <Badge className={user.onDuty ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
+                        <Badge className={user.onDuty ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-muted-foreground'}>
                           {user.onDuty ? 'On duty' : 'Off duty'}
                         </Badge>
                       </TableCell>
@@ -387,6 +390,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

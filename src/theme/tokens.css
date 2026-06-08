@@ -1,11 +1,10 @@
 /**
  * Garbo dashboard design tokens — single source of truth for theme values.
- * Light-theme brand green values are fixed; do not change --brand-600 / --brand-700.
- * Components should reference these variables (via Tailwind `brand-*` or `var(--*)`), not hardcode hex.
+ * Use CSS variables (Tailwind semantic colors or var(--*)); do not hardcode hex in components.
  */
 
 :root {
-  /* ── Brand green (matches existing Tailwind green-600 / green-700 usage) ── */
+  /* ── Brand green ── */
   --brand-50: #f0fdf4;
   --brand-100: #dcfce7;
   --brand-200: #bbf7d0;
@@ -14,7 +13,6 @@
   --brand-700: #15803d;
   --brand-800: #166534;
 
-  /* Semantic aliases */
   --brand-primary: var(--brand-600);
   --brand-primary-hover: var(--brand-700);
   --brand-primary-foreground: #ffffff;
@@ -22,16 +20,32 @@
   --brand-muted-foreground: var(--brand-800);
   --brand-ring: var(--brand-500);
 
-  /* ── Surfaces (light polish layer — extends shadcn tokens) ── */
+  /* ── Surfaces ── */
   --surface-page: #f8fafc;
   --surface-elevated: #ffffff;
   --surface-subtle: #f1f5f9;
   --surface-border: #e2e8f0;
+  --surface-topbar: #ffffff;
+
+  /* ── Status ── */
+  --status-danger: #dc2626;
+  --status-danger-muted: #fef2f2;
+  --status-danger-border: #fecaca;
+  --status-info: #2563eb;
+  --status-info-muted: #eff6ff;
+  --status-info-border: #bfdbfe;
+  --status-success: #16a34a;
+  --status-success-muted: #f0fdf4;
+  --status-success-border: #bbf7d0;
+  --status-warning: #d97706;
+  --status-warning-muted: #fffbeb;
+  --status-warning-border: #fcd34d;
 
   /* ── Typography scale ── */
   --font-family-sans: var(--font-inter, ui-sans-serif, system-ui, sans-serif);
   --text-display: 2rem;
   --text-page-title: 1.5rem;
+  --text-stat-value: 1.5rem;
   --text-section-title: 1.125rem;
   --text-body: 1rem;
   --text-caption: 0.875rem;
@@ -41,9 +55,10 @@
   --tracking-tight: -0.02em;
 
   /* ── Radius & elevation ── */
+  --radius: 0.625rem;
   --radius-card: 0.75rem;
   --radius-panel: 1rem;
-  --radius-auth-card: 1.25rem; /* 20px — visible rounded login card */
+  --radius-auth-card: 1.25rem;
   --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 10px 40px -10px rgb(15 23 42 / 0.12), 0 4px 12px -4px rgb(15 23 42 / 0.08);
   --shadow-auth-card:
@@ -51,17 +66,147 @@
     0 20px 50px -12px rgb(15 23 42 / 0.18),
     0 8px 24px -8px rgb(15 23 42 / 0.12);
 
-  /* ── Auth layout (login) ── */
+  /* ── shadcn semantic (light) ── */
+  --font-size: 16px;
+  --background: var(--surface-page);
+  --foreground: #0f172a;
+  --card: var(--surface-elevated);
+  --card-foreground: #0f172a;
+  --popover: var(--surface-elevated);
+  --popover-foreground: #0f172a;
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--brand-primary-foreground);
+  --secondary: var(--surface-subtle);
+  --secondary-foreground: #0f172a;
+  --muted: var(--surface-subtle);
+  --muted-foreground: #64748b;
+  --accent: #e2e8f0;
+  --accent-foreground: #0f172a;
+  --destructive: var(--status-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--surface-border);
+  --input: var(--surface-border);
+  --input-background: #ffffff;
+  --ring: var(--brand-ring);
+  --chart-1: #ea580c;
+  --chart-2: #16a34a;
+  --chart-3: #334155;
+  --chart-4: #ca8a04;
+  --chart-5: #d97706;
+  --sidebar: var(--surface-elevated);
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-muted);
+  --sidebar-accent-foreground: var(--brand-800);
+  --sidebar-border: var(--surface-border);
+  --sidebar-ring: var(--brand-ring);
+
+  /* ── Auth layout ── */
   --auth-hero-image: url('/images/login-hero.jpg');
   --auth-hero-overlay: rgb(15 23 42 / 0.42);
   --auth-hero-brand-tint: rgb(22 163 74 / 0.28);
   --auth-form-backdrop: rgba(255, 255, 255, 0.97);
+  --auth-form-column-bg: linear-gradient(180deg, #f1f5f9 0%, var(--surface-page) 72%);
+
+  /* ── Glass overlays (map panels, modals) ── */
+  --glass-surface: rgb(255 255 255 / 0.65);
+  --glass-surface-solid: rgb(255 255 255 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.35);
+  --glass-field: rgb(255 255 255 / 0.82);
+  --glass-text: #1e293b;
+  --glass-text-muted: #64748b;
+
+  /* ── Charts ── */
+  --chart-grid: #f1f5f9;
+  --chart-neutral: #94a3b8;
+  --chart-cursor: rgb(241 245 249 / 0.6);
+
+  /* ── Map (light = no filter) ── */
+  --map-brightness: 1;
+  --map-contrast: 1;
 }
 
 .dark {
-  /* Dark values filled in W9B — placeholders keep build stable */
-  --surface-page: var(--background);
-  --surface-elevated: var(--card);
-  --surface-subtle: var(--muted);
-  --surface-border: var(--border);
+  --brand-50: #052e16;
+  --brand-100: #14532d;
+  --brand-200: #166534;
+  --brand-500: #22c55e;
+  --brand-600: #22c55e;
+  --brand-700: #16a34a;
+  --brand-800: #bbf7d0;
+  --brand-muted: rgb(22 163 74 / 0.15);
+  --brand-muted-foreground: #86efac;
+
+  --surface-page: #0f172a;
+  --surface-elevated: #1e293b;
+  --surface-subtle: #334155;
+  --surface-border: #475569;
+  --surface-topbar: #1e293b;
+
+  --status-danger: #f87171;
+  --status-danger-muted: rgb(127 29 29 / 0.35);
+  --status-danger-border: rgb(248 113 113 / 0.35);
+  --status-info: #60a5fa;
+  --status-info-muted: rgb(30 58 138 / 0.35);
+  --status-info-border: rgb(96 165 250 / 0.35);
+  --status-success: #4ade80;
+  --status-success-muted: rgb(22 163 74 / 0.18);
+  --status-success-border: rgb(74 222 128 / 0.35);
+  --status-warning: #fbbf24;
+  --status-warning-muted: rgb(217 119 6 / 0.18);
+  --status-warning-border: rgb(251 191 36 / 0.35);
+
+  --background: var(--surface-page);
+  --foreground: #f1f5f9;
+  --card: var(--surface-elevated);
+  --card-foreground: #f1f5f9;
+  --popover: var(--surface-elevated);
+  --popover-foreground: #f1f5f9;
+  --primary: var(--brand-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-subtle);
+  --secondary-foreground: #f1f5f9;
+  --muted: var(--surface-subtle);
+  --muted-foreground: #94a3b8;
+  --accent: var(--surface-subtle);
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: var(--surface-border);
+  --input: var(--surface-border);
+  --input-background: var(--surface-elevated);
+  --ring: var(--brand-500);
+  --chart-1: #818cf8;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #c084fc;
+  --chart-5: #f472b6;
+  --sidebar: #1e293b;
+  --sidebar-foreground: #f1f5f9;
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-muted);
+  --sidebar-accent-foreground: var(--brand-muted-foreground);
+  --sidebar-border: var(--surface-border);
+  --sidebar-ring: var(--brand-ring);
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.35);
+  --shadow-elevated: 0 10px 40px -10px rgb(0 0 0 / 0.45);
+  --auth-form-backdrop: rgb(30 41 59 / 0.92);
+  --auth-form-column-bg: var(--surface-page);
+
+  --glass-surface: rgb(30 41 59 / 0.78);
+  --glass-surface-solid: rgb(30 41 59 / 0.9);
+  --glass-border: rgb(71 85 105 / 0.55);
+  --glass-field: rgb(15 23 42 / 0.85);
+  --glass-text: #f1f5f9;
+  --glass-text-muted: #94a3b8;
+
+  --chart-grid: #334155;
+  --chart-neutral: #64748b;
+  --chart-cursor: rgb(51 65 85 / 0.45);
+
+  --map-brightness: 0.72;
+  --map-contrast: 0.92;
 }

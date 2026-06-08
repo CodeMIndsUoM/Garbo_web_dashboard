@@ -24,9 +24,8 @@ import {
   X,
   Loader2
 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { AddBinGlassModal } from "./bin/AddBinGlassModal";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Switch } from "./ui/switch";
@@ -254,7 +253,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const [loadingRoutes, setLoadingRoutes] = useState(false); // Loading indicator for the assigned routes fetch
   const [isGeneratingRoute, setIsGeneratingRoute] = useState(false); // Loading state for route generation
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false); // Controls the new-bin creation dialog
-  const [newBin, setNewBin] = useState({ location: '', type: 'General Waste', zone: '', council: '' }); // Form state for the new bin dialog
+  const [newBin, setNewBin] = useState({
+    location: '',
+    type: 'General Waste',
+    zone: '',
+    council: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
+  }); // Form state for the new bin dialog
 
   const [selectionMode, setSelectionMode] = useState(false); // When true, map markers are tappable for route bin selection
   const [selectedBins, setSelectedBins] = useState<string[]>([]); // IDs of bins chosen for the next route optimisation
@@ -1149,7 +1154,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                 ? label
                 : `Not enough capacity (needs ${requiredBins}, max ${getVehicleMaxBins(v)})`
             }
-            className={sufficient ? '' : 'text-slate-400'}
+            className={sufficient ? '' : 'text-muted-foreground'}
           >
             {sufficient ? label : `${label} — insufficient`}
           </option>
@@ -1160,13 +1165,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
   const routeSessionFooter =
     routeStatus || routeError || activeSessionId ? (
-      <div className="text-xs text-slate-700 space-y-1">
-        <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+      <div className="text-xs text-[var(--glass-text)] space-y-1">
+        <div className="font-semibold text-[var(--glass-text)] flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
           Active Route Session
         </div>
         {activeSessionId && (
-          <div className="text-[10px] text-slate-500 font-mono truncate">ID: {activeSessionId}</div>
+          <div className="text-[10px] text-[var(--glass-text-muted)] font-mono truncate">ID: {activeSessionId}</div>
         )}
         {routeStatus && (
           <div>
@@ -1782,7 +1787,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         }).addTo(boundaryLayerRef.current!);
         poly.bindTooltip(`<div class="font-semibold text-xs text-green-700">${cName}</div>`, {
           permanent: true, direction: 'center',
-          className: 'bg-white/80 border border-green-500/30 rounded px-1.5 py-0.5 shadow-sm font-semibold'
+          className: 'bg-[var(--glass-field)] border border-brand-500/30 rounded px-1.5 py-0.5 shadow-sm font-semibold text-[var(--glass-text)]'
         });
         L.marker([cData.depotLat, cData.depotLng], { icon: depotIcon })
           .bindTooltip(`<div class='font-bold text-sm'>Depot: ${cName}</div>`)
@@ -1971,7 +1976,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(BINS_API, {
         method: "POST", headers,
-        body: JSON.stringify({ location: newBin.location, type: newBin.type, fillLevel: 0, priority: 'medium', status: 'empty', council: newBin.council })
+        body: JSON.stringify({
+          location: newBin.location,
+          type: newBin.type,
+          fillLevel: 0,
+          priority: newBin.priority,
+          status: 'empty',
+          council: newBin.council,
+        })
       });
       if (!res.ok) {
         let errMessage = 'Failed to create bin';
@@ -1990,7 +2002,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         council: saved.council
       });
       setIsCreateModalOpen(false);
-      setNewBin({ location: '', type: 'General Waste', zone: '', council: '' });
+      setNewBin({ location: '', type: 'General Waste', zone: '', council: '', priority: 'medium' });
       const zoneLabel = saved.zone ? ` (Zone ${saved.zone})` : '';
       toast.success(`Bin created successfully${zoneLabel}`);
     } catch (err) {
@@ -2260,14 +2272,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
   if (boundaryLoading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-gray-50">
+      <div className="w-full h-full flex items-center justify-center bg-background">
         <GarboLoader variant="inline" message="Loading map..." size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-slate-50">
+    <div className="garbo-map-root w-full h-full relative overflow-hidden bg-background">
       {/* Global CSS Style tag for Leaflet Polyline Dashed Flow Animation */}
       <style>{`
         @keyframes leaflet-dash {
@@ -2290,15 +2302,15 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       )}
 
       {/* HORIZONTAL TOOLBAR — responsive, compact, consistent */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-white/70 backdrop-blur-xl border border-white/30 rounded-2xl shadow-xl px-2 py-1.5 gap-1 transition-all w-max max-w-[calc(100vw-2rem)]">
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[999] flex items-center bg-[var(--glass-surface-solid)] backdrop-blur-xl border border-[var(--glass-border)] rounded-2xl shadow-xl px-2 py-1.5 gap-1 transition-all w-max max-w-[calc(100vw-2rem)]">
         {/* Council — superadmin selects here; council-admin sees read-only badge */}
-        <div className="flex items-center gap-1.5 px-2 py-1.5 bg-emerald-50/80 text-emerald-700 border border-emerald-200/40 rounded-xl text-[11px] font-semibold shrink-0">
-          <Layers className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+        <div className="flex items-center gap-1.5 px-2 py-1.5 bg-brand-muted text-brand-700 dark:text-brand-muted-foreground border border-brand-200/40 rounded-xl text-[11px] font-semibold shrink-0">
+          <Layers className="w-3.5 h-3.5 text-brand-600 shrink-0" />
           {isSuperadmin ? (
             <select
               value={selectedCouncilId === 'all' ? '' : selectedCouncilId}
               onChange={(e) => setSelectedCouncilId(e.target.value || 'all')}
-              className="bg-transparent border-0 outline-none text-emerald-800 font-semibold text-[11px] max-w-[140px] truncate cursor-pointer"
+              className="bg-transparent border-0 outline-none text-brand-800 dark:text-brand-muted-foreground font-semibold text-[11px] max-w-[140px] truncate cursor-pointer"
               title="Select council"
             >
               <option value="">Select council…</option>
@@ -2313,7 +2325,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           )}
         </div>
 
-        <div className="w-px h-5 bg-gray-300/40 shrink-0" />
+        <div className="w-px h-5 bg-border/50 shrink-0" />
 
         {/* Add Bin */}
         <button
@@ -2330,14 +2342,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${addMode
             ? 'bg-amber-500 text-white shadow-sm hover:bg-amber-600'
-            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
         >
           <Plus className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${addMode ? 'rotate-45' : ''}`} />
           <span className="hidden sm:inline">{addMode ? 'Place Bin' : 'Add Bin'}</span>
         </button>
 
-        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+        <div className="w-px h-4 bg-border/50 shrink-0" />
 
         {/* Routes — manual + auto in one right-side panel (tabs) */}
         <button
@@ -2354,14 +2366,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showRoutePlanner
             ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
-            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
         >
           <Navigation className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden sm:inline">{showRoutePlanner ? 'Routes…' : 'Routes'}</span>
         </button>
 
-        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+        <div className="w-px h-4 bg-border/50 shrink-0" />
 
         {/* Delete Bins */}
         <button
@@ -2388,14 +2400,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${deleteSelectionMode
             ? 'bg-red-600 text-white shadow-sm hover:bg-red-700'
-            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
         >
           <Trash2 className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden sm:inline">{deleteSelectionMode ? 'Selecting...' : 'Delete Bins'}</span>
         </button>
 
-        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+        <div className="w-px h-4 bg-border/50 shrink-0" />
 
         {/* Route History (includes route visibility controls) */}
         <button
@@ -2413,7 +2425,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showHistorySheet
             ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
-            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
         >
           <Clock className="w-3.5 h-3.5 shrink-0" />
@@ -2423,13 +2435,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         {/* Focus Mode — only when a single council is active */}
         {council?.name && (
           <>
-            <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+            <div className="w-px h-4 bg-border/50 shrink-0" />
             <button
               title={focusMode ? 'Disable focus mask' : 'Enable focus mask'}
               onClick={() => setFocusMode(!focusMode)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${focusMode
                 ? 'bg-green-600 text-white shadow-sm hover:bg-green-700'
-                : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
             >
               {focusMode ? <Eye className="w-3.5 h-3.5 shrink-0" /> : <EyeOff className="w-3.5 h-3.5 shrink-0" />}
@@ -2438,7 +2450,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           </>
         )}
 
-        <div className="w-px h-4 bg-gray-300/40 shrink-0" />
+        <div className="w-px h-4 bg-border/50 shrink-0" />
 
         {/* Legend */}
         <button
@@ -2454,7 +2466,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showLegend
             ? 'bg-slate-800 text-white shadow-sm hover:bg-slate-900'
-            : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
         >
           <Info className="w-3.5 h-3.5 shrink-0" />
@@ -2467,11 +2479,11 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         open={showLegend}
         onClose={() => setShowLegend(false)}
         title="Map Legend"
-        icon={<Info className="w-5 h-5 text-slate-600 shrink-0" />}
+        icon={<Info className="w-5 h-5 text-[var(--glass-text-muted)] shrink-0" />}
       >
-        <div className="p-5 flex flex-col gap-3 text-xs text-slate-700">
+        <div className="p-5 flex flex-col gap-3 text-xs text-[var(--glass-text)]">
             {/* Bin markers — matches field-staff report statuses */}
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-[var(--glass-text-muted)] uppercase tracking-wider">
               Bin markers (fill status)
             </span>
             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -2493,10 +2505,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               </div>
             </div>
 
-            <hr className="border-white/20" />
+            <hr className="border-[var(--glass-border)]" />
 
             {/* Selection badges */}
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-[var(--glass-text-muted)] uppercase tracking-wider">
               Selection mode
             </span>
             <div className="flex flex-col gap-1.5">
@@ -2510,13 +2522,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               </div>
             </div>
 
-            <hr className="border-white/20" />
+            <hr className="border-[var(--glass-border)]" />
 
             {/* Routes — aligned with History visibility (W4) */}
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-[var(--glass-text-muted)] uppercase tracking-wider">
               Collection routes
             </span>
-            <p className="text-[10px] text-slate-500 leading-snug">
+            <p className="text-[10px] text-[var(--glass-text-muted)] leading-snug">
               Open <strong>History</strong> → tick <strong>Visible on map</strong> per session.
               Latest active route is shown by default; use Show all / Hide all for more.
             </p>
@@ -2548,10 +2560,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               </div>
             </div>
 
-            <hr className="border-white/20" />
+            <hr className="border-[var(--glass-border)]" />
 
             {/* Map overlays */}
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-[var(--glass-text-muted)] uppercase tracking-wider">
               Map overlays
             </span>
             <div className="flex flex-col gap-1.5">
@@ -2568,40 +2580,20 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       </MapSidePanel>
 
       {/* CREATE BIN DIALOG */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent style={{ zIndex: 10000 }} className="z-[10000] sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Waste Bin</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateBinSubmit} className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Bin Code</label>
-              <Input value={nextBinCode} disabled className="bg-gray-50 text-gray-500 font-semibold" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
-              <Input placeholder="lat, lng" value={newBin.location}
-                onChange={(e) => setNewBin({ ...newBin, location: e.target.value })} required />
-            </div>
-            <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-              Zone is assigned automatically from coordinates when you save.
-            </p>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">Type</label>
-              <Select value={newBin.type} onValueChange={(val) => setNewBin({ ...newBin, type: val })}>
-                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
-                <SelectContent style={{ zIndex: 99999 }}>
-                  <SelectItem value="General Waste">General Waste</SelectItem>
-                  <SelectItem value="Recyclables">Recyclables</SelectItem>
-                  <SelectItem value="Organic Waste">Organic Waste</SelectItem>
-                  <SelectItem value="Mixed Waste">Mixed Waste</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-medium">Save Bin</Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <AddBinGlassModal
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        zIndex={10000}
+        nextBinCode={nextBinCode}
+        location={newBin.location}
+        onLocationChange={(value) => setNewBin((p) => ({ ...p, location: value }))}
+        type={newBin.type}
+        onTypeChange={(value) => setNewBin((p) => ({ ...p, type: value }))}
+        priority={newBin.priority}
+        onPriorityChange={(value) => setNewBin((p) => ({ ...p, priority: value }))}
+        showTypeSelect
+        onSubmit={handleCreateBinSubmit}
+      />
 
       {/* ROUTE PLANNER SIDE PANEL (manual + auto) */}
       <MapSidePanel
@@ -2624,7 +2616,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         bodyClassName="flex flex-col overflow-hidden"
       >
         {/* Manual / Auto tabs */}
-        <div className="px-5 pt-3 pb-2 border-b border-white/20 flex gap-2 shrink-0">
+        <div className="px-5 pt-3 pb-2 border-b border-[var(--glass-border)] flex gap-2 shrink-0">
           {(['manual', 'auto'] as const).map((tab) => (
             <button
               key={tab}
@@ -2632,7 +2624,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               onClick={() => switchRoutePlannerTab(tab)}
               className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold capitalize transition-all ${routePlannerTab === tab
                 ? 'bg-green-600 text-white shadow-sm'
-                : 'bg-white/55 text-slate-600 border border-slate-200/50 hover:bg-white/80'
+                : 'bg-[var(--glass-surface)] text-[var(--glass-text-muted)] border border-[var(--glass-border)] hover:bg-[var(--glass-surface-solid)]'
                 }`}
             >
               {tab === 'manual' ? 'Manual Route' : 'Auto Route'}
@@ -2646,12 +2638,12 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               {autoRouteLoading ? (
                 <div className="flex flex-col items-center py-12 gap-3">
                   <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
-                  <p className="text-xs text-slate-500">Analysing bins and fleet capacity...</p>
+                  <p className="text-xs text-[var(--glass-text-muted)]">Analysing bins and fleet capacity...</p>
                 </div>
               ) : !autoRoutePreview ? (
                 <>
-                  <div className="text-[11px] text-slate-600 bg-slate-50/60 rounded-xl p-3 border border-white/40 space-y-2">
-                    <p className="font-semibold text-slate-800">Auto Route</p>
+                  <div className="text-[11px] text-[var(--glass-text-muted)] bg-[var(--glass-surface)] rounded-xl p-3 border border-[var(--glass-border)] space-y-2">
+                    <p className="font-semibold text-[var(--glass-text)]">Auto Route</p>
                     <p>
                       <strong>{eligibleCollectionBins}</strong> bins need collection (full / half)
                     </p>
@@ -2659,7 +2651,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       Fleet: <strong>{fleetCapacitySummary.availableVehicles}</strong> vehicles ·{' '}
                       <strong>{fleetCapacitySummary.totalMaxBins}</strong> total bin capacity
                     </p>
-                    <p className="text-slate-500">
+                    <p className="text-[var(--glass-text-muted)]">
                       Click generate — bins are auto-selected by fill level and map clustering. You assign vehicle & driver per route, then confirm one by one.
                     </p>
                   </div>
@@ -2685,8 +2677,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       <span className="text-[10px] text-green-700 shrink-0">Tap a card to switch</span>
                     </div>
                   )}
-                  <div className="text-[11px] text-slate-600 bg-slate-50/60 rounded-xl p-3 border border-white/40 space-y-2">
-                    <p className="font-semibold text-slate-800">Generated routes — confirm one at a time</p>
+                  <div className="text-[11px] text-[var(--glass-text-muted)] bg-[var(--glass-surface)] rounded-xl p-3 border border-[var(--glass-border)] space-y-2">
+                    <p className="font-semibold text-[var(--glass-text)]">Generated routes — confirm one at a time</p>
                     <p>
                       <strong>{autoRoutePreview.totalBinsNeedingCollection}</strong> bins need collection →{' '}
                       <strong>{autoRoutePreview.draftRoutes.length}</strong> route(s) created
@@ -2695,7 +2687,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       Fleet: <strong>{autoRoutePreview.fleetSummary.availableVehicles}</strong> vehicles ·{' '}
                       <strong>{autoRoutePreview.fleetSummary.totalMaxBins}</strong> total bin capacity
                     </p>
-                    <p className="text-slate-500">Bins auto-selected by fill level + map clustering. Assign vehicle & driver per route.</p>
+                    <p className="text-[var(--glass-text-muted)]">Bins auto-selected by fill level + map clustering. Assign vehicle & driver per route.</p>
                   </div>
                   {autoRoutePreview.warnings.map((w) => (
                     <p key={w} className="text-[11px] text-amber-700 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
@@ -2711,7 +2703,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                         key={draft.draftId}
                         className={`rounded-xl border p-3 space-y-2 shadow-sm transition-all cursor-pointer ${isFocused
                           ? 'border-green-300/80 bg-green-50/40 ring-1 ring-green-200/60'
-                          : 'border-white/40 bg-white/55 hover:bg-white/70'
+                          : 'border-[var(--glass-border)] bg-[var(--glass-surface)] hover:bg-[var(--glass-surface-solid)]'
                           }`}
                         onClick={() => setFocusedDraftId(draft.draftId)}
                       >
@@ -2721,7 +2713,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                               className="w-3 h-3 rounded-full shrink-0 border border-white shadow-sm"
                               style={{ backgroundColor: routeColor }}
                             />
-                            <span className="text-xs font-bold text-slate-800 truncate">
+                            <span className="text-xs font-bold text-[var(--glass-text)] truncate">
                               Route {idx + 1}
                               {draft.suggestedZone ? ` · Zone ${draft.suggestedZone}` : ''}
                             </span>
@@ -2735,7 +2727,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                         )}
                         <div className="grid grid-cols-1 gap-2">
                           <div>
-                            <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                            <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
                               Vehicle
                             </label>
                             <select
@@ -2749,13 +2741,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                                   },
                                 }))
                               }
-                              className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                              className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
                             >
                               {renderVehicleOptions(draft.binCount, draftAssignments[draft.draftId]?.vehicleId ?? '')}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                            <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
                               Driver
                             </label>
                             <select
@@ -2769,7 +2761,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                                   },
                                 }))
                               }
-                              className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                              className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
                             >
                               <option value="">-- Driver --</option>
                               {drivers.map((d) => (
@@ -2812,20 +2804,20 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
             </>
           ) : (
             <>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Selected Bins</span>
+              <span className="text-[10px] font-bold text-[var(--glass-text-muted)] uppercase tracking-wider">Selected Bins</span>
               {selectedBins.length === 0 ? (
-                <div className="flex flex-col items-center justify-center border border-dashed border-slate-200/80 rounded-xl p-6 bg-slate-50/30">
-                  <MapPin className="w-6 h-6 text-slate-300 mb-1" />
-                  <p className="text-slate-400 text-xs text-center">Click bins on the map to add them to this route</p>
+                <div className="flex flex-col items-center justify-center border border-dashed border-[var(--glass-border)] rounded-xl p-6 bg-muted/40">
+                  <MapPin className="w-6 h-6 text-muted-foreground/50 mb-1" />
+                  <p className="text-muted-foreground text-xs text-center">Click bins on the map to add them to this route</p>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2 max-h-[160px] overflow-y-auto p-2 border border-white/40 rounded-xl bg-white/40">
+                <div className="flex flex-wrap gap-2 max-h-[160px] overflow-y-auto p-2 border border-[var(--glass-border)] rounded-xl bg-[var(--glass-surface)]">
                   {selectedBins.map((id) => {
                     const entry = markers.get(id);
                     return (
                       <div
                         key={id}
-                        className="flex items-center gap-1.5 bg-white/90 text-slate-800 px-3 py-1 rounded-full text-xs font-medium border border-slate-200/60 shadow-sm shrink-0"
+                        className="flex items-center gap-1.5 bg-[var(--glass-field)] text-[var(--glass-text)] px-3 py-1 rounded-full text-xs font-medium border border-[var(--glass-border)] shadow-sm shrink-0"
                       >
                         <span
                           className="w-2 h-2 rounded-full"
@@ -2835,7 +2827,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                         <button
                           type="button"
                           onClick={() => toggleBinSelection(id)}
-                          className="text-slate-400 hover:text-red-500 font-bold ml-1"
+                          className="text-muted-foreground hover:text-red-500 font-bold ml-1"
                         >
                           ✕
                         </button>
@@ -2847,13 +2839,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
               <div className="grid grid-cols-1 gap-3">
                 <div>
-                  <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                  <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
                     Vehicle
                   </label>
                   <select
                     value={selectedVehicleId}
                     onChange={(e) => setSelectedVehicleId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                    className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
                   >
                     {renderVehicleOptions(selectedBins.length, selectedVehicleId)}
                   </select>
@@ -2862,13 +2854,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                   )}
                 </div>
                 <div>
-                  <label className="block text-slate-500 mb-1 text-[10px] font-bold uppercase tracking-wider">
+                  <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
                     Driver
                   </label>
                   <select
                     value={selectedDriverId}
                     onChange={(e) => setSelectedDriverId(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-800 outline-none focus:border-green-600"
+                    className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
                   >
                     <option value="">-- Driver --</option>
                     {drivers.map((d) => (
@@ -2913,12 +2905,12 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       {deleteSelectionMode && (
         <div
           style={{ zIndex: 999 }}
-          className={`absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] transition-all duration-300 ease-in-out flex flex-col ${isPlannerExpanded ? 'h-[280px]' : 'h-14'
+          className={`absolute bottom-0 left-0 right-0 bg-[var(--glass-surface-solid)] backdrop-blur-md border-t border-border shadow-[var(--shadow-elevated)] transition-all duration-300 ease-in-out flex flex-col ${isPlannerExpanded ? 'h-[280px]' : 'h-14'
             }`}
         >
           {/* Header/Collapsed Panel Bar */}
           <div
-            className="flex items-center justify-between px-6 h-14 border-b border-gray-100 shrink-0 cursor-pointer select-none bg-red-50/50 hover:bg-red-50/80 transition-colors"
+            className="flex items-center justify-between px-6 h-14 border-b border-border shrink-0 cursor-pointer select-none bg-red-50/50 hover:bg-red-50/80 transition-colors"
             onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
           >
             <div className="flex items-center gap-3">
@@ -2927,7 +2919,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               ) : (
                 <ChevronUp className="w-5 h-5 text-red-500 animate-bounce" />
               )}
-              <span className="font-semibold text-gray-800 text-sm">Bulk Bin Deletion</span>
+              <span className="font-semibold text-foreground text-sm">Bulk Bin Deletion</span>
               <span className="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-semibold">
                 {selectedBinsToDelete.length} Bins Selected for Deletion
               </span>
@@ -2959,27 +2951,27 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
           {/* Expanded Configuration Details */}
           {isPlannerExpanded && (
-            <div className="p-5 flex flex-col md:flex-row gap-6 overflow-hidden flex-1 bg-white">
+            <div className="p-5 flex flex-col md:flex-row gap-6 overflow-hidden flex-1 bg-card">
               {/* Left Column: Selected Bins Tag Chips */}
               <div className="flex-1 flex flex-col gap-2 min-w-0">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bins to Delete</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Bins to Delete</span>
                 {selectedBinsToDelete.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                    <Trash2 className="w-6 h-6 text-gray-300 mb-1" />
-                    <p className="text-gray-400 text-xs text-center">Click bins on the map to add them to the deletion list</p>
+                  <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-border rounded-xl p-4 bg-muted/50">
+                    <Trash2 className="w-6 h-6 text-muted-foreground/50 mb-1" />
+                    <p className="text-muted-foreground text-xs text-center">Click bins on the map to add them to the deletion list</p>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] p-2 border border-gray-100 rounded-xl bg-slate-50/50">
+                  <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] p-2 border border-border rounded-xl bg-slate-50/50">
                     {selectedBinsToDelete.map(id => {
                       const entry = markers.get(id);
                       return (
-                        <div key={id} className="flex items-center gap-1.5 bg-white text-gray-800 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 shadow-sm shrink-0">
+                        <div key={id} className="flex items-center gap-1.5 bg-[var(--glass-field)] text-foreground px-3 py-1 rounded-full text-xs font-medium border border-border shadow-sm shrink-0">
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}></span>
                           <span>{entry?.data.binCode || id}</span>
                           <button
                             type="button"
                             onClick={() => toggleDeleteBinSelection(id)}
-                            className="text-gray-400 hover:text-red-500 font-bold ml-1 transition-colors"
+                            className="text-muted-foreground hover:text-red-500 font-bold ml-1 transition-colors"
                           >
                             ✕
                           </button>
@@ -2995,7 +2987,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                 <div className="flex gap-3">
                   <Button
                     variant="outline"
-                    className="flex-1 text-xs h-10 border-gray-200"
+                    className="flex-1 text-xs h-10 border-border"
                     onClick={() => {
                       clearSelectedBinIcons(selectedBinsToDelete);
                       setSelectedBinsToDelete([]);
@@ -3028,7 +3020,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         bodyClassName="flex flex-col overflow-hidden"
       >
         {/* History filter tabs */}
-        <div className="px-5 py-3 border-b border-white/20 bg-slate-50/20 flex items-center justify-between shrink-0">
+        <div className="px-5 py-3 border-b border-[var(--glass-border)] bg-slate-50/20 flex items-center justify-between shrink-0">
           <div className="flex gap-2">
             {(['all', 'active', 'completed'] as const).map(tab => (
               <button
@@ -3036,7 +3028,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                 onClick={() => setHistoryTab(tab)}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${historyTab === tab
                   ? 'bg-green-600 text-white shadow-sm'
-                  : 'bg-white/55 text-slate-600 border border-slate-200/50 hover:bg-white/80'
+                  : 'bg-[var(--glass-surface)] text-[var(--glass-text-muted)] border border-[var(--glass-border)] hover:bg-[var(--glass-surface-solid)]'
                   }`}
               >
                 {tab}
@@ -3055,7 +3047,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         </div>
 
         {/* Hover Preview toggle switch */}
-        <div className="px-5 py-3 border-b border-white/20 flex items-center justify-between text-xs font-medium text-slate-700 bg-green-50/10 shrink-0">
+        <div className="px-5 py-3 border-b border-[var(--glass-border)] flex items-center justify-between text-xs font-medium text-[var(--glass-text)] bg-green-50/10 shrink-0">
           <span className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-green-600" />
             Hover Cards to Preview on Map
@@ -3065,8 +3057,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
         {/* Map visibility — active routes only (W4, integrated into History) */}
         {loadedRouteSessions.length > 0 && (
-          <div className="px-5 py-2.5 border-b border-white/20 flex items-center justify-between shrink-0 bg-slate-50/30">
-            <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
+          <div className="px-5 py-2.5 border-b border-[var(--glass-border)] flex items-center justify-between shrink-0 bg-muted/40">
+            <span className="text-[11px] font-semibold text-[var(--glass-text-muted)] flex items-center gap-1.5">
               <RouteIcon className="w-3.5 h-3.5 text-green-600" />
               Routes on map
             </span>
@@ -3081,7 +3073,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               <button
                 type="button"
                 onClick={hideAllRoutes}
-                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-[var(--glass-text)] hover:bg-slate-200 border border-slate-200"
               >
                 Hide all
               </button>
@@ -3094,10 +3086,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           {loadingRoutes ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
-              <p className="text-gray-400 text-xs font-medium">Loading history...</p>
+              <p className="text-muted-foreground text-xs font-medium">Loading history...</p>
             </div>
           ) : filteredRoutes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-2 text-center text-slate-400">
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-center text-muted-foreground">
               <RouteIcon className="w-8 h-8 opacity-25" />
               <p className="text-xs">No {historyTab !== 'all' ? historyTab : ''} routes found</p>
             </div>
@@ -3111,7 +3103,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                   key={r.sessionId || r.id || i}
                   onMouseEnter={() => { if (hoverPreview) previewRouteSession(r.sessionId); }}
                   onMouseLeave={() => { if (hoverPreview) restoreRouteVisibility(); }}
-                  className="border border-white/30 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-white/50 transition-all bg-white/60 hover:bg-white/85 relative overflow-hidden group"
+                  className="border border-[var(--glass-border)] rounded-xl p-4 shadow-sm hover:shadow-md hover:border-[var(--glass-border)] transition-all bg-[var(--glass-surface)] hover:bg-[var(--glass-surface-solid)] relative overflow-hidden group"
                 >
                   {/* Route color strip — matches map polyline when active */}
                   <div
@@ -3120,10 +3112,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                   />
 
                   <div className="flex justify-between items-start mb-2.5">
-                    <span className="font-semibold text-slate-800 text-sm">Session #{r.id || i + 1}</span>
+                    <span className="font-semibold text-[var(--glass-text)] text-sm">Session #{r.id || i + 1}</span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${isActive
                       ? 'bg-emerald-50/70 text-emerald-700 border-emerald-100/50'
-                      : 'bg-slate-50/70 text-slate-700 border-slate-200/50'
+                      : 'bg-slate-50/70 text-[var(--glass-text)] border-slate-200/50'
                       }`}>
                       {isActive ? 'Active' : 'Completed'}
                     </span>
@@ -3146,26 +3138,26 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-sm"
                       style={{ backgroundColor: routeColor }}
                     />
-                    <span className="text-[11px] font-medium text-slate-600">
+                    <span className="text-[11px] font-medium text-[var(--glass-text-muted)]">
                       Visible on map
                     </span>
                   </label>
 
-                  <div className="text-[11px] text-slate-500 space-y-1.5 mb-3">
+                  <div className="text-[11px] text-[var(--glass-text-muted)] space-y-1.5 mb-3">
                     <div className="flex justify-between">
                       <span>Vehicle Code:</span>
-                      <span className="font-medium text-slate-800">{r.vehicleCode || 'N/A'}</span>
+                      <span className="font-medium text-[var(--glass-text)]">{r.vehicleCode || 'N/A'}</span>
                     </div>
                     {r.driverName && (
                       <div className="flex justify-between">
                         <span>Driver Name:</span>
-                        <span className="font-medium text-slate-800">{r.driverName}</span>
+                        <span className="font-medium text-[var(--glass-text)]">{r.driverName}</span>
                       </div>
                     )}
                     {r.createdDate && (
                       <div className="flex justify-between">
                         <span>Date Created:</span>
-                        <span className="font-medium text-slate-800">{new Date(r.createdDate).toLocaleString()}</span>
+                        <span className="font-medium text-[var(--glass-text)]">{new Date(r.createdDate).toLocaleString()}</span>
                       </div>
                     )}
                   </div>
@@ -3180,14 +3172,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       {/* CONTEXT MENU — appears on right-click of a bin marker */}
       {contextMenu && contextMenuPos && (
         <div style={{ top: contextMenuPos.y, left: contextMenuPos.x, zIndex: 9999, transform: 'translate(-50%, -105%)' }}
-          className="absolute bg-white shadow-xl rounded-lg p-2.5 z-[2000] min-w-[190px] border border-gray-200 flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-150">
-          <div className="text-[10px] font-bold text-gray-400 px-2 py-0.5 uppercase tracking-wider flex justify-between items-center border-b border-gray-50 pb-1.5">
+          className="absolute bg-card shadow-xl rounded-lg p-2.5 z-[2000] min-w-[190px] border border-border flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-150">
+          <div className="text-[10px] font-bold text-muted-foreground px-2 py-0.5 uppercase tracking-wider flex justify-between items-center border-b border-border pb-1.5">
             <span>Manage Bin</span>
-            <button onClick={() => setContextMenu(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            <button onClick={() => setContextMenu(null)} className="text-muted-foreground hover:text-muted-foreground">✕</button>
           </div>
           <div className="px-2 py-0.5">
-            <label className="text-[10px] text-gray-500 font-bold block mb-1 uppercase tracking-wider">Priority</label>
-            <select className="w-full text-xs border border-gray-200 rounded p-1.5 bg-gray-50 focus:ring focus:ring-green-200 outline-none"
+            <label className="text-[10px] text-muted-foreground font-bold block mb-1 uppercase tracking-wider">Priority</label>
+            <select className="w-full text-xs border border-border rounded p-1.5 bg-muted focus:ring focus:ring-green-200 outline-none"
               value={markers.get(contextMenu.binId)?.data.priority || 'medium'}
               onChange={(e) => updatePriority(contextMenu.binId, e.target.value as BinData['priority'])}>
               <option value="low">Low</option>
@@ -3195,14 +3187,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               <option value="high">High</option>
             </select>
           </div>
-          <div className="px-2 py-0.5 text-xs text-slate-600">
-            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Zone</span>
-            <p className="mt-1 font-medium text-slate-800">
+          <div className="px-2 py-0.5 text-xs text-[var(--glass-text-muted)]">
+            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Zone</span>
+            <p className="mt-1 font-medium text-[var(--glass-text)]">
               {markers.get(contextMenu.binId)?.data.zone || '—'}
             </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Assigned by system</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Assigned by system</p>
           </div>
-          <hr className="my-1 border-gray-100" />
+          <hr className="my-1 border-border" />
           <button onClick={() => removeBin(contextMenu.binId)}
             disabled={!canManageBin(contextMenu.binId)}
             title={!canManageBin(contextMenu.binId) ? 'You can only delete bins from your assigned council' : 'Delete this bin'}

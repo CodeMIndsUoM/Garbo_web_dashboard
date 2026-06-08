@@ -19,7 +19,7 @@ export function AnalyticsDonutChart({
 }: AnalyticsDonutChartProps) {
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center text-sm text-gray-400" style={{ height }}>
+      <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height }}>
         No data available
       </div>
     );
@@ -53,8 +53,8 @@ export function AnalyticsDonutChart({
       </ResponsiveContainer>
       {centerValue !== undefined ? (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pb-8">
-          <p className="text-2xl font-semibold text-gray-900">{centerValue}</p>
-          {centerLabel ? <p className="text-xs text-gray-500">{centerLabel}</p> : null}
+          <p className="text-2xl font-semibold text-foreground">{centerValue}</p>
+          {centerLabel ? <p className="text-xs text-muted-foreground">{centerLabel}</p> : null}
         </div>
       ) : null}
     </div>

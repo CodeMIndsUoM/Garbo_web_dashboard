@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export interface Council {
   id: string;
@@ -138,25 +139,28 @@ export function CouncilTopBar() {
 
   if (!isSuperadmin) {
     return (
-      <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-3">
-        <p className="text-sm text-gray-600">Showing data for council</p>
-        <span className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
-          {displayLabel}
-        </span>
+      <div className="flex items-center justify-between gap-4 border-b border-border bg-surface-topbar px-6 py-3">
+        <p className="text-sm text-muted-foreground">Showing data for council</p>
+        <div className="flex items-center gap-3">
+          <span className="rounded-lg border border-brand-200 bg-brand-muted px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-muted-foreground">
+            {displayLabel}
+          </span>
+          <ThemeToggle />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-3">
+    <div className="flex items-center justify-between gap-4 border-b border-border bg-surface-topbar px-6 py-3">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Viewing</p>
-        <p className="text-sm font-semibold text-gray-900">{displayLabel}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Viewing</p>
+        <p className="text-sm font-semibold text-foreground">{displayLabel}</p>
       </div>
       <div className="flex items-center gap-3">
         <label
           htmlFor="global-council-filter"
-          className="text-sm font-medium text-gray-600 shrink-0"
+          className="shrink-0 text-sm font-medium text-muted-foreground"
         >
           Council
         </label>
@@ -166,12 +170,12 @@ export function CouncilTopBar() {
         >
           <SelectTrigger
             id="global-council-filter"
-            className="h-9 w-[15rem] rounded-lg border-gray-300 bg-white px-3 text-sm text-gray-800 shadow-sm hover:bg-gray-50 focus-visible:border-green-500 focus-visible:ring-green-500/25"
+            className="h-9 w-[15rem] rounded-lg border-border bg-card px-3 text-sm text-foreground shadow-sm hover:bg-accent focus-visible:border-brand-500 focus-visible:ring-brand-500/25"
             aria-label="Select council"
           >
             <SelectValue placeholder="Select council" />
           </SelectTrigger>
-          <SelectContent align="end" className="z-[100] min-w-[15rem]">
+          <SelectContent align="end" className="z-[100] min-w-[15rem] border-border bg-popover text-popover-foreground">
             <SelectItem value="all">All Councils</SelectItem>
             {councils.map((c) => (
               <SelectItem key={c.id} value={c.id}>
@@ -180,6 +184,7 @@ export function CouncilTopBar() {
             ))}
           </SelectContent>
         </Select>
+        <ThemeToggle />
       </div>
     </div>
   );
