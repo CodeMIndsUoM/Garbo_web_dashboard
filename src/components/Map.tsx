@@ -159,6 +159,15 @@ interface RouteSessionSnapshot {
   message: string | null;     // Human-readable error or status message from the server
 }
 
+interface LoadedRouteSession {
+  sessionId: string;
+  vehicleCode?: string;
+  driverName?: string;
+  createdDate?: string;
+  status?: string;
+  color: string;
+}
+
 interface CouncilBoundaryDTO {
   council: string;
   depotLat: number;
@@ -174,7 +183,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const mapRef = useRef<HTMLDivElement | null>(null);   // DOM node that Leaflet mounts into
   const leafletMapRef = useRef<L.Map | null>(null);            // Leaflet map instance; null before initialisation
   const addModeRef = useRef(false);                         // Ref mirror of addMode — readable inside map event closures without stale state
-  const routeLayerRef = useRef<L.FeatureGroup | null>(null);   // FeatureGroup holding all route polylines; cleared between optimisations
+  const routeLayerRef = useRef<L.FeatureGroup | null>(null);   // Parent layer group for all route sessions
+  const sessionLayersRef = useRef<Map<string, L.FeatureGroup>>(new Map());
+  const sessionSnapshotsRef = useRef<Map<string, RouteSessionSnapshot>>(new Map());
+  const visibleSessionIdsRef = useRef<Record<string, boolean>>({});
   const stompClientRef = useRef<Client | null>(null);           // Active STOMP client for the route WebSocket subscription
   const depotMarkerRef = useRef<L.Marker | null>(null);         // Reference to the depot marker for potential repositioning
   const turfPolyRef = useRef<ReturnType<typeof turfPolygon> | null>(null); // Turf polygon used for point-in-polygon boundary checks
@@ -233,6 +245,12 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const [councilTransitioning, setCouncilTransitioning] = useState(false);
   const [historyTab, setHistoryTab] = useState<'all' | 'active' | 'completed'>('all');
   const [hoverPreview, setHoverPreview] = useState(false);
+  const [loadedRouteSessions, setLoadedRouteSessions] = useState<LoadedRouteSession[]>([]);
+  const [visibleSessionIds, setVisibleSessionIds] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    visibleSessionIdsRef.current = visibleSessionIds;
+  }, [visibleSessionIds]);
 
   const canManageBin = (binId: string) => {
     const entry = markers.get(binId);
@@ -426,8 +444,86 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     });
   };
 
+  const getOrCreateSessionLayer = (sessionId: string): L.FeatureGroup => {
+    let layer = sessionLayersRef.current.get(sessionId);
+    if (!layer) {
+      layer = L.featureGroup();
+      sessionLayersRef.current.set(sessionId, layer);
+    }
+    return layer;
+  };
+
+  const applySessionLayerVisibility = (sessionId: string, visible: boolean) => {
+    const layer = sessionLayersRef.current.get(sessionId);
+    if (!layer || !routeLayerRef.current) return;
+    if (visible) {
+      if (!routeLayerRef.current.hasLayer(layer)) {
+        layer.addTo(routeLayerRef.current);
+      }
+    } else if (routeLayerRef.current.hasLayer(layer)) {
+      routeLayerRef.current.removeLayer(layer);
+    }
+  };
+
+  const fitBoundsToVisibleRoutes = () => {
+    if (!routeLayerRef.current || !leafletMapRef.current) return;
+    const bounds = routeLayerRef.current.getBounds();
+    if (bounds.isValid()) leafletMapRef.current.fitBounds(bounds.pad(0.15));
+  };
+
+  const buildSnapshotFromRoutes = (
+    sessionId: string,
+    userId: number,
+    vehicleRoutes: any[],
+    assignmentId?: number | string,
+    trigger = 'LOAD'
+  ): RouteSessionSnapshot => ({
+    sessionId,
+    userId,
+    version: 0,
+    status: 'READY',
+    trigger,
+    selectedBinIds: [],
+    addedBinIds: [],
+    removedBinIds: [],
+    route: {
+      totalVehiclesUsed: vehicleRoutes.length,
+      routes: Object.fromEntries(
+        vehicleRoutes.map((vr: any, idx: number) => [
+          vr.vehicleId ? String(vr.vehicleId) : `v-${assignmentId ?? sessionId}-${idx}`,
+          {
+            vehicleId: vr.vehicleId || idx,
+            capacity: vr.capacity,
+            totalBins: vr.totalBins,
+            estimatedDurationSeconds: vr.estimatedDurationSeconds,
+            binSequence: (vr.binStops ?? []).map((s: any) => ({
+              stopOrder: s.stopOrder,
+              binId: s.binId,
+              lat: s.lat,
+              lng: s.lng,
+              durationFromPrevStopSeconds:
+                s.durationFromPrevSeconds || s.durationFromPrevStopSeconds || 0,
+            })),
+          },
+        ])
+      ),
+    },
+    message: null,
+  });
+
   // Removes all route polylines from the map without affecting bin markers
   const clearRouteVisualization = () => {
+    sessionLayersRef.current.forEach((layer) => {
+      layer.clearLayers();
+      if (routeLayerRef.current?.hasLayer(layer)) {
+        routeLayerRef.current.removeLayer(layer);
+      }
+    });
+    sessionLayersRef.current.clear();
+    sessionSnapshotsRef.current.clear();
+    visibleSessionIdsRef.current = {};
+    setLoadedRouteSessions([]);
+    setVisibleSessionIds({});
     if (routeLayerRef.current) routeLayerRef.current.clearLayers();
   };
 
@@ -552,8 +648,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   };
 
   // Builds a road-snapped polyline for one vehicle's stops using OSRM, falling back to straight lines on failure
-  const buildRoadPolyline = async (stops: RouteBinStop[], color: string, vehicleId: string, isCompleted: boolean = false) => {
-    if (!routeLayerRef.current || !leafletMapRef.current || stops.length === 0) return;
+  const buildRoadPolyline = async (
+    stops: RouteBinStop[],
+    strokeColor: string,
+    vehicleId: string,
+    targetLayer: L.FeatureGroup,
+    isCompleted: boolean = false
+  ) => {
+    if (!leafletMapRef.current || stops.length === 0) return;
 
     // Use council-specific depot coordinates if available, otherwise fall back to Moratuwa defaults
     const depotLat = boundaryData?.depotLat ?? 6.775080;
@@ -570,7 +672,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     const osrmCoordString = pathCoordinates.map(([lat, lng]) => `${lng},${lat}`).join(';');
 
     // Visual configurations based on completed vs active routes
-    const routeColor = isCompleted ? '#475569' : '#10b981';
+    const routeColor = isCompleted ? '#475569' : strokeColor;
     const className = isCompleted ? '' : 'animate-route-flow';
     const dashArray = isCompleted ? undefined : '10, 10';
 
@@ -596,7 +698,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           dashArray
         })
           .bindTooltip(`Vehicle ${vehicleId}${index > 0 ? ' (continued)' : ''}`)
-          .addTo(routeLayerRef.current!);
+          .addTo(targetLayer);
       });
     } catch {
       // Fallback: draw a straight-line polyline
@@ -612,34 +714,172 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           className
         })
           .bindTooltip(`Vehicle ${vehicleId} (fallback${index > 0 ? ' continued' : ''})`)
-          .addTo(routeLayerRef.current!);
+          .addTo(targetLayer);
       });
     }
   };
 
-  // Public-facing wrapper that always clears existing routes before drawing the new snapshot
-  const visualizeRoutes = async (snapshot: RouteSessionSnapshot) => {
-    await visualizeRoutesInternal(snapshot, true);
-  };
-
-  // Core visualisation logic; `clear` flag allows incremental drawing when loading multiple sessions
-  const visualizeRoutesInternal = async (snapshot: RouteSessionSnapshot, clear = true) => {
+  const visualizeRoutesInternal = async (
+    snapshot: RouteSessionSnapshot,
+    options: {
+      sessionColor?: string;
+      storeSnapshot?: boolean;
+      fitMap?: boolean;
+      forceVisible?: boolean;
+    } = {}
+  ) => {
     if (!leafletMapRef.current || !snapshot.route?.routes) return;
-    if (clear) clearRouteVisualization();
+    const sessionId = snapshot.sessionId;
+    if (options.storeSnapshot !== false) {
+      sessionSnapshotsRef.current.set(sessionId, snapshot);
+    }
+
+    const sessionLayer = getOrCreateSessionLayer(sessionId);
+    sessionLayer.clearLayers();
+
+    const isCompleted = snapshot.status === 'COMPLETED';
+    const sessionColor = options.sessionColor || ROUTE_COLORS[0];
     const routeEntries = Object.entries(snapshot.route.routes);
 
-    // Determine route completed status
-    const isCompleted = snapshot.status === 'COMPLETED';
+    await Promise.all(
+      routeEntries.map(async ([vehicleKey, vehicleRoute], index) => {
+        const vehicleColor =
+          routeEntries.length === 1
+            ? sessionColor
+            : ROUTE_COLORS[index % ROUTE_COLORS.length];
+        await buildRoadPolyline(
+          vehicleRoute.binSequence || [],
+          vehicleColor,
+          vehicleKey,
+          sessionLayer,
+          isCompleted
+        );
+      })
+    );
 
-    // Draw all vehicle polylines in parallel for faster rendering
-    await Promise.all(routeEntries.map(async ([vehicleKey, vehicleRoute], index) => {
-      const color = ROUTE_COLORS[index % ROUTE_COLORS.length]; // Cycle through the colour palette
-      await buildRoadPolyline(vehicleRoute.binSequence || [], color, vehicleKey, isCompleted);
-    }));
-    if (routeLayerRef.current) {
-      const bounds = routeLayerRef.current.getBounds();
-      if (bounds.isValid()) leafletMapRef.current.fitBounds(bounds.pad(0.15)); // Pan + zoom to show all routes with padding
+    const visible =
+      options.forceVisible ?? visibleSessionIdsRef.current[sessionId] ?? false;
+    applySessionLayerVisibility(sessionId, visible);
+    if (options.fitMap && visible) fitBoundsToVisibleRoutes();
+  };
+
+  // Live route from WebSocket — show only the new session by default
+  const visualizeRoutes = async (snapshot: RouteSessionSnapshot) => {
+    const color = ROUTE_COLORS[0];
+    const entry: LoadedRouteSession = {
+      sessionId: snapshot.sessionId,
+      color,
+      status: snapshot.status,
+    };
+    setLoadedRouteSessions((prev) => [
+      entry,
+      ...prev.filter((s) => s.sessionId !== snapshot.sessionId),
+    ]);
+    const visibility = { [snapshot.sessionId]: true };
+    setVisibleSessionIds(visibility);
+    visibleSessionIdsRef.current = visibility;
+    sessionLayersRef.current.forEach((_, sid) => {
+      if (sid !== snapshot.sessionId) applySessionLayerVisibility(sid, false);
+    });
+    await visualizeRoutesInternal(snapshot, {
+      sessionColor: color,
+      fitMap: true,
+      forceVisible: true,
+    });
+  };
+
+  const toggleSessionVisibility = async (sessionId: string, visible: boolean) => {
+    setVisibleSessionIds((prev) => {
+      const next = { ...prev, [sessionId]: visible };
+      visibleSessionIdsRef.current = next;
+      return next;
+    });
+
+    if (!visible) {
+      applySessionLayerVisibility(sessionId, false);
+      return;
     }
+
+    let snap = sessionSnapshotsRef.current.get(sessionId);
+    if (!snap) {
+      await fetchAndCacheSessionSnapshot(sessionId);
+      snap = sessionSnapshotsRef.current.get(sessionId);
+    }
+    if (!snap) return;
+
+    const meta = loadedRouteSessions.find((s) => s.sessionId === sessionId);
+    await visualizeRoutesInternal(snap, {
+      sessionColor: meta?.color,
+      fitMap: true,
+      forceVisible: true,
+    });
+  };
+
+  const showAllRoutes = async () => {
+    const next: Record<string, boolean> = {};
+    for (const s of loadedRouteSessions) next[s.sessionId] = true;
+    setVisibleSessionIds(next);
+    visibleSessionIdsRef.current = next;
+
+    for (const s of loadedRouteSessions) {
+      let snap = sessionSnapshotsRef.current.get(s.sessionId);
+      if (!snap) {
+        await fetchAndCacheSessionSnapshot(s.sessionId);
+        snap = sessionSnapshotsRef.current.get(s.sessionId);
+      }
+      if (snap) {
+        await visualizeRoutesInternal(snap, {
+          sessionColor: s.color,
+          storeSnapshot: false,
+          forceVisible: true,
+        });
+      }
+    }
+    fitBoundsToVisibleRoutes();
+  };
+
+  const hideAllRoutes = () => {
+    const next: Record<string, boolean> = {};
+    for (const s of loadedRouteSessions) next[s.sessionId] = false;
+    setVisibleSessionIds(next);
+    visibleSessionIdsRef.current = next;
+    sessionLayersRef.current.forEach((_, sid) => applySessionLayerVisibility(sid, false));
+  };
+
+  const restoreRouteVisibility = async () => {
+    for (const s of loadedRouteSessions) {
+      const visible = visibleSessionIdsRef.current[s.sessionId] ?? false;
+      if (visible) {
+        const snap = sessionSnapshotsRef.current.get(s.sessionId);
+        if (snap) {
+          await visualizeRoutesInternal(snap, {
+            sessionColor: s.color,
+            storeSnapshot: false,
+            forceVisible: true,
+            fitMap: false,
+          });
+        }
+      } else {
+        applySessionLayerVisibility(s.sessionId, false);
+      }
+    }
+    fitBoundsToVisibleRoutes();
+  };
+
+  const previewRouteSession = async (sessionId: string) => {
+    let snap = sessionSnapshotsRef.current.get(sessionId);
+    if (!snap) {
+      await fetchAndCacheSessionSnapshot(sessionId);
+      snap = sessionSnapshotsRef.current.get(sessionId);
+    }
+    if (!snap) return;
+    sessionLayersRef.current.forEach((_, sid) => applySessionLayerVisibility(sid, false));
+    const meta = loadedRouteSessions.find((s) => s.sessionId === sessionId);
+    await visualizeRoutesInternal(snap, {
+      sessionColor: meta?.color || ROUTE_COLORS[0],
+      forceVisible: true,
+      fitMap: true,
+    });
   };
 
   // Lazy-load assigned routes from the API
@@ -651,7 +891,9 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
       if (res.ok) {
         const json = await res.json();
-        setAssignedRoutes(Array.isArray(json) ? json : (json.data || []));
+        const routes = Array.isArray(json) ? json : json.data || [];
+        setAssignedRoutes(routes);
+        syncLoadedSessionsFromRoutes(routes);
       }
     } catch (e) {
       console.error('Failed to fetch assigned routes', e);
@@ -682,40 +924,42 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     }
   };
 
-  // Visualizes a specific history/assigned session
-  const visualizeSession = async (sessionId: string, clear = true) => {
-    try {
-      const res = await fetch(`${API_ORIGIN}/api/route-sessions/${sessionId}/routes`,
-        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
-      if (!res.ok) throw new Error('Failed to fetch routes');
-      const json = await res.json();
-      const vehicleRoutes = Array.isArray(json) ? json : (json.data || []);
+  const fetchAndCacheSessionSnapshot = async (sessionId: string) => {
+    const res = await fetch(`${API_ORIGIN}/api/route-sessions/${sessionId}/routes`, {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+    });
+    if (!res.ok) throw new Error('Failed to fetch routes');
+    const json = await res.json();
+    const vehicleRoutes = Array.isArray(json) ? json : json.data || [];
+    const snapshot = buildSnapshotFromRoutes(
+      sessionId,
+      getCurrentUserId(),
+      vehicleRoutes,
+      sessionId,
+      'HISTORY_VIEW'
+    );
+    sessionSnapshotsRef.current.set(sessionId, snapshot);
+    return snapshot;
+  };
 
-      const fakeSnapshot: RouteSessionSnapshot = {
-        sessionId, userId: 0, version: 0, status: 'READY',
-        trigger: 'HISTORY_VIEW', selectedBinIds: [], addedBinIds: [], removedBinIds: [],
-        route: {
-          totalVehiclesUsed: vehicleRoutes.length,
-          routes: Object.fromEntries(vehicleRoutes.map((vr: any, idx: number) => [
-            vr.vehicleId ? String(vr.vehicleId) : `v-${sessionId}-${idx}`,
-            {
-              vehicleId: vr.vehicleId || idx,
-              capacity: vr.capacity,
-              totalBins: vr.totalBins,
-              estimatedDurationSeconds: vr.estimatedDurationSeconds,
-              binSequence: (vr.binStops ?? []).map((s: any) => ({
-                stopOrder: s.stopOrder,
-                binId: s.binId,
-                lat: s.lat,
-                lng: s.lng,
-                durationFromPrevStopSeconds: s.durationFromPrevSeconds || s.durationFromPrevStopSeconds || 0,
-              }))
-            }
-          ]))
-        },
-        message: null
-      };
-      await visualizeRoutesInternal(fakeSnapshot, clear);
+  // Visualizes a specific history/assigned session (persistent — updates visibility toggles)
+  const visualizeSession = async (sessionId: string, persistent = true) => {
+    try {
+      await fetchAndCacheSessionSnapshot(sessionId);
+      if (persistent) {
+        setVisibleSessionIds((prev) => {
+          const next = { ...prev, [sessionId]: true };
+          visibleSessionIdsRef.current = next;
+          return next;
+        });
+      }
+      const snap = sessionSnapshotsRef.current.get(sessionId)!;
+      const meta = loadedRouteSessions.find((s) => s.sessionId === sessionId);
+      await visualizeRoutesInternal(snap, {
+        sessionColor: meta?.color || ROUTE_COLORS[0],
+        fitMap: true,
+        forceVisible: true,
+      });
     } catch (e) {
       console.error('Failed to visualize session', sessionId, e);
     }
@@ -758,6 +1002,34 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     client.onWebSocketError = () => { setRouteError('Websocket connection error'); };
     client.activate();
     stompClientRef.current = client; // Persist client reference for later cleanup
+  };
+
+  const getSessionColor = (sessionId: string, fallbackIndex: number) => {
+    const loaded = loadedRouteSessions.find((s) => s.sessionId === sessionId);
+    return loaded?.color ?? ROUTE_COLORS[fallbackIndex % ROUTE_COLORS.length];
+  };
+
+  const syncLoadedSessionsFromRoutes = (routes: any[]) => {
+    const active = routes
+      .filter((r) => r.status !== 'COMPLETED' && r.status !== 'CANCELLED')
+      .sort((a: any, b: any) => {
+        const da = a.createdDate ? new Date(a.createdDate).getTime() : 0;
+        const db = b.createdDate ? new Date(b.createdDate).getTime() : 0;
+        return db - da;
+      });
+
+    const sessions: LoadedRouteSession[] = active.map((r: any, i: number) => {
+      const existing = loadedRouteSessions.find((s) => s.sessionId === r.sessionId);
+      return {
+        sessionId: r.sessionId,
+        vehicleCode: r.vehicleCode,
+        driverName: r.driverName,
+        createdDate: r.createdDate,
+        status: r.status,
+        color: existing?.color ?? ROUTE_COLORS[i % ROUTE_COLORS.length],
+      };
+    });
+    setLoadedRouteSessions(sessions);
   };
 
   // Filter assigned routes by tab
@@ -1305,58 +1577,93 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     } catch (e) { console.error("Failed to update zone", e); }
   };
 
-  // Restores any active route session for the current user on initial map load
+  // Restores active route sessions — only the latest is visible by default (W4)
   const loadActiveSession = async () => {
     try {
       const userId = getCurrentUserId();
-      const res = await fetch(`${API_ORIGIN}/api/route-sessions/user/${userId}/active`,
-        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
-      if (res.ok) {
-        const json = await res.json();
-        const assignments = Array.isArray(json) ? json : (json.data || []).filter((x: any) => x.status !== 'COMPLETED' && x.status !== 'CANCELLED');
-        if (assignments.length > 0) {
-          setRouteStatus('READY');
-          clearRouteVisualization();
-          for (const assignment of assignments) {
-            try {
-              const routeRes = await fetch(`${API_ORIGIN}/api/route-sessions/${assignment.sessionId}/routes`,
-                { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
-              if (routeRes.ok) {
-                const vRoutes = await routeRes.json();
-                const vehicleRoutes = Array.isArray(vRoutes) ? vRoutes : (vRoutes.data || []);
-                const fakeSnapshot: RouteSessionSnapshot = {
-                  sessionId: assignment.sessionId, userId,
-                  version: 0, status: 'READY', trigger: 'INITIAL_LOAD',
-                  selectedBinIds: [], addedBinIds: [], removedBinIds: [],
-                  route: {
-                    totalVehiclesUsed: vehicleRoutes.length,
-                    routes: Object.fromEntries(vehicleRoutes.map((vr: any, idx: number) => [
-                      vr.vehicleId ? String(vr.vehicleId) : `v-${assignment.id}-${idx}`,
-                      {
-                        vehicleId: vr.vehicleId || idx,
-                        capacity: vr.capacity, totalBins: vr.totalBins,
-                        estimatedDurationSeconds: vr.estimatedDurationSeconds,
-                        binSequence: (vr.binStops ?? []).map((s: any) => ({
-                          stopOrder: s.stopOrder, binId: s.binId,
-                          lat: s.lat, lng: s.lng,
-                          durationFromPrevStopSeconds: s.durationFromPrevSeconds || s.durationFromPrevStopSeconds || 0,
-                        }))
-                      }
-                    ]))
-                  },
-                  message: null
-                };
-                await visualizeRoutesInternal(fakeSnapshot, false);
-              }
-              if (assignment === assignments[0]) {
-                setActiveSessionId(assignment.sessionId);
-                connectRouteSocket(assignment.sessionId);
-              }
-            } catch (err) { console.error('Error loading assignment', assignment, err); }
+      const res = await fetch(`${API_ORIGIN}/api/route-sessions/user/${userId}/active`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+      });
+      if (!res.ok) return;
+
+      const json = await res.json();
+      const assignments = (Array.isArray(json) ? json : json.data || [])
+        .filter((x: any) => x.status !== 'COMPLETED' && x.status !== 'CANCELLED')
+        .sort((a: any, b: any) => {
+          const da = a.createdDate ? new Date(a.createdDate).getTime() : 0;
+          const db = b.createdDate ? new Date(b.createdDate).getTime() : 0;
+          return db - da;
+        });
+
+      if (assignments.length === 0) return;
+
+      setRouteStatus('READY');
+      clearRouteVisualization();
+
+      const sessions: LoadedRouteSession[] = [];
+      const visibility: Record<string, boolean> = {};
+
+      for (let i = 0; i < assignments.length; i++) {
+        const assignment = assignments[i];
+        try {
+          const routeRes = await fetch(
+            `${API_ORIGIN}/api/route-sessions/${assignment.sessionId}/routes`,
+            { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } }
+          );
+          if (!routeRes.ok) continue;
+
+          const vRoutes = await routeRes.json();
+          const vehicleRoutes = Array.isArray(vRoutes) ? vRoutes : vRoutes.data || [];
+          const snapshot = buildSnapshotFromRoutes(
+            assignment.sessionId,
+            userId,
+            vehicleRoutes,
+            assignment.id,
+            'INITIAL_LOAD'
+          );
+          sessionSnapshotsRef.current.set(assignment.sessionId, snapshot);
+
+          const color = ROUTE_COLORS[i % ROUTE_COLORS.length];
+          sessions.push({
+            sessionId: assignment.sessionId,
+            vehicleCode: assignment.vehicleCode,
+            driverName: assignment.driverName,
+            createdDate: assignment.createdDate,
+            status: assignment.status,
+            color,
+          });
+          visibility[assignment.sessionId] = i === 0;
+        } catch (err) {
+          console.error('Error loading assignment', assignment, err);
+        }
+      }
+
+      setLoadedRouteSessions(sessions);
+      setVisibleSessionIds(visibility);
+      visibleSessionIdsRef.current = visibility;
+
+      for (const s of sessions) {
+        if (visibility[s.sessionId]) {
+          const snap = sessionSnapshotsRef.current.get(s.sessionId);
+          if (snap) {
+            await visualizeRoutesInternal(snap, {
+              sessionColor: s.color,
+              storeSnapshot: false,
+              forceVisible: true,
+              fitMap: false,
+            });
           }
         }
       }
-    } catch (e) { console.error('Failed to load active session on mount', e); }
+      fitBoundsToVisibleRoutes();
+
+      if (sessions.length > 0) {
+        setActiveSessionId(sessions[0].sessionId);
+        connectRouteSocket(sessions[0].sessionId);
+      }
+    } catch (e) {
+      console.error('Failed to load active session on mount', e);
+    }
   };
 
   if (boundaryLoading) {
@@ -1494,7 +1801,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
         <div className="w-px h-4 bg-gray-300/40 shrink-0" />
 
-        {/* Route History */}
+        {/* Route History (includes route visibility controls) */}
         <button
           title="Route History"
           onClick={() => {
@@ -1553,49 +1860,114 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
       {/* MAP LEGEND OVERLAY CARD */}
       {showLegend && (
-        <div style={{ zIndex: 999 }} className="absolute top-16 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl shadow-xl p-5 w-72 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
+        <div
+          style={{ zIndex: 999 }}
+          className="absolute top-16 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl shadow-xl p-5 w-80 max-w-[calc(100vw-2rem)] flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-200"
+        >
           <div className="flex justify-between items-center border-b border-gray-100 pb-2">
             <span className="font-semibold text-gray-800 text-sm">Map Legend</span>
-            <button onClick={() => setShowLegend(false)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            <button
+              type="button"
+              onClick={() => setShowLegend(false)}
+              className="text-gray-400 hover:text-gray-600 text-xs"
+            >
+              ✕
+            </button>
           </div>
 
-          <div className="flex flex-col gap-3">
-            {/* Bin Status colors */}
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bin Fill Status</span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex flex-col gap-3 text-xs">
+            {/* Bin markers — matches field-staff report statuses */}
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Bin markers (fill status)
+            </span>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#ef4444] border border-white shadow-sm"></span>
-                <span className="text-gray-700 font-medium">Full (&gt;80%)</span>
+                <span className="w-3 h-3 rounded-full bg-[#ef4444] border border-white shadow-sm shrink-0" />
+                <span className="text-gray-700 font-medium">Full — collect first</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#f59e0b] border border-white shadow-sm"></span>
-                <span className="text-gray-700 font-medium">Half (30-80%)</span>
+                <span className="w-3 h-3 rounded-full bg-[#f59e0b] border border-white shadow-sm shrink-0" />
+                <span className="text-gray-700 font-medium">Half — needs collection</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#10b981] border border-white shadow-sm"></span>
-                <span className="text-gray-700 font-medium">Empty (&lt;30%)</span>
+                <span className="w-3 h-3 rounded-full bg-[#10b981] border border-white shadow-sm shrink-0" />
+                <span className="text-gray-700 font-medium">Empty — recently cleared</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#94a3b8] border border-white shadow-sm"></span>
-                <span className="text-gray-700 font-medium">Not Checked</span>
+                <span className="w-3 h-3 rounded-full bg-[#94a3b8] border border-white shadow-sm shrink-0" />
+                <span className="text-gray-700 font-medium">Not checked — no report yet</span>
               </div>
             </div>
 
             <hr className="border-gray-100" />
 
-            {/* Route Status representation */}
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Route Status</span>
-            <div className="flex flex-col gap-2 text-xs">
+            {/* Selection badges */}
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Selection mode
+            </span>
+            <div className="flex flex-col gap-1.5 text-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-sm shrink-0" />
+                <span>Green badge — bin selected for <strong>Route</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow-sm shrink-0" />
+                <span>Red badge — bin selected for <strong>Delete</strong></span>
+              </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Routes — aligned with History visibility (W4) */}
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Collection routes
+            </span>
+            <p className="text-[10px] text-gray-500 leading-snug">
+              Open <strong>History</strong> → tick <strong>Visible on map</strong> per session.
+              Latest active route is shown by default; use Show all / Hide all for more.
+            </p>
+            <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
-                <span className="w-8 h-1 bg-slate-500 rounded"></span>
-                <span className="text-gray-700 font-medium">Completed Route</span>
+                <span
+                  className="w-8 h-1 rounded shrink-0"
+                  style={{ backgroundColor: ROUTE_COLORS[0] }}
+                />
+                <span className="text-gray-700 font-medium">Active route (colour varies per session)</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 pl-11">
+                {ROUTE_COLORS.slice(0, 4).map((c) => (
+                  <span
+                    key={c}
+                    className="w-5 h-1 rounded shrink-0"
+                    style={{ backgroundColor: c }}
+                    title="Route session colour"
+                  />
+                ))}
               </div>
               <div className="flex items-center gap-3">
-                <span className="w-8 h-1 bg-emerald-500 rounded border-t border-dashed"></span>
-                <span className="text-gray-700 font-medium flex items-center gap-1.5">
-                  Active/In Progress
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                </span>
+                <span className="w-8 h-1 bg-slate-500 rounded shrink-0" />
+                <span className="text-gray-700 font-medium">Completed route</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="w-8 h-0.5 border-t-2 border-dashed border-emerald-500 shrink-0" />
+                <span className="text-gray-700 font-medium">Animated line — route in progress</span>
+              </div>
+            </div>
+
+            <hr className="border-gray-100" />
+
+            {/* Map overlays */}
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Map overlays
+            </span>
+            <div className="flex flex-col gap-1.5 text-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded bg-[#9333ea] border border-white shadow-sm shrink-0" />
+                <span>Depot — route start / end point</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-0.5 border-t-2 border-emerald-500 shrink-0" />
+                <span>Council boundary outline</span>
               </div>
             </div>
           </div>
@@ -1993,6 +2365,32 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           <Switch checked={hoverPreview} onCheckedChange={setHoverPreview} />
         </div>
 
+        {/* Map visibility — active routes only (W4, integrated into History) */}
+        {loadedRouteSessions.length > 0 && (
+          <div className="px-5 py-2.5 border-b border-white/20 flex items-center justify-between shrink-0 bg-slate-50/30">
+            <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
+              <RouteIcon className="w-3.5 h-3.5 text-green-600" />
+              Routes on map
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={showAllRoutes}
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-100"
+              >
+                Show all
+              </button>
+              <button
+                type="button"
+                onClick={hideAllRoutes}
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+              >
+                Hide all
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* List content container */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {loadingRoutes ? (
@@ -2008,16 +2406,20 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           ) : (
             filteredRoutes.map((r, i) => {
               const isActive = r.status !== 'COMPLETED' && r.status !== 'CANCELLED';
+              const routeColor = getSessionColor(r.sessionId, i);
+              const isVisibleOnMap = visibleSessionIds[r.sessionId] ?? false;
               return (
                 <div
                   key={r.sessionId || r.id || i}
-                  onMouseEnter={() => { if (hoverPreview) visualizeSession(r.sessionId); }}
-                  onMouseLeave={() => { if (hoverPreview) clearRouteVisualization(); }}
-                  onClick={() => { if (!hoverPreview) visualizeSession(r.sessionId); }}
-                  className="border border-white/30 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-white/50 transition-all bg-white/60 hover:bg-white/85 relative overflow-hidden group cursor-pointer"
+                  onMouseEnter={() => { if (hoverPreview) previewRouteSession(r.sessionId); }}
+                  onMouseLeave={() => { if (hoverPreview) restoreRouteVisibility(); }}
+                  className="border border-white/30 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-white/50 transition-all bg-white/60 hover:bg-white/85 relative overflow-hidden group"
                 >
-                  {/* Visual left bar color strip */}
-                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isActive ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                  {/* Route color strip — matches map polyline when active */}
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1.5"
+                    style={{ backgroundColor: isActive ? routeColor : '#94a3b8' }}
+                  />
 
                   <div className="flex justify-between items-start mb-2.5">
                     <span className="font-semibold text-slate-800 text-sm">Session #{r.id || i + 1}</span>
@@ -2028,6 +2430,28 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       {isActive ? 'Active' : 'Completed'}
                     </span>
                   </div>
+
+                  {/* Per-route map visibility */}
+                  <label
+                    className="flex items-center gap-2 mb-3 cursor-pointer"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isVisibleOnMap}
+                      onChange={(e) =>
+                        toggleSessionVisibility(r.sessionId, e.target.checked)
+                      }
+                      className="rounded border-slate-300"
+                    />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0 border border-white shadow-sm"
+                      style={{ backgroundColor: routeColor }}
+                    />
+                    <span className="text-[11px] font-medium text-slate-600">
+                      Visible on map
+                    </span>
+                  </label>
 
                   <div className="text-[11px] text-slate-500 space-y-1.5 mb-3">
                     <div className="flex justify-between">
@@ -2048,17 +2472,6 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                     )}
                   </div>
 
-                  {!hoverPreview && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full text-xs font-semibold h-8 bg-white/80 border-slate-200/50 hover:bg-white"
-                      onClick={(e) => { e.stopPropagation(); visualizeSession(r.sessionId); }}
-                    >
-                      <Eye className="w-3.5 h-3.5 mr-1 text-slate-500" />
-                      Show on Map
-                    </Button>
-                  )}
                 </div>
               );
             })

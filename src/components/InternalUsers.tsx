@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api';
+import { isSuperadmin } from '@/lib/auth';
+import type { ApiListResponse } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 interface InternalUser {
   empId: number;
@@ -40,37 +41,28 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const tokenHeader = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const storedRole = (typeof window !== 'undefined' ? sessionStorage.getItem('role') : null) || '';
-  const isSuperadmin = storedRole.toString().toLowerCase() === 'superadmin';
-
   const loadData = async () => {
     setListLoading(true);
     setListError('');
     try {
-      let url = `${API_BASE}/api/admins/staff`;
+      let path = '/api/admins/staff';
       const councilName = council?.name;
-      if (isSuperadmin && councilName) {
-        url += `?council=${encodeURIComponent(councilName)}`;
+      if (isSuperadmin() && councilName) {
+        path += `?council=${encodeURIComponent(councilName)}`;
       }
-      const res = await fetch(url, { headers: tokenHeader() });
-      if (res.status === 403) {
+      const { response, data } = await apiFetch<ApiListResponse<InternalUser[]>>(path);
+      if (response.status === 403) {
         setListError('You do not have permission to view internal staff');
         setUsers([]);
         return;
       }
-      const json = await res.json().catch(() => ({ data: [] }));
-      if (!res.ok) {
-        setListError(json?.message || 'Failed to load internal staff');
+      if (!response.ok) {
+        setListError(data?.message || 'Failed to load internal staff');
         setUsers([]);
       } else {
-        setUsers(Array.isArray(json?.data) ? json.data : []);
+        setUsers(Array.isArray(data?.data) ? data.data : []);
       }
-    } catch (err: any) {
+    } catch {
       setListError('Network error');
       setUsers([]);
     } finally {
@@ -95,26 +87,25 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
     if (!confirm('Delete this internal user? This action cannot be undone.')) return;
     setListError('');
     try {
-      const res = await fetch(`${API_BASE}/api/admins/staff/${id}`, {
-        method: 'DELETE',
-        headers: tokenHeader(),
-      });
-      if (res.status === 403) {
+      const { response, data } = await apiFetch<ApiListResponse<unknown>>(
+        `/api/admins/staff/${id}`,
+        { method: 'DELETE' }
+      );
+      if (response.status === 403) {
         setListError('Not allowed');
         return;
       }
-      if (res.status === 404) {
+      if (response.status === 404) {
         setListError('User not found');
         await loadData();
         return;
       }
-      if (res.status === 409) {
+      if (response.status === 409) {
         setListError('Cannot delete due to constraints');
         return;
       }
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setListError(json?.message || 'Failed to delete internal user');
+      if (!response.ok) {
+        setListError(data?.message || 'Failed to delete internal user');
         return;
       }
       // success
@@ -140,26 +131,24 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
         contactNumber: contactNumber.trim() || undefined,
       };
 
-      const endpoint = role === 'FIELD_MENTOR'
-        ? `${API_BASE}/api/admins/staff/field-mentors`
-        : `${API_BASE}/api/admins/staff/bin-collectors`;
+      const path =
+        role === 'FIELD_MENTOR'
+          ? '/api/admins/staff/field-mentors'
+          : '/api/admins/staff/bin-collectors';
 
-      const res = await fetch(endpoint, {
+      const { response, data } = await apiFetch<ApiListResponse<unknown>>(path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...tokenHeader() },
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(json?.message || 'Failed to create internal user');
-      } else if (json.success) {
+      if (!response.ok) {
+        setError(data?.message || 'Failed to create internal user');
+      } else if (data.success) {
         setSuccess('Internal user created successfully!');
         resetForm();
-        // Refresh list
         await loadData();
       } else {
-        setError(json?.message || 'Failed to create internal user');
+        setError(data?.message || 'Failed to create internal user');
       }
     } catch (err: any) {
       setError('Network error. Please try again.');
@@ -177,7 +166,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
         {/* Council selection is managed at a higher-level (app/page.tsx) and passed via the `council` prop. */}
       </div>
 
-      {!isSuperadmin && (
+      {!isSuperadmin() && (
       <Card>
         <CardHeader>
           <CardTitle>Create Internal User</CardTitle>
@@ -250,7 +239,7 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                         <TableCell className="align-middle">{user.email ?? '-'}</TableCell>
                         <TableCell className="align-middle">{(user.role || '-').toString()}</TableCell>
                         <TableCell className="align-middle">
-                          {isSuperadmin ? (
+                          {isSuperadmin() ? (
                             '—'
                           ) : (
                             <Button size="sm" variant="outline" onClick={() => deleteUser(user.empId ?? user.id ?? user.userId)}>

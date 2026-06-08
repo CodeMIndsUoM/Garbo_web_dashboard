@@ -22,8 +22,9 @@ import {
   SelectValue,
 } from "./ui/select";
 import { toast } from "sonner";
+import { apiFetch } from '@/lib/api';
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081'}/api/bins`;
+const BINS_API = '/api/bins';
 const COUNCILS = [
   'Colombo',
   'Dehiwala-Mt. Lavinia',
@@ -64,17 +65,13 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
   const isAdmin = userRole === 'admin';
   const defaultCouncil = council?.name || '';
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const fetchBins = async () => {
     try {
       setLoading(true);
       const query = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
-      const response = await fetch(`${API_BASE}${query}`, { headers: authHeaders() });
-      const result = await response.json();
+      const { response, data: result } = await apiFetch<{ success?: boolean; data?: Bin[] }>(
+        `${BINS_API}${query}`
+      );
       if (result.success) {
         const data = Array.isArray(result.data) ? result.data : [];
         const hasCouncilField = data.some((b: any) => typeof b?.council === 'string');
@@ -108,15 +105,10 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         status: 'empty'
       };
 
-      const response = await fetch(API_BASE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders(),
-        },
-        body: JSON.stringify(binDataToSubmit),
-      });
-      const result = await response.json();
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string }>(
+        BINS_API,
+        { method: 'POST', body: JSON.stringify(binDataToSubmit) }
+      );
       if (result.success) {
         toast.success("Bin created successfully");
         setIsCreateModalOpen(false);
@@ -141,11 +133,10 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const handleDeleteBin = async (id: number) => {
     if (!confirm("Are you sure you want to delete this bin?")) return;
     try {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      });
-      const result = await response.json();
+      const { data: result } = await apiFetch<{ success?: boolean }>(
+        `${BINS_API}/${id}`,
+        { method: 'DELETE' }
+      );
       if (result.success) {
         toast.success("Bin deleted successfully");
         fetchBins();
