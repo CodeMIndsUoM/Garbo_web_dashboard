@@ -3,25 +3,38 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-interface CollectorUser {
+interface PendingRegistration {
   empId?: number;
-  id?: number;
   empName?: string;
   email?: string;
-  role?: string;
-  council?: string;
+  phone?: string;
+  NIC?: string;
+  company?: string;
+  defaultAddress?: string;
+  assignedCouncils?: string;
+  nicPhotoUrl?: string;
+  nicPhotoBackUrl?: string;
+  registrationStatus?: string;
+}
+
+interface ApprovedCollector {
+  empId?: number;
+  empName?: string;
+  email?: string;
+  registrationStatus?: string;
 }
 
 export function ThirdPartyCollectors({ council }: { council?: { name?: string } | null }) {
-  const [collectors, setCollectors] = useState<CollectorUser[]>([]);
-  const [analytics, setAnalytics] = useState<unknown>(null);
+  const [pending, setPending] = useState<PendingRegistration[]>([]);
+  const [approved, setApproved] = useState<ApprovedCollector[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ empName: '', email: '', password: '' });
-  const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
+  const [rejectReasons, setRejectReasons] = useState<Record<number, string>>({});
 
   const tokenHeader = (): Record<string, string> => {
     const token = sessionStorage.getItem('token');
@@ -31,23 +44,21 @@ export function ThirdPartyCollectors({ council }: { council?: { name?: string } 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [usersRes, logsRes] = await Promise.all([
+      const [pendingRes, usersRes] = await Promise.all([
+        fetch(`${API_BASE}/api/admins/thirdparty-registrations/pending`, { headers: tokenHeader() }),
         fetch(`${API_BASE}/api/users`, { headers: tokenHeader() }),
-        fetch(`${API_BASE}/api/admin/thirdparty/analyze`, { headers: tokenHeader() }),
       ]);
+      const pendingJson = await pendingRes.json().catch(() => ({ data: [] }));
       const usersJson = await usersRes.json().catch(() => ({ data: [] }));
-      const logsJson = await logsRes.json().catch(() => null);
-      const onlyThirdParty = Array.isArray(usersJson?.data)
-        ? usersJson.data.filter((u: CollectorUser) => (u?.role || '').toString().toUpperCase().includes('THIRD'))
-        : [];
-      const councilName = (council?.name || '').toLowerCase();
-      const hasCouncilField = onlyThirdParty.some((u: CollectorUser) => typeof u.council === 'string');
-      setCouncilFilterUnavailable(Boolean(councilName) && !hasCouncilField && onlyThirdParty.length > 0);
-      const scoped = councilName
-        ? onlyThirdParty.filter((u: CollectorUser) => (typeof u.council !== 'string' ? true : u.council.toLowerCase() === councilName))
-        : onlyThirdParty;
-      setCollectors(scoped);
-      setAnalytics(logsJson);
+      setPending(Array.isArray(pendingJson?.data) ? pendingJson.data : []);
+      const all = Array.isArray(usersJson?.data) ? usersJson.data : [];
+      setApproved(
+        all.filter(
+          (u: ApprovedCollector & { role?: string; registrationStatus?: string }) =>
+            (u?.role || '').toString().toUpperCase().includes('THIRD') &&
+            (u?.registrationStatus || '').toString().toUpperCase() === 'APPROVED'
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -55,22 +66,23 @@ export function ThirdPartyCollectors({ council }: { council?: { name?: string } 
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [council?.name]);
 
-  const createCollector = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.empName || !form.email || !form.password) return;
-    await fetch(`${API_BASE}/api/users`, {
+  const approve = async (empId: number) => {
+    await fetch(`${API_BASE}/api/admins/thirdparty-registrations/${empId}/approve`, {
+      method: 'POST',
+      headers: tokenHeader(),
+    });
+    loadData();
+  };
+
+  const reject = async (empId: number) => {
+    const reason = rejectReasons[empId] || 'Rejected by admin';
+    await fetch(`${API_BASE}/api/admins/thirdparty-registrations/${empId}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
-      body: JSON.stringify({
-        empName: form.empName,
-        email: form.email,
-        password: form.password,
-        role: 'THIRD_PARTY_COLLECTOR',
-      }),
+      body: JSON.stringify({ reason }),
     });
-    setForm({ empName: '', email: '', password: '' });
     loadData();
   };
 
@@ -78,46 +90,69 @@ export function ThirdPartyCollectors({ council }: { council?: { name?: string } 
     <div className="p-8 space-y-8">
       <div>
         <h2 className="text-gray-900 mb-2">3rd Party Collectors</h2>
-        <p className="text-gray-600">Manage third-party collectors and view analytics logs</p>
-        {council?.name && <p className="text-sm text-gray-500 mt-1">Showing data for council: {council.name}</p>}
+        <p className="text-gray-600">Review pending registrations and manage approved collectors</p>
+        {council?.name && (
+          <p className="text-sm text-gray-500 mt-1">Showing data for council: {council.name}</p>
+        )}
       </div>
-      {councilFilterUnavailable && (
-        <div className="p-3 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 text-sm">
-          Council-specific filtering is not available from backend fields yet, so the complete list is shown here.
-        </div>
-      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Add Collector</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="grid grid-cols-1 md:grid-cols-4 gap-3" onSubmit={createCollector}>
-            <Input placeholder="Name" value={form.empName} onChange={(e) => setForm((p) => ({ ...p, empName: e.target.value }))} />
-            <Input placeholder="Email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-            <Input placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} />
-            <Button type="submit" className="bg-green-600 hover:bg-green-700">Add</Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Collectors</CardTitle>
+          <CardTitle>Pending Registrations</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-gray-500">Loading collectors...</div>
-          ) : collectors.length === 0 ? (
-            <div className="text-gray-500">No third-party collectors found.</div>
+            <div className="text-gray-500">Loading registrations...</div>
+          ) : pending.length === 0 ? (
+            <div className="text-gray-500">No pending registrations.</div>
           ) : (
-            <div className="space-y-3">
-              {collectors.map((collector) => (
-                <div key={collector.empId || collector.id} className="p-3 border border-gray-200 rounded-lg">
-                  <p className="text-gray-900">{collector.empName || collector.email}</p>
-                  <p className="text-xs text-gray-500">{collector.email}</p>
-                </div>
-              ))}
+            <div className="space-y-4">
+              {pending.map((item) => {
+                const id = item.empId ?? 0;
+                return (
+                  <div key={id} className="p-4 border border-gray-200 rounded-lg space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-gray-900 font-medium">{item.empName || item.email}</p>
+                        <p className="text-sm text-gray-600">{item.email}</p>
+                        <p className="text-sm text-gray-600">Phone: {item.phone || '-'}</p>
+                        <p className="text-sm text-gray-600">NIC: {item.NIC || '-'}</p>
+                        <p className="text-sm text-gray-600">Company: {item.company || '-'}</p>
+                        <p className="text-sm text-gray-600">Councils: {item.assignedCouncils || '-'}</p>
+                        <Badge variant="secondary" className="mt-2 bg-orange-100 text-orange-700">
+                          {item.registrationStatus || 'PENDING'}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-col gap-2 min-w-[120px]">
+                        {item.nicPhotoUrl && (
+                          <a href={item.nicPhotoUrl} target="_blank" rel="noreferrer" className="text-xs text-green-700 underline">
+                            View NIC (front)
+                          </a>
+                        )}
+                        {item.nicPhotoBackUrl && (
+                          <a href={item.nicPhotoBackUrl} target="_blank" rel="noreferrer" className="text-xs text-green-700 underline">
+                            View NIC (back)
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <Textarea
+                      placeholder="Rejection reason (optional)"
+                      value={rejectReasons[id] || ''}
+                      onChange={(e) => setRejectReasons((p) => ({ ...p, [id]: e.target.value }))}
+                      rows={2}
+                    />
+                    <div className="flex gap-2">
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => approve(id)}>
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => reject(id)}>
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -125,12 +160,21 @@ export function ThirdPartyCollectors({ council }: { council?: { name?: string } 
 
       <Card>
         <CardHeader>
-          <CardTitle>Third-Party Logs</CardTitle>
+          <CardTitle>Approved Collectors</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="text-xs bg-gray-50 border border-gray-200 p-3 rounded-lg overflow-auto">
-            {JSON.stringify(analytics, null, 2)}
-          </pre>
+          {approved.length === 0 ? (
+            <div className="text-gray-500">No approved collectors yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {approved.map((collector) => (
+                <div key={collector.empId} className="p-3 border border-gray-200 rounded-lg">
+                  <p className="text-gray-900">{collector.empName || collector.email}</p>
+                  <p className="text-xs text-gray-500">{collector.email}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

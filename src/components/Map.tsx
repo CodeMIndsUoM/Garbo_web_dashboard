@@ -176,6 +176,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const addModeRef = useRef(false);                         // Ref mirror of addMode — readable inside map event closures without stale state
   const routeLayerRef = useRef<L.FeatureGroup | null>(null);   // FeatureGroup holding all route polylines; cleared between optimisations
   const stompClientRef = useRef<Client | null>(null);           // Active STOMP client for the route WebSocket subscription
+  const collectionStompRef = useRef<Client | null>(null);       // STOMP client for live bin collection updates
+  const [routeCollectionStatus, setRouteCollectionStatus] = useState<Record<number, string>>({});
   const depotMarkerRef = useRef<L.Marker | null>(null);         // Reference to the depot marker for potential repositioning
   const turfPolyRef = useRef<ReturnType<typeof turfPolygon> | null>(null); // Turf polygon used for point-in-polygon boundary checks
   const boundaryLayerRef = useRef<L.FeatureGroup | null>(null);   // Holds the boundary outline polygons
@@ -884,6 +886,37 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       if (boundaryLayerRef.current) boundaryLayerRef.current.clearLayers();
     };
   }, [boundaryLoading]);
+
+  // Live bin collection status from collector mobile app
+  useEffect(() => {
+    const client = new Client({
+      webSocketFactory: () => new SockJS(`${API_ORIGIN}/ws`),
+      reconnectDelay: 3000,
+      debug: () => {},
+    });
+    client.onConnect = () => {
+      client.subscribe('/topic/route-collection', (message) => {
+        try {
+          const payload = JSON.parse(message.body) as { binId?: number; status?: string };
+          if (payload.binId && payload.status) {
+            setRouteCollectionStatus((prev) => ({ ...prev, [payload.binId!]: payload.status! }));
+            // Defer toast until after React/Next router hydration completes
+            window.setTimeout(() => {
+              toast.info(`Bin ${payload.binId}: ${payload.status}`);
+            }, 0);
+          }
+        } catch (error) {
+          console.error('Failed to parse route collection update', error);
+        }
+      });
+    };
+    client.activate();
+    collectionStompRef.current = client;
+    return () => {
+      client.deactivate();
+      collectionStompRef.current = null;
+    };
+  }, []);
 
   // ── Helper: compute combined bounds of all councils (cached) ──
   const getAllCouncilBounds = (): L.LatLngBounds | null => {
