@@ -25,8 +25,7 @@ import { ComplaintAnalytics } from '@/components/ComplaintAnalytics';
 import { ThirdPartyAnalytics } from '@/components/ThirdPartyAnalytics';
 import { VehicleAnalytics } from '@/components/VehicleAnalytics';
 import { BinReportAnalytics } from '@/components/BinReportAnalytics';
-import { CitizenManagement } from '@/components/CitizenManagement';
-import { ThirdPartyCollectors } from '@/components/ThirdPartyCollectors';
+import { ExternalUsers } from '@/components/ExternalUsers';
 import { InternalUsers } from '@/components/InternalUsers';
 import dynamic from 'next/dynamic';
 
@@ -38,8 +37,7 @@ export type PageType =
   | 'map'
   | 'vehicles'
   | 'analytics'
-  | 'citizen-management'
-  | 'third-party-collectors'
+  | 'external-users'
   | 'internal-users'
   | 'reports'
   | 'admin-assignment'
@@ -97,10 +95,8 @@ function AuthenticatedShell({
             council={activeCouncil}
           />
         );
-      case 'citizen-management':
-        return <CitizenManagement council={activeCouncil} />;
-      case 'third-party-collectors':
-        return <ThirdPartyCollectors council={activeCouncil} />;
+      case 'external-users':
+        return <ExternalUsers council={activeCouncil} />;
       case 'internal-users':
         return <InternalUsers council={activeCouncil} />;
       case 'total-collection':
