@@ -26,7 +26,7 @@ export function CitizenManagement({ council }: { council?: { name?: string } | n
   const [loading, setLoading] = useState(true);
 
   const tokenHeader = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 

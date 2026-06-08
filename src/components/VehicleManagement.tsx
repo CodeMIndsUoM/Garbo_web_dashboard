@@ -79,7 +79,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   const [error, setError] = useState('');
 
   const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
@@ -453,7 +453,7 @@ function VehicleFormModal({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
@@ -564,7 +564,7 @@ function DriversListModal({
   council?: { name?: string; id?: string } | null;
 }) {
   const authHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
   return (

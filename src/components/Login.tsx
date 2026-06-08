@@ -56,7 +56,7 @@ export function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      localStorage.setItem('token', token);
+      sessionStorage.setItem('token', token);
       // Try to extract role and id from token if backend doesn't include them in response
       try {
         // lazy-import to avoid SSR issues
@@ -66,17 +66,17 @@ export function Login({ onLogin }: LoginProps) {
         const roleFromToken = payload?.role || payload?.roles || payload?.roleName;
         const idFromToken = payload?.sub || payload?.id || payload?.userId;
         const roleToStore = data.role||data.data?.role||roleFromToken||'admin';
-        localStorage.setItem('role', roleToStore);
-        localStorage.setItem('userId', idFromToken || '');
-        localStorage.setItem(
+        sessionStorage.setItem('role', roleToStore);
+        sessionStorage.setItem('userId', idFromToken || '');
+        sessionStorage.setItem(
           'admin',
           JSON.stringify({ username: data.email||data.data?.email, role: roleToStore, id: idFromToken || undefined })
         );
         // persist mustChangePassword flag for app-level routing (backwards compatible)
-        try { localStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword))); } catch (e) {}
+        try { sessionStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword))); } catch (e) {}
       } catch (e) {
-        localStorage.setItem('role', data.role||data.data?.role||'admin');
-        localStorage.setItem(
+        sessionStorage.setItem('role', data.role||data.data?.role||'admin');
+        sessionStorage.setItem(
           'admin',
           JSON.stringify({ username: data.email||data.data?.email, role: data.role||data.data?.role||'admin' })
         );
@@ -84,21 +84,21 @@ export function Login({ onLogin }: LoginProps) {
       try {
         const council = data?.council ?? data?.data?.council;
         if (council === null || council === undefined) {
-          localStorage.removeItem('council');
+          sessionStorage.removeItem('council');
         } else {
-          localStorage.setItem('council', JSON.stringify(council));
+          sessionStorage.setItem('council', JSON.stringify(council));
         }
       } catch (e) {}
 
       // Enforce strict overwrite behavior for `council` returned by backend.
       // Always clear previous council on every login. If backend returns null/undefined,
-      // remove `council` from localStorage; otherwise store the returned object.
+      // remove `council` from sessionStorage; otherwise store the returned object.
       try {
         const council = data?.council ?? data?.data?.council;
         if (council === null || council === undefined) {
-          localStorage.removeItem('council');
+          sessionStorage.removeItem('council');
         } else {
-          localStorage.setItem('council', JSON.stringify(council));
+          sessionStorage.setItem('council', JSON.stringify(council));
         }
       } catch (e) {}
 

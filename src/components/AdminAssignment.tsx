@@ -42,7 +42,7 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
     setError('');
     try {
       // Include token/Authorization header for GET
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'GET',
         headers: {
@@ -77,7 +77,7 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
     setUpdatingUser(userId);
     setError('');
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/users/${userId}/role`, {
         method: 'PUT',
         headers: {
