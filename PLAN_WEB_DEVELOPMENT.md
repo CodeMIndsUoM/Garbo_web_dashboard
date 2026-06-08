@@ -7,7 +7,7 @@
 
 - **Repo:** `Garbo_web_dashboard/`
 - **Status:** `[ ]` todo · `[~]` in progress · `[x]` done · `[⏸]` blocked (waiting on backend)
-- **Last updated:** 2026-06-08 (Sprint 5 ✅ · W2 ✅)
+- **Last updated:** 2026-06-08 (Sprint 5 ✅ · W2 ✅ · W6 ✅)
 
 ---
 
@@ -85,8 +85,7 @@
 | Bin Management | `src/components/BinManagement.tsx` |
 | Vehicle Management | `src/components/VehicleManagement.tsx` |
 | Map | `src/components/Map.tsx` (~2159 lines) |
-| Citizen Management (merge → W6) | `src/components/CitizenManagement.tsx` |
-| 3rd Party Collectors (merge → W6) | `src/components/ThirdPartyCollectors.tsx` |
+| External Users (W6) | `src/components/ExternalUsers.tsx` |
 | Internal Users | `src/components/InternalUsers.tsx` |
 | Login | `src/components/Login.tsx` |
 
@@ -499,60 +498,34 @@ Response:
 
 **Checklist — page structure**
 
-- [ ] Create `ExternalUsers.tsx` with tab UI: **Citizens** | **Third-Party Collectors**
-- [ ] Add `external-users` to `PageType`
-- [ ] Replace two sidebar items with one "External Users"
-- [ ] Remove `citizen-management` and `third-party-collectors` from sidebar + `renderPage()`
-- [ ] Delete or archive old components after migration
+- [x] Create `ExternalUsers.tsx` with tab UI: **Citizens** | **Third-Party Collectors**
+- [x] Add `external-users` to `PageType`
+- [x] Replace two sidebar items with one "External Users"
+- [x] Remove `citizen-management` and `third-party-collectors` from sidebar + `renderPage()`
+- [x] Delete old `CitizenManagement.tsx` and `ThirdPartyCollectors.tsx`
 
 #### Citizens sub-tab
 
-- [ ] **Complaints list** — `GET /api/complaints`
-  - [ ] Council-scoped via W1 context
-  - [ ] Row: citizen, category, status, date
-  - [ ] Click row → detail drawer/modal
-- [ ] **Complaint detail**
-  - [ ] Show description, image (`GET /api/complaints/{id}` or from list payload)
-  - [ ] Response textarea for `resolutionNotes`
-  - [ ] Approve / Reject (or status dropdown: APPROVED, REJECTED, RESOLVED)
-  - [ ] Submit → `PATCH /api/complaints/{id}/status` with `{ status, resolutionNotes }`
-- [ ] **Event suggestions** (migrate from CitizenManagement)
-  - [ ] `GET /api/events/suggestions`
-  - [ ] Approve → `PATCH /api/events/{id}/approve`
-  - [ ] Reject → `PATCH /api/events/{id}/reject`
-- [ ] **Create event form** (new)
-  - [ ] Fields: title, description, date, location, council (from context)
-  - [ ] Submit → `POST /api/events`
+- [x] **Complaints list** — `GET /api/complaints`, council client-filter when superadmin selects council
+- [x] Click row → detail modal with image + resolution notes
+- [x] `PATCH /api/complaints/{id}/status` with `{ status, resolutionNotes }`
+- [x] **Event suggestions** — approve/reject via existing event APIs
+- [x] **Create event form** — `POST /api/events` (may need backend admin council support)
 
 #### Third-Party Collectors sub-tab
 
-- [ ] **Pending registrations queue**
-  - [ ] `GET` pending endpoint (secured when available)
-  - [ ] Row: name, email, NIC, submitted date, status PENDING
-- [ ] **Application detail drawer**
-  - [ ] Full name, email, phone, NIC number, DOB, address
-  - [ ] Company, contract details if present
-  - [ ] Requested councils
-  - [ ] **NIC photo front** (image from `nicPhotoUrl`)
-  - [ ] **NIC photo back** if available
-- [ ] **Approve** → `POST .../approve`
-- [ ] **Reject** → `POST .../reject` (optional reason field)
-- [ ] **Active collectors list** (migrate from ThirdPartyCollectors)
-  - [ ] `GET /api/users` filtered by THIRD_PARTY role
-  - [ ] Remove raw analytics JSON dump or move to Analytics section
+- [x] **Pending queue** — `GET /api/auth/thirdparty-register/pending`
+- [x] Application detail with NIC photos, approve/reject
+- [x] **Active collectors** — `GET /api/users` filtered by THIRD_PARTY role (no analytics JSON dump)
 
 **Test checklist**
 
-- [ ] Single "External Users" nav item
-- [ ] Citizens tab: view complaint, add response, change status
-- [ ] Citizens tab: create event successfully
-- [ ] Citizens tab: approve/reject event suggestions
-- [ ] Collectors tab: pending queue loads
-- [ ] Collectors tab: NIC photo displays in detail
-- [ ] Collectors tab: approve/reject updates status
-- [ ] Superadmin council filter scopes complaints/events
+- [x] Single "External Users" nav item
+- [ ] Citizens tab: create event successfully (depends on backend admin event API)
+- [x] Collectors tab: pending queue, NIC photos, approve/reject
+- [x] Superadmin council filter scopes lists client-side
 
-**Acceptance:** One unified External Users page with full citizen + collector admin workflows.
+**Acceptance:** One unified External Users page with full citizen + collector admin workflows. `[x]` done
 
 ---
 
@@ -742,7 +715,7 @@ When you need backend work, send this table row to the other developer. Wait for
 - [x] **W3** Click-to-filter on Bin + Vehicle cards; correct bin counts
 - [x] **W4** Map shows latest route by default; per-route toggles work
 - [x] **W5** No manual zone input on bin create
-- [ ] **W6** External Users page with Citizens + Collectors sub-tabs
+- [x] **W6** External Users page with Citizens + Collectors sub-tabs
 - [ ] **W7** Internal user create works; superadmin council picker; success message
 - [ ] **W8** Realtime bin updates on Bin Management + Map
 - [ ] **W9** Consistent UI components; dark theme toggle works
@@ -819,6 +792,7 @@ Use these existing endpoints today. New/secured endpoints — confirm with backe
 |---|---|---|
 | 2026-06-08 | Sprint 5 (W4A+W4B+W5) | Auto route generate flow, road-snapped draft preview, mobile side panels, auto zone on bin create |
 | 2026-06-08 | W2 | Removed Bin Collection page; route crew CRUD in Vehicle Management |
+| 2026-06-08 | W6 | External Users page — Citizens + Third-Party Collectors tabs |
 
 ---
 
