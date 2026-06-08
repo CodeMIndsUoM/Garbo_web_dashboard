@@ -401,25 +401,26 @@ Response:
 
 `POST /api/route-sessions` (existing) — called **once per confirmed draft** with `selectedBinIds`, `vehicleId`, `driverId`, `vehicleCapacities: [vehicle.maxBins]`.
 
-#### Web tasks
-- [ ] **Auto Route** toolbar button
-- [ ] Preview draft routes (bin count, map highlight per draft)
-- [ ] Per-draft **vehicle** dropdown (capacity-filtered, disabled + tooltip when too small)
-- [ ] Per-draft **driver** dropdown (available collectors)
-- [ ] Fleet capacity banner when total `maxBins` insufficient
-- [ ] Confirm all assignments → create sessions sequentially; show in History
+**Status:** `[~]` in progress — auto-preview + web UI shipped; tune clustering in W5
 
-#### Backend tasks (`Garbo_backend/`, branch `feature/web-dashboard-update`)
-- [ ] `Vehicle.maxBins` column + DTO
-- [ ] `AutoRouteService` — filter bins, cluster, split into drafts
-- [ ] `POST /api/route-sessions/auto-preview` endpoint
-- [ ] Wire confirmed routes to existing `RouteSessionService.optimizeAndBroadcast`
+**Web tasks**
+- [x] **Auto Route** toolbar button
+- [x] Preview draft routes (bin count per route)
+- [x] Per-draft **vehicle** dropdown (capacity-filtered, disabled when too small)
+- [x] Per-draft **driver** dropdown
+- [x] Fleet capacity summary + warnings
+- [x] Confirm all assignments → create sessions sequentially; show in History
+- [ ] Map highlight per draft route (optional polish)
 
-#### Vehicle Management (web + backend)
-- [ ] Replace "Capacity (tons)" with **Max bins per trip** in `VehicleManagement.tsx`
-- [ ] Display `maxBins` on vehicle cards
+**Backend tasks**
+- [x] `Vehicle.maxBins` column + entity
+- [x] `AutoRouteService` — filter bins, split into drafts
+- [x] `POST /api/route-sessions/auto-preview` endpoint
+- [x] Confirmed routes use existing `optimizeAndBroadcast`
 
-**Status:** `[ ]` not started — manual Route flow stays; implement after Sprint 3 approval
+**Vehicle Management**
+- [x] **Max bins per trip** in `VehicleManagement.tsx`
+- [x] Display `maxBins` on vehicle cards
 
 ---
 
@@ -445,13 +446,13 @@ Response:
 **Manual delete bins:** keep bottom drawer for now OR move to second tab in same panel (decide in implementation).
 
 **Checklist**
-- [ ] Extract shared `MapSidePanel` styles (History, Legend, Route Planner)
-- [ ] Move route planner content from bottom drawer to right panel
-- [ ] Close History/Legend when Route Planner opens
-- [ ] Move active session status into panel footer
+- [x] Extract shared `MapSidePanel` (`src/components/map/MapSidePanel.tsx`)
+- [x] Move route planner content from bottom drawer to right panel
+- [x] Mutual exclusion: Route Planner | History | Legend (same slide animation)
+- [x] Move active session status into route planner panel footer
 - [ ] Responsive: full-width panel on mobile
 
-**Status:** `[ ]` not started — depends on W4A for auto-route sections
+**Status:** `[~]` in progress — manual + auto planner on right panel; delete bins still bottom drawer
 
 ---
 
@@ -459,24 +460,15 @@ Response:
 
 **Goal:** Admin no longer fills zone when adding a bin. Backend assigns zone automatically.
 
-**⏸ Backend needed before you start:**
-
-- `POST /api/bins` — `zone` field becomes **optional** (server assigns via clustering)
-- Optional: `GET /api/zones?council=` for map visualization
-
-**Files to edit**
-
-- `src/components/Map.tsx` (Add Bin dialog)
-- `src/components/BinManagement.tsx` (create form)
+**Backend:** `ZoneClusteringService` — K-means on coordinates per council (no ML).
 
 **Checklist**
 
-- [ ] Confirm with backend dev that `zone` is optional on create
-- [ ] `Map.tsx`: remove required zone number input from Add Bin dialog
-- [ ] `BinManagement.tsx`: remove zone field from create form
-- [ ] After create: show assigned zone in bin card/detail (read from API response)
-- [ ] Keep zone display read-only on bin cards (backend-assigned value)
-- [ ] (Optional) If `GET /api/zones` exists: color-code bins by zone on map
+- [x] `POST /api/bins` — `zone` optional; server assigns via `ZoneClusteringService`
+- [x] `Map.tsx`: remove zone input from Add Bin dialog; toast shows assigned zone
+- [x] `BinManagement.tsx`: remove zone field from create form
+- [x] Map context menu: zone read-only (system-assigned)
+- [ ] (Optional) `GET /api/zones?council=` for map zone visualization
 
 **Test checklist**
 
