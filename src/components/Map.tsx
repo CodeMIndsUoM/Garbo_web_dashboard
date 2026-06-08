@@ -1808,6 +1808,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
             const nextShow = !showHistorySheet;
             setShowHistorySheet(nextShow);
             if (nextShow) {
+              setShowLegend(false);
               setAddMode(false);
               setSelectionMode(false);
               clearSelectedBinIcons(selectedBins);
@@ -1847,7 +1848,11 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         {/* Legend */}
         <button
           title="Map Legend"
-          onClick={() => setShowLegend(!showLegend)}
+          onClick={() => {
+            const next = !showLegend;
+            setShowLegend(next);
+            if (next) setShowHistorySheet(false);
+          }}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-medium text-[11px] transition-all active:scale-95 shrink-0 ${showLegend
             ? 'bg-slate-800 text-white shadow-sm hover:bg-slate-900'
             : 'text-gray-600 hover:bg-white/50 hover:text-gray-900'
@@ -1862,50 +1867,50 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       {showLegend && (
         <div
           style={{ zIndex: 999 }}
-          className="absolute top-16 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl shadow-xl p-5 w-80 max-w-[calc(100vw-2rem)] flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-200"
+          className="absolute top-20 right-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl p-5 gap-3 animate-in fade-in zoom-in-95 duration-200"
         >
-          <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-            <span className="font-semibold text-gray-800 text-sm">Map Legend</span>
+          <div className="flex justify-between items-center border-b border-white/20 pb-2 shrink-0">
+            <span className="font-bold text-slate-800 text-sm">Map Legend</span>
             <button
               type="button"
               onClick={() => setShowLegend(false)}
-              className="text-gray-400 hover:text-gray-600 text-xs"
+              className="p-1 rounded-lg hover:bg-slate-200/50 text-slate-500 hover:text-slate-700 transition-colors text-xs"
             >
               ✕
             </button>
           </div>
 
-          <div className="flex flex-col gap-3 text-xs">
+          <div className="flex flex-col gap-3 text-xs text-slate-700">
             {/* Bin markers — matches field-staff report statuses */}
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Bin markers (fill status)
             </span>
             <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#ef4444] border border-white shadow-sm shrink-0" />
-                <span className="text-gray-700 font-medium">Full — collect first</span>
+                <span className="font-medium">Full — collect first</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#f59e0b] border border-white shadow-sm shrink-0" />
-                <span className="text-gray-700 font-medium">Half — needs collection</span>
+                <span className="font-medium">Half — needs collection</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#10b981] border border-white shadow-sm shrink-0" />
-                <span className="text-gray-700 font-medium">Empty — recently cleared</span>
+                <span className="font-medium">Empty — recently cleared</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-[#94a3b8] border border-white shadow-sm shrink-0" />
-                <span className="text-gray-700 font-medium">Not checked — no report yet</span>
+                <span className="font-medium">Not checked — no report yet</span>
               </div>
             </div>
 
-            <hr className="border-gray-100" />
+            <hr className="border-white/20" />
 
             {/* Selection badges */}
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Selection mode
             </span>
-            <div className="flex flex-col gap-1.5 text-gray-700">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 rounded-full bg-green-500 border-2 border-white shadow-sm shrink-0" />
                 <span>Green badge — bin selected for <strong>Route</strong></span>
@@ -1916,13 +1921,13 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               </div>
             </div>
 
-            <hr className="border-gray-100" />
+            <hr className="border-white/20" />
 
             {/* Routes — aligned with History visibility (W4) */}
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Collection routes
             </span>
-            <p className="text-[10px] text-gray-500 leading-snug">
+            <p className="text-[10px] text-slate-500 leading-snug">
               Open <strong>History</strong> → tick <strong>Visible on map</strong> per session.
               Latest active route is shown by default; use Show all / Hide all for more.
             </p>
@@ -1932,7 +1937,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                   className="w-8 h-1 rounded shrink-0"
                   style={{ backgroundColor: ROUTE_COLORS[0] }}
                 />
-                <span className="text-gray-700 font-medium">Active route (colour varies per session)</span>
+                <span className="font-medium">Active route (colour varies per session)</span>
               </div>
               <div className="flex flex-wrap gap-1.5 pl-11">
                 {ROUTE_COLORS.slice(0, 4).map((c) => (
@@ -1946,21 +1951,21 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               </div>
               <div className="flex items-center gap-3">
                 <span className="w-8 h-1 bg-slate-500 rounded shrink-0" />
-                <span className="text-gray-700 font-medium">Completed route</span>
+                <span className="font-medium">Completed route</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className="w-8 h-0.5 border-t-2 border-dashed border-emerald-500 shrink-0" />
-                <span className="text-gray-700 font-medium">Animated line — route in progress</span>
+                <span className="font-medium">Animated line — route in progress</span>
               </div>
             </div>
 
-            <hr className="border-gray-100" />
+            <hr className="border-white/20" />
 
             {/* Map overlays */}
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Map overlays
             </span>
-            <div className="flex flex-col gap-1.5 text-gray-700">
+            <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-4 h-4 rounded bg-[#9333ea] border border-white shadow-sm shrink-0" />
                 <span>Depot — route start / end point</span>
