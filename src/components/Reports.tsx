@@ -9,29 +9,29 @@ import { ReportPrintView } from './Reportprintview';
 
 // Summary rows returned from the reports list endpoint.
 interface ReportSummary {
-  id:              number;
-  title:           string;
-  periodStart:     string;
-  periodEnd:       string;
-  status:          string;
-  createdAt:       string;
-  fileSizeKb:      number;
-  periodLabel:     string;
+  id: number;
+  title: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  createdAt: string;
+  fileSizeKb: number;
+  periodLabel: string;
   fileSizeDisplay: string;
 }
 
 // Full report payload returned when opening one report by id.
 interface ReportDetail {
-  id:          number;
-  title:       string;
+  id: number;
+  title: string;
   periodLabel: string;
-  snapshot:    any;
+  snapshot: any;
 }
 
 // Council context provided by parent views for scoped report generation.
 interface Council {
-  id:           string;
-  name:         string;
+  id: string;
+  name: string;
   description?: string;
 }
 
@@ -40,12 +40,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 export function Reports({ council }: { council?: Council | null }) {
 
   // Main view state: list, loading flags, selected report, and UI error text.
-  const [reports, setReports]             = useState<ReportSummary[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [generating, setGenerating]       = useState(false);
-  const [openReport, setOpenReport]       = useState<ReportDetail | null>(null);
+  const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [openReport, setOpenReport] = useState<ReportDetail | null>(null);
   const [loadingReport, setLoadingReport] = useState<number | null>(null);
-  const [error, setError]                 = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch report list on first mount so the table is populated immediately.
   useEffect(() => { fetchReports(); }, []);
@@ -115,17 +115,17 @@ export function Reports({ council }: { council?: Council | null }) {
   }
 
   // Derived dashboard stats shown in the top card row.
-  const completed   = reports.filter(r => r.status === 'COMPLETED').length;
+  const completed = reports.filter(r => r.status === 'COMPLETED').length;
   const totalSizeKb = reports.reduce((s, r) => s + (r.fileSizeKb ?? 0), 0);
-  const avgSizeKb   = reports.length > 0 ? Math.round(totalSizeKb / reports.length) : 0;
-  const formatKb    = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
+  const avgSizeKb = reports.length > 0 ? Math.round(totalSizeKb / reports.length) : 0;
+  const formatKb = (kb: number) => kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`;
 
   // Static descriptors for the stat cards, fed by derived values above.
   const statCards = [
-    { label: 'Total Reports',       value: reports.length },
-    { label: 'Avg Report Size',     value: avgSizeKb > 0 ? formatKb(avgSizeKb) : '—' },
+    { label: 'Total Reports', value: reports.length },
+    { label: 'Avg Report Size', value: avgSizeKb > 0 ? formatKb(avgSizeKb) : '—' },
     { label: 'Completed This Year', value: completed },
-    { label: 'Storage Used',        value: totalSizeKb > 0 ? formatKb(totalSizeKb) : '—' },
+    { label: 'Storage Used', value: totalSizeKb > 0 ? formatKb(totalSizeKb) : '—' },
   ];
 
   return (

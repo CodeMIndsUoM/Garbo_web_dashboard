@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { CHART, type PieChartEntry } from './analytics-ui';
+import { CHART, CHART_ANIMATION, type PieChartEntry } from './analytics-ui';
 
 interface AnalyticsDonutChartProps {
   data: PieChartEntry[];
@@ -38,6 +38,7 @@ export function AnalyticsDonutChart({
             paddingAngle={3}
             dataKey="value"
             nameKey="name"
+            {...CHART_ANIMATION}
           >
             {data.map((entry) => (
               <Cell key={entry.name} fill={entry.color} />

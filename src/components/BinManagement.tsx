@@ -288,8 +288,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   };
 
   const statCardClass = (active: boolean) =>
-    `bg-white cursor-pointer transition-all hover:shadow-md ${
-      active ? 'ring-2 ring-blue-500 shadow-md' : ''
+    `cursor-pointer transition-all hover:shadow-md ${
+      active ? 'ring-2 ring-green-500 shadow-md' : ''
     }`;
 
   const nextBinCode = useMemo(() => {
@@ -323,17 +323,15 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const statusBarClass = (status: string) => {
     const key = normalizeBinStatus(status);
     if (key === 'full') return 'bg-red-500';
-    if (key === 'half') return 'bg-yellow-400';
-    if (key === 'empty') return 'bg-green-500';
-    return 'bg-white';
+    if (key === 'half') return 'bg-gray-400';
+    if (key === 'empty') return 'bg-green-600';
+    return 'bg-gray-200';
   };
 
   const statusTextClass = (status: string) => {
     const key = normalizeBinStatus(status);
     if (key === 'full') return 'text-red-600';
-    if (key === 'half') return 'text-yellow-600';
-    if (key === 'empty') return 'text-green-600';
-    return 'text-gray-400';
+    return 'text-gray-700';
   };
 
   return (
@@ -353,7 +351,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
+            <Button className="bg-green-600 hover:bg-green-700 text-white">
               <Plus className="w-4 h-4 mr-2" />
               Add New Bin
             </Button>
@@ -405,11 +403,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Total Bins</p>
-                <p className="text-2xl font-semibold text-gray-900">{binCounts.total}</p>
+                <p className="text-2xl text-gray-900">{binCounts.total}</p>
               </div>
-              <div className="p-3 bg-gray-50 rounded-full">
-                <Trash2 className="w-6 h-6 text-gray-400" />
-              </div>
+              <Trash2 className="w-10 h-10 shrink-0 text-gray-400" />
             </div>
           </CardContent>
         </Card>
@@ -425,11 +421,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Full</p>
-                <p className="text-2xl font-semibold text-red-600">{binCounts.full}</p>
+                <p className="text-2xl text-red-600">{binCounts.full}</p>
               </div>
-              <div className="p-3 bg-red-50 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-red-400" />
-              </div>
+              <AlertTriangle className="w-10 h-10 shrink-0 text-gray-400" />
             </div>
           </CardContent>
         </Card>
@@ -445,11 +439,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Half</p>
-                <p className="text-2xl font-semibold text-orange-600">{binCounts.half}</p>
+                <p className="text-2xl text-gray-900">{binCounts.half}</p>
               </div>
-              <div className="p-3 bg-orange-50 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-orange-400" />
-              </div>
+              <AlertTriangle className="w-10 h-10 shrink-0 text-gray-400" />
             </div>
           </CardContent>
         </Card>
@@ -465,11 +457,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Empty</p>
-                <p className="text-2xl font-semibold text-green-600">{binCounts.empty}</p>
+                <p className="text-2xl text-gray-900">{binCounts.empty}</p>
               </div>
-              <div className="p-3 bg-green-50 rounded-full">
-                <Trash2 className="w-6 h-6 text-green-400" />
-              </div>
+              <Trash2 className="w-10 h-10 shrink-0 text-gray-400" />
             </div>
           </CardContent>
         </Card>
@@ -496,7 +486,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
       {/* Bins Grid */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+          <Loader2 className="w-10 h-10 text-green-600 animate-spin mb-4" />
           <p className="text-gray-600">Loading bin data...</p>
         </div>
       ) : councilScopedBins.length === 0 ? (
@@ -530,8 +520,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                     <Badge
                       className={
                         bin.isAssigned
-                          ? 'bg-blue-50 text-blue-700 border-blue-100'
-                          : 'bg-gray-50 text-gray-700 border-gray-100'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-gray-50 text-gray-600 border-gray-200'
                       }
                       variant="outline"
                     >

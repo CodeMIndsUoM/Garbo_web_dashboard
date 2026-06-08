@@ -53,16 +53,15 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
               item.id === 'dashboard'
                 ? currentPage === 'dashboard' || DASHBOARD_DRILL_PAGES.includes(currentPage)
                 : currentPage === item.id;
-            
+
             return (
               <li key={item.id}>
                 <button
                   onClick={() => onPageChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                       ? 'bg-green-50 text-green-700'
                       : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <Icon className="w-5 h-5 shrink-0" />
                   <span className="whitespace-nowrap">{item.label}</span>
@@ -75,9 +74,8 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
 
       <div className="p-4 border-t border-gray-200">
         {userRole && (
-          <div className={`rounded-xl border p-2 ${
-            userRole === 'superadmin' ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'
-          }`}>
+          <div className={`rounded-xl border p-2 ${userRole === 'superadmin' ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'
+            }`}>
             <button
               onClick={() => {
                 if (userRole === 'superadmin') {
@@ -87,19 +85,16 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
                   onPageChange('admin-edit-password');
                 }
               }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors select-none ${
-                userRole === 'superadmin'
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors select-none ${userRole === 'superadmin'
                   ? 'hover:bg-purple-100 cursor-pointer'
                   : 'hover:bg-blue-100 cursor-pointer'
-              }`}
+                }`}
               disabled={userRole !== 'superadmin' && userRole !== 'admin'}
             >
-              <Shield className={`w-4 h-4 shrink-0 ${
-                userRole === 'superadmin' ? 'text-purple-600' : 'text-blue-600'
-              }`} />
-              <span className={`text-xs font-medium capitalize ${
-                userRole === 'superadmin' ? 'text-purple-700' : 'text-blue-700'
-              }`}>
+              <Shield className={`w-4 h-4 shrink-0 ${userRole === 'superadmin' ? 'text-purple-600' : 'text-blue-600'
+                }`} />
+              <span className={`text-xs font-medium capitalize ${userRole === 'superadmin' ? 'text-purple-700' : 'text-blue-700'
+                }`}>
                 {userRole === 'superadmin' ? 'Superadmin' : 'Admin'}
               </span>
             </button>

@@ -9,6 +9,13 @@ import {
   type ReactNode,
 } from 'react';
 import type { UserRole } from '@/app/page';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export interface Council {
   id: string;
@@ -105,6 +112,12 @@ export function CouncilProvider({
   );
 }
 
+/** Backend APIs expect the display name (e.g. "Colombo"), not the slug id ("colombo"). */
+export function getCouncilApiName(council?: { id?: string; name?: string } | null): string | undefined {
+  const name = council?.name?.trim();
+  return name || undefined;
+}
+
 export function useCouncil(): CouncilContextValue {
   const ctx = useContext(CouncilContext);
   if (!ctx) {
@@ -125,9 +138,9 @@ export function CouncilTopBar() {
 
   if (!isSuperadmin) {
     return (
-      <div className="p-4 bg-gray-100 border-b text-sm flex items-center justify-between gap-4">
-        <span className="text-gray-600">Showing data for council</span>
-        <span className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-semibold">
+      <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-3">
+        <p className="text-sm text-gray-600">Showing data for council</p>
+        <span className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
           {displayLabel}
         </span>
       </div>
@@ -135,25 +148,38 @@ export function CouncilTopBar() {
   }
 
   return (
-    <div className="p-4 bg-gray-100 border-b text-sm flex items-center justify-between gap-4">
-      <div className="text-gray-700 font-semibold">{displayLabel}</div>
-      <div className="flex items-center gap-2">
-        <label className="text-gray-600" htmlFor="global-council-filter">
+    <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-3">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Viewing</p>
+        <p className="text-sm font-semibold text-gray-900">{displayLabel}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <label
+          htmlFor="global-council-filter"
+          className="text-sm font-medium text-gray-600 shrink-0"
+        >
           Council
         </label>
-        <select
-          id="global-council-filter"
-          className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-700"
+        <Select
           value={selectedCouncilId}
-          onChange={(e) => setSelectedCouncilId(e.target.value)}
+          onValueChange={(value) => setSelectedCouncilId(value as CouncilFilterId)}
         >
-          <option value="all">All Councils</option>
-          {councils.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            id="global-council-filter"
+            className="h-9 w-[15rem] rounded-lg border-gray-300 bg-white px-3 text-sm text-gray-800 shadow-sm hover:bg-gray-50 focus-visible:border-green-500 focus-visible:ring-green-500/25"
+            aria-label="Select council"
+          >
+            <SelectValue placeholder="Select council" />
+          </SelectTrigger>
+          <SelectContent align="end" className="z-[100] min-w-[15rem]">
+            <SelectItem value="all">All Councils</SelectItem>
+            {councils.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );

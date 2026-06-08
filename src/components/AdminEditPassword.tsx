@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import React, { useState } from "react";
 import { decodeJwtPayload } from '@/lib/jwt';
@@ -75,10 +75,10 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      try { sessionStorage.setItem('mustChangePassword', JSON.stringify(false)); } catch (e) {}
+      try { sessionStorage.setItem('mustChangePassword', JSON.stringify(false)); } catch (e) { }
       // trigger parent navigation handler if provided (state-based routing)
       if (onPasswordChanged) {
-        try { onPasswordChanged(); } catch (e) {}
+        try { onPasswordChanged(); } catch (e) { }
       }
     } catch (err: any) {
       setError(err?.message || 'Network error');
