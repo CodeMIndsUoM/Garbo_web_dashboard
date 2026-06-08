@@ -7,7 +7,7 @@
 
 - **Repo:** `Garbo_web_dashboard/`
 - **Status:** `[ ]` todo · `[~]` in progress · `[x]` done · `[⏸]` blocked (waiting on backend)
-- **Last updated:** 2026-06-08 (W0 ✅ · W1 ✅ · W3 ✅ · W4 ✅ · W4A/W4B planned)
+- **Last updated:** 2026-06-08 (Sprint 5 ✅ · W2 ✅)
 
 ---
 
@@ -81,7 +81,7 @@
 | Sidebar | `src/components/Sidebar.tsx` |
 | Council context (W1) | `src/lib/council-context.tsx` |
 | Dashboard | `src/components/Dashboard.tsx` |
-| Bin Collection (remove) | `src/components/CollectionSchedule.tsx` |
+| ~~Bin Collection~~ (removed W2) | labour in `VehicleManagement.tsx` |
 | Bin Management | `src/components/BinManagement.tsx` |
 | Vehicle Management | `src/components/VehicleManagement.tsx` |
 | Map | `src/components/Map.tsx` (~2159 lines) |
@@ -205,21 +205,22 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 **Checklist — migrate collector-labour**
 
-- [ ] Copy labour CRUD UI from `CollectionSchedule.tsx`:
+- [x] Copy labour CRUD UI from `CollectionSchedule.tsx`:
   - `GET /api/collector-labours`
   - `POST /api/collector-labours`
   - `DELETE /api/collector-labours/{id}`
-- [ ] Add section to `VehicleManagement.tsx` e.g. "Route Crew / Collector Labour"
-  - [ ] Input + Add button for labour name
-  - [ ] List with Delete per row
-- [ ] Style to match Vehicle Management cards
+- [x] Add section to `VehicleManagement.tsx` — "Route Crew / Collector Labour"
+  - [x] Input + Add button for labour name
+  - [x] List with Delete per row
+- [x] Style to match Vehicle Management cards
+- [x] **View Collectors** button opens staff drivers modal (fixes dead `DriversListModal`)
 
 **Checklist — remove page**
 
-- [ ] Remove `schedule` from `PageType` in `page.tsx`
-- [ ] Remove `CollectionSchedule` import and `renderPage()` case
-- [ ] Remove "Bin Collection" from `Sidebar.tsx`
-- [ ] Delete `CollectionSchedule.tsx`
+- [x] Remove `schedule` from `PageType` in `page.tsx`
+- [x] Remove `CollectionSchedule` import and `renderPage()` case
+- [x] Remove "Bin Collection" from `Sidebar.tsx`
+- [x] Delete `CollectionSchedule.tsx`
 
 **Do NOT migrate**
 
@@ -228,11 +229,11 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 
 **Test checklist**
 
-- [ ] Sidebar has no "Bin Collection"
-- [ ] Collector labour add/list/delete works in Vehicle Management
-- [ ] No broken imports or `PageType` references to `schedule`
+- [x] Sidebar has no "Bin Collection"
+- [x] Collector labour add/list/delete works in Vehicle Management
+- [x] No broken imports or `PageType` references to `schedule`
 
-**Acceptance:** Bin Collection page gone; labour management lives in Vehicle Management.
+**Acceptance:** Bin Collection page gone; labour management lives in Vehicle Management. `[x]` done
 
 ---
 
@@ -401,16 +402,18 @@ Response:
 
 `POST /api/route-sessions` (existing) — called **once per confirmed draft** with `selectedBinIds`, `vehicleId`, `driverId`, `vehicleCapacities: [vehicle.maxBins]`.
 
-**Status:** `[~]` in progress — auto-preview + web UI shipped; tune clustering in W5
+**Status:** `[x]` done
 
 **Web tasks**
-- [x] **Auto Route** toolbar button
-- [x] Preview draft routes (bin count per route)
+- [x] **Routes** toolbar button with Manual / Auto tabs (W4B)
+- [x] **Generate Routes** button — on-demand auto-preview (not on tab open)
+- [x] Preview draft routes on map (road-snapped OSRM + Turf clip, one route at a time)
+- [x] Numbered stop markers + depot marker on draft preview
 - [x] Per-draft **vehicle** dropdown (capacity-filtered, disabled when too small)
 - [x] Per-draft **driver** dropdown
 - [x] Fleet capacity summary + warnings
-- [x] Confirm all assignments → create sessions sequentially; show in History
-- [ ] Map highlight per draft route (optional polish)
+- [x] **Confirm This Route** per draft → creates session; refreshes available vehicles
+- [x] Confirmed routes appear in History with road polylines
 
 **Backend tasks**
 - [x] `Vehicle.maxBins` column + entity
@@ -450,9 +453,9 @@ Response:
 - [x] Move route planner content from bottom drawer to right panel
 - [x] Mutual exclusion: Route Planner | History | Legend (same slide animation)
 - [x] Move active session status into route planner panel footer
-- [ ] Responsive: full-width panel on mobile
+- [x] Responsive: full-width panel on mobile (`left-2 right-2` below `sm` breakpoint)
 
-**Status:** `[~]` in progress — manual + auto planner on right panel; delete bins still bottom drawer
+**Status:** `[x]` done — manual + auto planner on right panel; delete bins still bottom drawer (intentional)
 
 ---
 
@@ -472,11 +475,11 @@ Response:
 
 **Test checklist**
 
-- [ ] Add bin on map without entering zone → succeeds; zone appears in response
-- [ ] Add bin from Bin Management without zone → succeeds
-- [ ] Route optimization still works with auto-assigned zones
+- [x] Add bin on map without entering zone → succeeds; zone appears in response
+- [x] Add bin from Bin Management without zone → succeeds
+- [x] Route optimization still works with auto-assigned zones
 
-**Acceptance:** No manual zone input; bins get server-assigned zones.
+**Acceptance:** No manual zone input; bins get server-assigned zones. `[x]` done
 
 ---
 
@@ -710,7 +713,7 @@ When you need backend work, send this table row to the other developer. Wait for
 | Your feature | What you need | Status |
 |---|---|---|
 | W1 | `GET /api/councils` → `[{id,name,district,isActive}]` | `[ ]` requested `[ ]` ready |
-| W5 | `POST /api/bins` — `zone` optional; response includes assigned zone | `[ ]` requested `[ ]` ready |
+| W5 | `POST /api/bins` — `zone` optional; response includes assigned zone | `[x]` ready |
 | W5 | (Optional) `GET /api/zones?council=` | `[ ]` requested `[ ]` ready |
 | W6 | Secured `GET /api/admin/thirdparty/registrations/pending` | `[ ]` requested `[ ]` ready |
 | W6 | Secured `POST .../approve` and `.../reject` | `[ ]` requested `[ ]` ready |
@@ -743,10 +746,10 @@ When you need backend work, send this table row to the other developer. Wait for
 
 - [x] **W0** Shared API client in use for new/edited code
 - [x] **W1** Home removed; global council dropdown for superadmin
-- [ ] **W2** Bin Collection page removed; labour in Vehicle Management
+- [x] **W2** Bin Collection page removed; labour in Vehicle Management
 - [x] **W3** Click-to-filter on Bin + Vehicle cards; correct bin counts
 - [x] **W4** Map shows latest route by default; per-route toggles work
-- [ ] **W5** No manual zone input on bin create
+- [x] **W5** No manual zone input on bin create
 - [ ] **W6** External Users page with Citizens + Collectors sub-tabs
 - [ ] **W7** Internal user create works; superadmin council picker; success message
 - [ ] **W8** Realtime bin updates on Bin Management + Map
@@ -822,7 +825,8 @@ Use these existing endpoints today. New/secured endpoints — confirm with backe
 
 | Date | Feature | Note |
 |---|---|---|
-| | | |
+| 2026-06-08 | Sprint 5 (W4A+W4B+W5) | Auto route generate flow, road-snapped draft preview, mobile side panels, auto zone on bin create |
+| 2026-06-08 | W2 | Removed Bin Collection page; route crew CRUD in Vehicle Management |
 
 ---
 

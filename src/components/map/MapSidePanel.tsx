@@ -3,9 +3,9 @@
 import React from 'react';
 import { X } from 'lucide-react';
 
-/** Shared glass side-panel shell used by History, Legend, and Route Planner on the map. */
+/** Shared glass side-panel shell — full-width on mobile, fixed width on sm+. */
 export const MAP_SIDE_PANEL_BASE =
-  'absolute right-4 top-20 bottom-4 w-[380px] max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl transition-all duration-300 transform';
+  'absolute left-2 right-2 top-[4.5rem] bottom-2 sm:left-auto sm:right-4 sm:top-20 sm:bottom-4 sm:w-[380px] sm:max-w-[calc(100vw-2rem)] flex flex-col bg-white/70 backdrop-blur-md border border-white/30 rounded-2xl shadow-2xl transition-all duration-300 transform';
 
 export function mapSidePanelState(open: boolean) {
   return open

@@ -394,22 +394,32 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     };
   }, [contextMenu]);
 
-  // Fetches vehicles and drivers whenever selection mode opens or the council changes
+  const refetchRouteResources = async () => {
+    const token = sessionStorage.getItem('token');
+    const authHeaders = (token ? { Authorization: `Bearer ${token}` } : {}) as Record<string, string>;
+    const councilQuery = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
+    try {
+      const [vehRes, drvRes] = await Promise.all([
+        fetch(`${API_ORIGIN}/api/route-sessions/available-vehicles${councilQuery}`, { headers: authHeaders }),
+        fetch(`${API_ORIGIN}/api/route-sessions/available-drivers${councilQuery}`, { headers: authHeaders }),
+      ]);
+      if (vehRes.ok) {
+        const j = await vehRes.json();
+        if (j.success) setVehicles(j.data);
+      }
+      if (drvRes.ok) {
+        const j = await drvRes.json();
+        if (j.success) setDrivers(j.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch routing resources', e);
+    }
+  };
+
+  // Fetches vehicles and drivers whenever route planner opens or council changes
   useEffect(() => {
-    const fetchResources = async () => {
-      const token = sessionStorage.getItem('token');
-      const authHeaders = (token ? { Authorization: `Bearer ${token}` } : {}) as Record<string, string>;
-      const councilQuery = council?.name ? `?council=${encodeURIComponent(council.name)}` : ''; // Scope resources to the active council
-      try {
-        const [vehRes, drvRes] = await Promise.all([
-          fetch(`${API_ORIGIN}/api/route-sessions/available-vehicles${councilQuery}`, { headers: authHeaders }),
-          fetch(`${API_ORIGIN}/api/route-sessions/available-drivers${councilQuery}`, { headers: authHeaders })
-        ]);
-        if (vehRes.ok) { const j = await vehRes.json(); if (j.success) setVehicles(j.data); }
-        if (drvRes.ok) { const j = await drvRes.json(); if (j.success) setDrivers(j.data); }
-      } catch (e) { console.error('Failed to fetch routing resources', e); }
-    };
-    fetchResources();
+    if (!showRoutePlanner) return;
+    void refetchRouteResources();
   }, [showRoutePlanner, council?.name]);
 
   // Reset bin selection and routing states when the council context changes
@@ -692,8 +702,10 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       : activeDrafts;
 
     await Promise.all(
-      draftsToShow.map(async (draft, idx) => {
-        const color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
+      draftsToShow.map(async (draft) => {
+        const routeIndex = activeDrafts.findIndex((d) => d.draftId === draft.draftId);
+        const routeLabel = routeIndex >= 0 ? routeIndex + 1 : 1;
+        const color = ROUTE_COLORS[Math.max(routeIndex, 0) % ROUTE_COLORS.length];
         const stops: [number, number][] = [];
 
         for (const binId of draft.binIds) {
@@ -706,25 +718,36 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
         if (stops.length === 0) return;
 
+        L.circleMarker([depotLat, depotLng], {
+          radius: 9,
+          color: '#7c3aed',
+          fillColor: '#7c3aed',
+          fillOpacity: 0.9,
+          weight: 3,
+        })
+          .bindTooltip('Depot (start / end)')
+          .addTo(draftPreviewLayerRef.current!);
+
         const path: [number, number][] = [[depotLat, depotLng], ...stops, [depotLat, depotLng]];
         await drawRoadSnappedPath(path, draftPreviewLayerRef.current!, {
           color,
-          weight: 5,
-          opacity: 0.9,
+          weight: 6,
+          opacity: 0.95,
           dashArray: '12, 8',
           className: 'animate-route-flow',
-          tooltip: `Route ${idx + 1} · ${draft.binCount} bins`,
+          tooltip: `Route ${routeLabel} · ${draft.binCount} bins`,
         });
 
-        stops.forEach(([lat, lng]) => {
-          L.circleMarker([lat, lng], {
-            radius: 7,
-            color,
-            fillColor: color,
-            fillOpacity: 0.35,
-            weight: 2,
-          })
-            .bindTooltip(`Route ${idx + 1}`)
+        stops.forEach(([lat, lng], stopIdx) => {
+          const stopNum = stopIdx + 1;
+          const numberedIcon = L.divIcon({
+            className: 'draft-stop-marker',
+            html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:9999px;background:${color};color:#fff;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25)">${stopNum}</span>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+          L.marker([lat, lng], { icon: numberedIcon, zIndexOffset: 500 })
+            .bindTooltip(`Stop ${stopNum}`)
             .addTo(draftPreviewLayerRef.current!);
         });
       })
@@ -1089,6 +1112,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         return next;
       });
       toast.success(`${routeLabel} confirmed and optimized`);
+      await refetchRouteResources();
     } catch (e) {
       console.error(e);
       toast.error(`Failed to confirm ${routeLabel}`);
@@ -1096,6 +1120,16 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       setConfirmingDraftId(null);
     }
   };
+
+  const remainingDraftRoutes = useMemo(() => {
+    if (!autoRoutePreview) return [];
+    return autoRoutePreview.draftRoutes.filter((d) => !confirmedDraftIds.includes(d.draftId));
+  }, [autoRoutePreview, confirmedDraftIds]);
+
+  const focusedDraftIndex = useMemo(() => {
+    if (!focusedDraftId) return -1;
+    return remainingDraftRoutes.findIndex((d) => d.draftId === focusedDraftId);
+  }, [remainingDraftRoutes, focusedDraftId]);
 
   const renderVehicleOptions = (requiredBins: number, selectedId: string) => (
     <>
@@ -2548,7 +2582,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
             </span>
           ) : autoRoutePreview ? (
             <span className="bg-green-100 text-green-800 text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0">
-              {autoRoutePreview.draftRoutes.filter((d) => !confirmedDraftIds.includes(d.draftId)).length} routes
+              {remainingDraftRoutes.length} routes
             </span>
           ) : null
         }
@@ -2609,6 +2643,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                 </>
               ) : autoRoutePreview ? (
                 <>
+                  {remainingDraftRoutes.length > 0 && focusedDraftIndex >= 0 && (
+                    <div className="flex items-center justify-between gap-2 rounded-xl bg-green-600/10 border border-green-200/60 px-3 py-2">
+                      <p className="text-[11px] font-semibold text-green-800">
+                        Map preview: Route {focusedDraftIndex + 1} of {remainingDraftRoutes.length}
+                      </p>
+                      <span className="text-[10px] text-green-700 shrink-0">Tap a card to switch</span>
+                    </div>
+                  )}
                   <div className="text-[11px] text-slate-600 bg-slate-50/60 rounded-xl p-3 border border-white/40 space-y-2">
                     <p className="font-semibold text-slate-800">Generated routes — confirm one at a time</p>
                     <p>
@@ -2627,9 +2669,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                     </p>
                   ))}
                   <div className="space-y-3">
-                    {autoRoutePreview.draftRoutes
-                      .filter((d) => !confirmedDraftIds.includes(d.draftId))
-                      .map((draft, idx) => {
+                    {remainingDraftRoutes.map((draft, idx) => {
                         const routeColor = ROUTE_COLORS[idx % ROUTE_COLORS.length];
                         const isFocused = focusedDraftId === draft.draftId;
                         return (
