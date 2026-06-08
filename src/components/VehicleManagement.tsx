@@ -6,8 +6,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
+import { apiFetch } from '@/lib/api';
 
 interface Vehicle {
   id: number;
@@ -16,6 +15,7 @@ interface Vehicle {
   vehicleCode?: string | null;
   type: string;
   capacity: number | null;
+  maxBins: number | null;
   status: string;
   assignedCouncil: string;
   assignedDriverId: number | null;
@@ -65,54 +65,35 @@ function getStatusLabel(status: string) {
 
 export function VehicleManagement({ council, userRole }: { council?: { name?: string; id?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [drivers, setDrivers] = useState<BinCollector[]>([]);
   const [allDrivers, setAllDrivers] = useState<BinCollector[]>([]);
-  const [driversLoading, setDriversLoading] = useState(true);
-  const [showDriversListModal, setShowDriversListModal] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<BinCollector | null>(null);
-  const [deletingDriver, setDeletingDriver] = useState<BinCollector | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingVehicle, setDeletingVehicle] = useState<Vehicle | null>(null);
   const [error, setError] = useState('');
 
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   const fetchDrivers = useCallback(async () => {
     try {
-      const url = `${API_BASE}/api/admins/staff`;
-      const res = await fetch(url, { headers: authHeaders() });
-      const json = await res.json();
+      const { data: json } = await apiFetch<{ success?: boolean; data?: any[] }>(
+        '/api/admins/staff'
+      );
       if (json.success) {
         const staff: any[] = Array.isArray(json.data) ? json.data : [];
         const collectors = staff.filter(s => (s.role || '').toString().toUpperCase() === 'BIN_COLLECTOR');
         setAllDrivers(collectors);
-        
-        if (council?.name) {
-          const councilName = council.name.toLowerCase();
-          setDrivers(collectors.filter((d) => (d.assignedCouncil || '').toLowerCase() === councilName));
-        } else {
-          setDrivers(collectors);
-        }
       }
     } catch {
       console.error('Failed to fetch drivers (bin collectors)');
-    } finally {
-      setDriversLoading(false);
     }
   }, [council]);
 
   const fetchVehicles = useCallback(async () => {
     try {
       const councilQuery = council?.name || council?.id || '';
-      const url = `${API_BASE}/api/vehicles${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
-      const res = await fetch(url, { headers: authHeaders() });
-      const json = await res.json();
+      const path = `/api/vehicles${councilQuery ? `?council=${encodeURIComponent(councilQuery)}` : ''}`;
+      const { data: json } = await apiFetch<{ success?: boolean; data?: Vehicle[] }>(path);
       if (json.success) {
         const rawVehicles: Vehicle[] = Array.isArray(json.data) ? json.data : [];
         if (council?.name) {
@@ -148,29 +129,49 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
     return driver.empName || `Staff #${assignedDriverId}`;
   }, [driversById]);
 
-  const handleDriverUpdated = () => {
-    setEditingDriver(null);
-    fetchDrivers();
-  };
-
-  const filteredVehicles = vehicles.filter(v =>
-    v.licensePlate.toLowerCase().includes(search.toLowerCase()) ||
-    v.type.toLowerCase().includes(search.toLowerCase())
+  const stats = useMemo(
+    () => ({
+      total: vehicles.length,
+      available: vehicles.filter((v) => v.status === 'available').length,
+      onRoute: vehicles.filter((v) => v.status === 'on_route').length,
+      maintenance: vehicles.filter((v) => v.status === 'maintenance').length,
+    }),
+    [vehicles]
   );
 
-  const stats = {
-    total: vehicles.length,
-    available: vehicles.filter(v => v.status === 'available').length,
-    onRoute: vehicles.filter(v => v.status === 'on_route').length,
-    maintenance: vehicles.filter(v => v.status === 'maintenance').length,
+  const filteredVehicles = useMemo(() => {
+    let result = vehicles;
+    if (statusFilter) {
+      result = result.filter((v) => v.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (v) =>
+          v.licensePlate.toLowerCase().includes(q) ||
+          v.type.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [vehicles, statusFilter, search]);
+
+  const handleStatusCardClick = (filter: string | null) => {
+    setStatusFilter((prev) => (prev === filter ? null : filter));
   };
+
+  const statCardClass = (active: boolean) =>
+    `cursor-pointer transition-all hover:shadow-md ${
+      active ? 'ring-2 ring-blue-500 shadow-md' : ''
+    }`;
 
   const handleDelete = async () => {
     if (!deletingVehicle) return;
     try {
-      const res = await fetch(`${API_BASE}/api/vehicles/${deletingVehicle.id}`, { method: 'DELETE', headers: authHeaders() });
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
+      const { response, data: json } = await apiFetch<{ message?: string }>(
+        `/api/vehicles/${deletingVehicle.id}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) {
         throw new Error(json?.message || 'Failed to delete vehicle');
       }
       setDeletingVehicle(null);
@@ -183,9 +184,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
 
   const handleStatusChange = async (vehicle: Vehicle, newStatus: string) => {
     try {
-      await fetch(`${API_BASE}/api/vehicles/${vehicle.id}/status`, {
+      await apiFetch(`/api/vehicles/${vehicle.id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ status: newStatus }),
       });
       fetchVehicles();
@@ -201,16 +201,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           <h2 className="text-gray-900 mb-2">Vehicle Management</h2>
           <p className="text-gray-600">Manage collection vehicles, assignments, and availability</p>
         </div>
-        <div className="flex items-center gap-3">
-
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Vehicle
-          </button>
-        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Vehicle
+        </button>
       </div>
 
       {error && (
@@ -220,9 +217,15 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
         </div>
       )}
 
-      {/* Stats */}
+      {/* Stats — click a card to filter the grid below */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === null)}
+          onClick={() => handleStatusCardClick(null)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick(null)}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -233,7 +236,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === 'available')}
+          onClick={() => handleStatusCardClick('available')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('available')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -244,7 +253,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === 'on_route')}
+          onClick={() => handleStatusCardClick('on_route')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('on_route')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -255,7 +270,13 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className={statCardClass(statusFilter === 'maintenance')}
+          onClick={() => handleStatusCardClick('maintenance')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('maintenance')}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -267,15 +288,6 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
           </CardContent>
         </Card>
       </div>
-
-      {showDriversListModal && (
-        <DriversListModal
-          drivers={drivers}
-          loading={driversLoading}
-          council={council}
-          onClose={() => setShowDriversListModal(false)}
-        />
-      )}
 
       {/* Search */}
       <div className="mb-6">
@@ -335,8 +347,10 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
                       <span className="text-gray-900">{vehicle.type}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Capacity</span>
-                      <span className="text-gray-900">{vehicle.capacity ? `${vehicle.capacity} tons` : '—'}</span>
+                      <span className="text-gray-600">Max bins / trip</span>
+                      <span className="text-gray-900">
+                        {vehicle.maxBins ?? (vehicle.capacity ? Math.round(vehicle.capacity) : '—')}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 flex items-center gap-1"><User className="w-3 h-3" /> Driver</span>
@@ -446,17 +460,12 @@ function VehicleFormModal({
   const [form, setForm] = useState({
     licensePlate: vehicle?.licensePlate || '',
     type: vehicle?.type || VEHICLE_TYPES[0],
-    capacity: vehicle?.capacity?.toString() || '',
+    maxBins: vehicle?.maxBins?.toString() || (vehicle?.capacity ? String(Math.round(vehicle.capacity)) : ''),
     status: vehicle?.status || 'available',
     assignedCouncil: vehicle?.assignedCouncil || defaultCouncil,
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     if (!isAdmin) return;
     if (!defaultCouncil) return;
@@ -482,21 +491,19 @@ function VehicleFormModal({
 
       licensePlate: form.licensePlate,
       type: form.type,
-      capacity: form.capacity ? parseFloat(form.capacity) : null,
+      maxBins: form.maxBins ? parseInt(form.maxBins, 10) : null,
       status: form.status,
       // Enforce council ownership server payload for admins.
       assignedCouncil: (isAdmin ? defaultCouncil : form.assignedCouncil) || null,
     };
 
     try {
-      const url = isEditing ? `${API_BASE}/api/vehicles/${vehicle!.id}` : `${API_BASE}/api/vehicles`;
+      const path = isEditing ? `/api/vehicles/${vehicle!.id}` : '/api/vehicles';
       const method = isEditing ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      const { data: json } = await apiFetch<{ success?: boolean; message?: string }>(path, {
         method,
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
       if (json.success) {
         onSaved();
       } else {
@@ -533,8 +540,8 @@ function VehicleFormModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Capacity (tons)</label>
-              <Input type="number" step="0.1" value={form.capacity} onChange={e => setForm({...form, capacity: e.target.value})} placeholder="5.0" />
+              <label className="block text-sm text-gray-600 mb-1">Max bins per trip</label>
+              <Input type="number" min="1" step="1" value={form.maxBins} onChange={e => setForm({...form, maxBins: e.target.value})} placeholder="50" />
             </div>
           </div>
           <div className="flex gap-3 justify-end pt-4">
@@ -545,62 +552,6 @@ function VehicleFormModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-}
-
-/* ── Drivers List Modal ────────────────────────────────────────── */
-
-function DriversListModal({
-  drivers,
-  loading,
-  onClose,
-  council,
-}: {
-  drivers: BinCollector[];
-  loading: boolean;
-  onClose: () => void;
-  council?: { name?: string; id?: string } | null;
-}) {
-  const authHeaders = (): Record<string, string> => {
-    const token = sessionStorage.getItem('token');
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg text-gray-900 font-medium">Bin Collectors (Staff Drivers)</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-        </div>
-
-
-
-        {loading ? (
-          <div className="text-sm text-gray-500 py-8 text-center">Loading staff members...</div>
-        ) : drivers.length === 0 ? (
-          <div className="text-sm text-gray-500 py-8 text-center">No bin collectors found for {council?.name || 'this council'}.</div>
-        ) : (
-          <div className="space-y-2">
-            {drivers.map((d) => (
-              <div key={d.empId} className="flex items-center justify-between border border-gray-200 rounded-lg px-4 py-3 bg-gray-50/50">
-                <div className="min-w-0">
-                  <div className="text-sm text-gray-900 font-semibold">{d.empName || 'Unnamed Staff'}</div>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                    <div className="text-xs text-gray-500 font-mono">ID: #{d.empId}</div>
-                    {d.email && <div className="text-xs text-blue-600 truncate max-w-[200px]">{d.email}</div>}
-                  </div>
-                </div>
-                <Badge className="bg-green-100 text-green-700 border-green-200">Staff</Badge>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex justify-end pt-6">
-          <button onClick={onClose} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
-        </div>
       </div>
     </div>
   );
