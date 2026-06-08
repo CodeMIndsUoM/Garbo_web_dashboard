@@ -1,7 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Building2, Calendar, Check, ChevronDown, ChevronUp, Clock, ImageIcon, MapPin, Users, X } from 'lucide-react';
+import {
+  Building2,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  ImageIcon,
+  MapPin,
+  MessageSquare,
+  UserCircle,
+  UserMinus,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -10,6 +25,62 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
 type Tab = 'citizens' | 'collectors';
+type CitizensSection = 'users' | 'complaints' | 'events';
+type CollectorsSection = 'pending' | 'active' | 'revoked';
+
+interface SubSectionItem<T extends string> {
+  id: T;
+  label: string;
+  icon: React.ReactNode;
+  count?: number;
+  description: string;
+}
+
+function SubSectionNav<T extends string>({
+  items,
+  active,
+  onChange,
+}: {
+  items: SubSectionItem<T>[];
+  active: T;
+  onChange: (id: T) => void;
+}) {
+  const activeItem = items.find((item) => item.id === active);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onChange(item.id)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              active === item.id
+                ? 'bg-green-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {item.icon}
+            {item.label}
+            {item.count !== undefined && (
+              <span
+                className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                  active === item.id ? 'bg-white/20 text-white' : 'bg-white text-gray-600'
+                }`}
+              >
+                {item.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      {activeItem && (
+        <p className="text-sm text-gray-500">{activeItem.description}</p>
+      )}
+    </div>
+  );
+}
 
 interface ComplaintItem {
   id: number;
@@ -175,6 +246,7 @@ function councilQuery(councilName?: string): string {
 }
 
 function CitizensTab({ council }: { council?: { name?: string } | null }) {
+  const [section, setSection] = useState<CitizensSection>('users');
   const [citizens, setCitizens] = useState<CitizenUser[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -362,8 +434,35 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 
   const detailImage = resolveMediaUrl(complaintDetail?.imageUrl);
 
+  const citizenSections: SubSectionItem<CitizensSection>[] = [
+    {
+      id: 'users',
+      label: 'Users',
+      icon: <UserCircle className="w-4 h-4" />,
+      count: citizens.length,
+      description: 'Registered citizens in the selected council.',
+    },
+    {
+      id: 'complaints',
+      label: 'Complaints',
+      icon: <MessageSquare className="w-4 h-4" />,
+      count: complaints.length,
+      description: 'Review and resolve citizen waste complaints.',
+    },
+    {
+      id: 'events',
+      label: 'Events',
+      icon: <Calendar className="w-4 h-4" />,
+      count: events.length,
+      description: 'Approve event suggestions and publish new council events.',
+    },
+  ];
+
   return (
     <div className="space-y-6">
+      <SubSectionNav items={citizenSections} active={section} onChange={setSection} />
+
+      {section === 'users' && (
       <Card>
         <CardHeader>
           <CardTitle>Citizen Users</CardTitle>
@@ -396,7 +495,9 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
           )}
         </CardContent>
       </Card>
+      )}
 
+      {section === 'complaints' && (
       <Card>
         <CardHeader>
           <CardTitle>Citizen Complaints</CardTitle>
@@ -433,7 +534,10 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
           )}
         </CardContent>
       </Card>
+      )}
 
+      {section === 'events' && (
+      <>
       <Card>
         <CardHeader>
           <CardTitle>Event Suggestions</CardTitle>
@@ -610,6 +714,8 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
           </form>
         </CardContent>
       </Card>
+      </>
+      )}
 
       {selectedComplaintId !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -679,6 +785,7 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
 }
 
 function CollectorsTab({ council }: { council?: { name?: string } | null }) {
+  const [section, setSection] = useState<CollectorsSection>('pending');
   const [pending, setPending] = useState<ThirdPartyCollector[]>([]);
   const [active, setActive] = useState<ThirdPartyCollector[]>([]);
   const [revoked, setRevoked] = useState<ThirdPartyCollector[]>([]);
@@ -824,8 +931,35 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
     }
   };
 
+  const collectorSections: SubSectionItem<CollectorsSection>[] = [
+    {
+      id: 'pending',
+      label: 'Pending',
+      icon: <UserPlus className="w-4 h-4" />,
+      count: pending.length,
+      description: 'Review new third-party collector registration applications.',
+    },
+    {
+      id: 'active',
+      label: 'Active',
+      icon: <Users className="w-4 h-4" />,
+      count: active.length,
+      description: 'Approved collectors assigned to this council.',
+    },
+    {
+      id: 'revoked',
+      label: 'Revoked',
+      icon: <UserMinus className="w-4 h-4" />,
+      count: revoked.length,
+      description: 'Restore access for collectors revoked by admin.',
+    },
+  ];
+
   return (
     <div className="space-y-6">
+      <SubSectionNav items={collectorSections} active={section} onChange={setSection} />
+
+      {section === 'pending' && (
       <Card>
         <CardHeader>
           <CardTitle>Pending Registrations</CardTitle>
@@ -938,7 +1072,9 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           )}
         </CardContent>
       </Card>
+      )}
 
+      {section === 'active' && (
       <Card>
         <CardHeader>
           <CardTitle>Active Collectors</CardTitle>
@@ -1037,7 +1173,9 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           )}
         </CardContent>
       </Card>
+      )}
 
+      {section === 'revoked' && (
       <Card>
         <CardHeader>
           <CardTitle>Revoked Collectors</CardTitle>
@@ -1109,6 +1247,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
