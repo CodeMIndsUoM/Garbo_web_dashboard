@@ -26,6 +26,7 @@ import { ThirdPartyAnalytics } from '@/components/ThirdPartyAnalytics';
 import { VehicleAnalytics } from '@/components/VehicleAnalytics';
 import { BinReportAnalytics } from '@/components/BinReportAnalytics';
 import { ExternalUsers } from '@/components/ExternalUsers';
+import { GamificationManagement } from '@/components/GamificationManagement';
 import { InternalUsers } from '@/components/InternalUsers';
 import dynamic from 'next/dynamic';
 
@@ -38,6 +39,7 @@ export type PageType =
   | 'vehicles'
   | 'analytics'
   | 'external-users'
+  | 'gamification'
   | 'internal-users'
   | 'reports'
   | 'admin-assignment'
@@ -50,7 +52,6 @@ export type PageType =
   | 'third-party-analytics'
   | 'vehicle-analytics'
   | 'bin-report-analytics';
-
 export type UserRole = 'admin' | 'superadmin' | null;
 
 interface AuthenticatedShellProps {
@@ -97,6 +98,8 @@ function AuthenticatedShell({
         );
       case 'external-users':
         return <ExternalUsers council={activeCouncil} />;
+      case 'gamification':
+        return <GamificationManagement />;
       case 'internal-users':
         return <InternalUsers council={activeCouncil} />;
       case 'total-collection':
@@ -192,6 +195,7 @@ function AuthenticatedShell({
 }
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
@@ -201,6 +205,12 @@ export default function Home() {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     const checkToken = async () => {
       const token = sessionStorage.getItem('token');
       if (!token) {
@@ -279,7 +289,7 @@ export default function Home() {
     };
 
     checkToken();
-  }, [API_BASE]);
+  }, [API_BASE, mounted]);
 
   const handleLogout = async () => {
     sessionStorage.removeItem('token');
@@ -325,7 +335,7 @@ export default function Home() {
     }
   };
 
-  if (checkingAuth) {
+  if (!mounted || checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         Checking authentication...
