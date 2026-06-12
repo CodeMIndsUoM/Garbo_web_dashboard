@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import React, { useState } from "react";
 import { decodeJwtPayload } from '@/lib/jwt';
@@ -25,10 +25,10 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
     setLoading(true);
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
-    // derive email from localStorage.admin or decode token
+    // derive email from sessionStorage.admin or decode token
     let email = '';
     try {
-      const adminStr = localStorage.getItem('admin');
+      const adminStr = sessionStorage.getItem('admin');
       if (adminStr) {
         const adminObj = JSON.parse(adminStr);
         email = adminObj.username || adminObj.email || '';
@@ -38,7 +38,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
     }
 
     if (!email) {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const payload = decodeJwtPayload(token);
       email = payload?.email || payload?.sub || '';
     }
@@ -50,7 +50,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/auth/change-password`, {
         method: 'POST',
         headers: {
@@ -75,10 +75,10 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      try { localStorage.setItem('mustChangePassword', JSON.stringify(false)); } catch (e) {}
+      try { sessionStorage.setItem('mustChangePassword', JSON.stringify(false)); } catch (e) { }
       // trigger parent navigation handler if provided (state-based routing)
       if (onPasswordChanged) {
-        try { onPasswordChanged(); } catch (e) {}
+        try { onPasswordChanged(); } catch (e) { }
       }
     } catch (err: any) {
       setError(err?.message || 'Network error');

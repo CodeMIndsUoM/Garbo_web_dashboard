@@ -30,7 +30,7 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
     // Duplicate email check moved to AdminAssignment (All Users table)
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: {
@@ -80,7 +80,7 @@ export default function CreateAdminPage({ onBack }: CreateAdminPageProps) {
         )}
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Existing admins list removed — handled in AdminAssignment's All Users table */}
+        {/* Existing admins list removed — handled in AdminAssignment's All Users table */}
         <div>
           <label className="block mb-1 font-medium">Full Name</label>
           <input

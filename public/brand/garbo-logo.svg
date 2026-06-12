@@ -1,0 +1,11 @@
+<svg width="120" height="48" viewBox="0 0 120 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Garbo">
+  <defs>
+    <linearGradient id="garboText" x1="0" y1="0" x2="120" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#166534"/>
+      <stop offset="0.5" stop-color="#16a34a"/>
+      <stop offset="1" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+  <text x="0" y="34" fill="url(#garboText)" font-family="system-ui, sans-serif" font-size="32" font-weight="800" letter-spacing="-1">Garbo</text>
+  <rect x="0" y="40" width="48" height="4" rx="2" fill="#16a34a"/>
+</svg>

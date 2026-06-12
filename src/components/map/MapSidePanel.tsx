@@ -1,0 +1,62 @@
+'use client';
+
+import React from 'react';
+import { X } from 'lucide-react';
+
+/** Shared glass side-panel shell — full-width on mobile, fixed width on sm+. */
+export const MAP_SIDE_PANEL_BASE =
+  'absolute left-2 right-2 top-[4.5rem] bottom-2 sm:left-auto sm:right-4 sm:top-20 sm:bottom-4 sm:w-[380px] sm:max-w-[calc(100vw-2rem)] flex flex-col bg-[var(--glass-surface-solid)] backdrop-blur-md border border-[var(--glass-border)] rounded-2xl shadow-2xl transition-all duration-300 transform';
+
+export function mapSidePanelState(open: boolean) {
+  return open
+    ? 'translate-x-0 opacity-100'
+    : 'translate-x-[110%] opacity-0 pointer-events-none';
+}
+
+interface MapSidePanelProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  headerExtra?: React.ReactNode;
+  bodyClassName?: string;
+  zIndex?: number;
+}
+
+export function MapSidePanel({
+  open,
+  onClose,
+  title,
+  icon,
+  children,
+  footer,
+  headerExtra,
+  bodyClassName = 'overflow-y-auto',
+  zIndex = 999,
+}: MapSidePanelProps) {
+  return (
+    <div style={{ zIndex }} className={`${MAP_SIDE_PANEL_BASE} ${mapSidePanelState(open)}`}>
+      <div className="p-5 border-b border-[var(--glass-border)] shrink-0 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {icon}
+          <h3 className="text-sm font-bold text-[var(--glass-text)] truncate">{title}</h3>
+          {headerExtra}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 rounded-lg hover:bg-accent text-[var(--glass-text-muted)] hover:text-foreground transition-colors shrink-0"
+          aria-label="Close panel"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+      <div className={`flex-1 min-h-0 ${bodyClassName}`}>{children}</div>
+      {footer ? (
+        <div className="p-4 border-t border-[var(--glass-border)] shrink-0 bg-muted/30">{footer}</div>
+      ) : null}
+    </div>
+  );
+}
