@@ -1,22 +1,33 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Shield, UserPlus } from 'lucide-react';
+import { LogOut, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Button } from './ui/button';
-// Removed search input import per UI refactor
-import { Badge } from './ui/badge';
-// Modal-based admin creation removed — keep file focused on listing and role management
+import { PageHeader } from './layout/PageHeader';
+import { typography } from '@/theme';
 
 interface User {
-  id: string;
+  empId?: number | string;
+  id?: number | string;
   empName?: string | null;
-  username?: string | null; // legacy
-  role?: string | null; // backend uses SUPERADMIN, ADMIN, CITIZEN/USER
+  username?: string | null;
+  role?: string | null;
   email?: string;
   createdAt?: string;
-  council?: string | null; // backend does not provide; show '-' when absent
+  council?: string | null;
+}
+
+function adminRowKey(user: User, index: number): string {
+  const id = user.empId ?? user.id;
+  if (id !== undefined && id !== null && id !== '') {
+    return String(id);
+  }
+  if (user.email) {
+    return `email-${user.email}`;
+  }
+  return `admin-row-${index}`;
 }
 
 interface AdminAssignmentProps {
@@ -28,8 +39,6 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [updatingUser, setUpdatingUser] = useState<string | null>(null);
-  // Modal creation flow removed; creation should be done via CreateAdminPage
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
@@ -41,8 +50,7 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
     setLoading(true);
     setError('');
     try {
-      // Include token/Authorization header for GET
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       const res = await fetch(`${API_BASE}/api/users`, {
         method: 'GET',
         headers: {
@@ -51,8 +59,6 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
         },
       });
       const json = await res.json();
-      // log raw API response for verification
-      console.log('RAW USERS:', json);
       if (!res.ok) {
         setError(json?.message || 'Failed to fetch users');
         setUsers([]);
@@ -61,7 +67,7 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
       } else {
         setUsers([]);
       }
-    } catch (err: any) {
+    } catch {
       setError('Failed to fetch users');
       setUsers([]);
     } finally {
@@ -69,164 +75,87 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
     }
   };
 
-  // Admin creation should be handled by `CreateAdminPage` — modal creation disabled
-
-  // Assign admin removed per spec (no client-side assign feature)
-
-  const removeAdmin = async (userId: string) => {
-    setUpdatingUser(userId);
-    setError('');
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/api/users/${userId}/role`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ role: 'user' }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json?.message || 'Failed to remove admin role');
-      }
-      // Always re-fetch users to ensure UI is in sync
-      await fetchUsers();
-    } catch (err: any) {
-      setError('Failed to remove admin: ' + (err?.message || err));
-    } finally {
-      setUpdatingUser(null);
-    }
-  };
-
-  // Show only users whose role is exactly the uppercase string 'ADMIN'
   const filteredUsers = users.filter((u) => (u.role || '') === 'ADMIN');
 
-  const stats = {
-    total: users.length,
-    superadmins: users.filter((u) => ((u.role || '').toString().toUpperCase() === 'SUPERADMIN')).length,
-    admins: users.filter((u) => ((u.role || '').toString().toUpperCase() === 'ADMIN')).length,
-    regular: users.filter((u) => {
-      const r = (u.role || '').toString().toUpperCase();
-      return r !== 'SUPERADMIN' && r !== 'ADMIN';
-    }).length,
-  };
+  const displayName = (user: User) =>
+    user.empName || user.username || user.email || 'N/A';
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h2 className="text-gray-900 mb-2 text-2xl font-semibold">Admin Management</h2>
-        <p className="text-gray-600">Assign and manage admins across all councils</p>
-      </div>
+    <div className="space-y-6 p-8">
+      <PageHeader
+        title="Admin Management"
+        subtitle="Assign and manage admins across all councils"
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="brand"
+              className="gap-2"
+              onClick={() => onAddNewAdmin?.()}
+            >
+              <UserPlus className="size-4" />
+              Add New Admin
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 border-status-danger-border text-status-danger hover:bg-status-danger-muted"
+              onClick={() => onLogout?.()}
+            >
+              <LogOut className="size-4" />
+              Log Out
+            </Button>
+          </>
+        }
+      />
 
-      {/* Stats (temporarily hidden)
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Users</p>
-                <p className="text-2xl text-gray-900">{stats.total}</p>
-              </div>
-              <Users className="w-10 h-10 text-gray-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Superadmins</p>
-                <p className="text-2xl text-purple-600">{stats.superadmins}</p>
-              </div>
-              <Shield className="w-10 h-10 text-purple-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Admins</p>
-                <p className="text-2xl text-blue-600">{stats.admins}</p>
-              </div>
-              <Shield className="w-10 h-10 text-blue-400" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Regular Users</p>
-                <p className="text-2xl text-green-600">{stats.regular}</p>
-              </div>
-              <Users className="w-10 h-10 text-green-400" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      */}
-
-
-      {/* Add Admin Button and Search */}
-      <div className="mb-6 flex items-center gap-4">
-        <Button
-          className="flex items-center gap-2"
-          onClick={() => { if (onAddNewAdmin) onAddNewAdmin(); }}
-        >
-          <UserPlus className="w-4 h-4" />
-          Add New Admin
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="border-red-200 text-red-600 hover:bg-red-50"
-          onClick={() => onLogout && onLogout()}
-        >
-          Log Out
-        </Button>
-      </div>
-
-      {/* Admin creation moved to CreateAdminPage; modal removed */}
-
-      {/* Users Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">All Admins</CardTitle>
+      <Card className="border-border bg-card shadow-[var(--shadow-card)]">
+        <CardHeader className="border-b border-border pb-4">
+          <CardTitle className={typography.sectionTitle}>All Admins</CardTitle>
+          <p className={typography.caption}>
+            {loading
+              ? 'Loading admin accounts…'
+              : `${filteredUsers.length} admin${filteredUsers.length === 1 ? '' : 's'} registered`}
+          </p>
         </CardHeader>
-        <CardContent>
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+        <CardContent className="pt-6">
+          {error ? (
+            <div className="mb-4 rounded-lg border border-status-danger-border bg-status-danger-muted px-4 py-3 text-sm text-status-danger">
               {error}
             </div>
-          )}
+          ) : null}
 
           {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading users...</div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">No users found</div>
+            <div className={`py-12 text-center ${typography.bodyMuted}`}>Loading users…</div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+              <p className={typography.body}>No admins found</p>
+              <p className={typography.caption}>
+                Create a new admin account to get started.
+              </p>
+            </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-[180px] text-lg font-semibold">Full Name</TableHead>
-                    <TableHead className="min-w-[220px] text-lg font-semibold">Email</TableHead>
-                    <TableHead className="min-w-[160px] text-lg font-semibold">Council</TableHead>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className={`min-w-[180px] ${typography.label}`}>Full Name</TableHead>
+                    <TableHead className={`min-w-[220px] ${typography.label}`}>Email</TableHead>
+                    <TableHead className={`min-w-[160px] ${typography.label}`}>Council</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium align-middle">
-                        {user.empName ? user.empName : (user.username ? user.username : (user.email || 'N/A'))}
+                  {filteredUsers.map((user, index) => (
+                    <TableRow key={adminRowKey(user, index)}>
+                      <TableCell className={`align-middle ${typography.rowTitle}`}>
+                        {displayName(user)}
                       </TableCell>
-                      <TableCell className="align-middle">{user.email || 'N/A'}</TableCell>
-                      <TableCell className="align-middle">{user.council ? user.council : '-'}</TableCell>
+                      <TableCell className={`align-middle ${typography.bodyMuted}`}>
+                        {user.email || 'N/A'}
+                      </TableCell>
+                      <TableCell className={`align-middle ${typography.bodyMuted}`}>
+                        {user.council || '—'}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -235,7 +164,6 @@ export function AdminAssignment({ onAddNewAdmin, onLogout }: AdminAssignmentProp
           )}
         </CardContent>
       </Card>
-      {/* Bottom submit button removed per UI refactor */}
     </div>
   );
 }
