@@ -105,56 +105,16 @@ export function CouncilProvider({
   );
 }
 
+/** Backend APIs expect the display name (e.g. "Colombo"), not the slug id ("colombo"). */
+export function getCouncilApiName(council?: { id?: string; name?: string } | null): string | undefined {
+  const name = council?.name?.trim();
+  return name || undefined;
+}
+
 export function useCouncil(): CouncilContextValue {
   const ctx = useContext(CouncilContext);
   if (!ctx) {
     throw new Error('useCouncil must be used within CouncilProvider');
   }
   return ctx;
-}
-
-/** Global council filter bar — superadmin dropdown; council-admin read-only chip. */
-export function CouncilTopBar() {
-  const {
-    isSuperadmin,
-    displayLabel,
-    selectedCouncilId,
-    setSelectedCouncilId,
-    councils,
-  } = useCouncil();
-
-  if (!isSuperadmin) {
-    return (
-      <div className="p-4 bg-gray-100 border-b text-sm flex items-center justify-between gap-4">
-        <span className="text-gray-600">Showing data for council</span>
-        <span className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-semibold">
-          {displayLabel}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-4 bg-gray-100 border-b text-sm flex items-center justify-between gap-4">
-      <div className="text-gray-700 font-semibold">{displayLabel}</div>
-      <div className="flex items-center gap-2">
-        <label className="text-gray-600" htmlFor="global-council-filter">
-          Council
-        </label>
-        <select
-          id="global-council-filter"
-          className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-700"
-          value={selectedCouncilId}
-          onChange={(e) => setSelectedCouncilId(e.target.value)}
-        >
-          <option value="all">All Councils</option>
-          {councils.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
-  );
 }

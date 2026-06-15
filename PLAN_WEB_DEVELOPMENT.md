@@ -7,7 +7,7 @@
 
 - **Repo:** `Garbo_web_dashboard/`
 - **Status:** `[ ]` todo · `[~]` in progress · `[x]` done · `[⏸]` blocked (waiting on backend)
-- **Last updated:** 2026-06-08 (Sprint 5 ✅ · W2 ✅ · W6 ✅)
+- **Last updated:** 2026-06-08 (W8 ✅ · W9A-1 ✅ · **Next: W9A-2 Sidebar + shell**)
 
 ---
 
@@ -68,10 +68,10 @@
 
 - **Single-page app.** No feature routes — `page.tsx` switches on `PageType` string.
 - **Council filter** is global via `CouncilContext` (`src/lib/council-context.tsx`) + top-bar dropdown (W1 ✅).
-- **No shared API client** — every component repeats `API_BASE` + `fetch` + auth headers.
+- **Shared API client** — `src/lib/api.ts` (`apiFetch`, `getApiBase`, `getAuthHeaders`). Migrate remaining pages as you touch them.
 - **Auth** in `sessionStorage`: `token`, `role`, `council`, `mustChangePassword`, `userId`.
-- **WebSocket** only in `Map.tsx` (route sessions). Bin realtime is **not** wired on web.
-- **Dark mode** tokens exist in `globals.css` but are never activated.
+- **WebSocket** — Map route sessions + bin realtime via `useBinRealtime` (W8 ✅).
+- **Theme** — `src/theme/` tokens + layout components (W9A in progress). Dark mode not activated yet.
 
 ### Key files map
 
@@ -109,7 +109,7 @@ Work top-to-bottom. Do not start W9 until W1–W8 are functionally complete.
 | **Sprint 3** | W6 + W7 | External Users page + Internal Users polish |
 | **Sprint 4** | W5 + W2 | Remove zone input (after backend) + remove Bin Collection |
 | **Sprint 5** | W4B + W4A | Route planner right panel + auto multi-route (backend `maxBins` + auto-preview) |
-| **Sprint 6** | W9 | UI consistency + dark theme (last) |
+| **Sprint 6** | W9A then W9B | Light UI polish page-by-page, then dark theme |
 
 ---
 
@@ -533,36 +533,32 @@ Response:
 
 **Goal:** Verify create flow works. Let superadmin create users for a chosen council. Better success UX.
 
-**⏸ Backend needed:**
-
-- `POST /api/admins/staff/field-mentors` and `bin-collectors` must accept optional `council`
-  param when caller is superadmin
-
 **File:** `src/components/InternalUsers.tsx`
 
 **Checklist**
 
-- [ ] Verify existing create flow for council admin:
-  - [ ] `POST /api/admins/staff/field-mentors` with `{ fullName, email, contactNumber? }`
-  - [ ] `POST /api/admins/staff/bin-collectors` with same shape
-  - [ ] Role select: FIELD_MENTOR | BIN_COLLECTOR
-- [ ] Superadmin create form (DECIDED: yes):
-  - [ ] Show create form for superadmin (currently hidden)
-  - [ ] Add **council picker** dropdown (required for superadmin)
-  - [ ] Send `council` in request body
-- [ ] Success message: "User created. Temporary password sent to {email}."
-- [ ] List view: superadmin sees staff for selected council (`GET /api/admins/staff?council=`)
-- [ ] List view: council admin sees own council only
-- [ ] Do NOT show password in UI (backend emails it)
+- [x] Verify existing create flow for council admin:
+  - [x] `POST /api/admins/staff/field-mentors` with `{ fullName, email, contactNumber? }`
+  - [x] `POST /api/admins/staff/bin-collectors` with same shape
+  - [x] Role select: FIELD_MENTOR | BIN_COLLECTOR (via sub-section tabs)
+- [x] Superadmin create form:
+  - [x] Show create form for superadmin
+  - [x] **Council picker** dropdown (required for superadmin)
+  - [x] Send `council` in request body
+- [x] Success message: "User created. Temporary password sent to {email}."
+- [x] List view: superadmin sees staff for selected council (`GET /api/admins/staff?council=`)
+- [x] List view: council admin sees own council only
+- [x] Do NOT show password in UI (backend emails it)
+- [x] Hide / Delete actions on staff rows (all roles incl. superadmin staff)
 
 **Test checklist**
 
 - [ ] Council admin creates field mentor → appears in list → user can login on app (ask app dev to verify)
 - [ ] Superadmin selects Kaduwela → creates bin collector → user assigned to Kaduwela
-- [ ] Success toast/message mentions emailed password
-- [ ] No password field in create form
+- [x] Success toast/message mentions emailed password
+- [x] No password field in create form
 
-**Acceptance:** Both admin types can create internal users; superadmin picks council; clear success UX.
+**Acceptance:** Both admin types can create internal users; superadmin picks council; clear success UX. `[x]` done (code)
 
 ---
 
@@ -585,24 +581,27 @@ Response:
 
 **Checklist — shared realtime client**
 
-- [ ] Create hook `useBinRealtime({ council, onBinUpdate })`
-- [ ] Reuse `@stomp/stompjs` + `sockjs-client` (already in `package.json`)
-- [ ] Connect to `${API_ORIGIN}/ws` (same pattern as `Map.tsx` route socket)
-- [ ] Subscribe to `/topic/councils/{council}/bins` (or multiple subscriptions for "All Councils")
-- [ ] Parse incoming messages; call `onBinUpdate(payload)`
-- [ ] Disconnect on unmount / council change
+- [x] Create `src/hooks/useBinRealtime.ts` + `src/lib/bin-realtime.ts`
+- [x] Reuse `@stomp/stompjs` + `sockjs-client`
+- [x] Connect to `${API_ORIGIN}/ws`
+- [x] Subscribe to `/topic/councils/{council}/bins` (or `/topic/councils/all/bins`)
+- [x] Parse incoming messages; call `onUpdate(payload)`
+- [x] Disconnect on unmount / council change
+- [x] Broadcast after DB commit (fixes full/half/empty report lag)
+- [x] Report details in STOMP payload (notes, photoUrl, reporter) + `GET /api/bins/{id}/latest-report`
 
 **Checklist — Bin Management**
 
-- [ ] On `BIN_STATUS_UPDATED` / `BIN_COLLECTED`: update bin in local state
-- [ ] Recalculate summary card counts
-- [ ] If bin not in list and matches council filter → optionally refetch or append
-- [ ] (Optional) Sonner toast: "Bin {code} reported as {status}"
+- [x] On `BIN_STATUS_UPDATED` / `BIN_COLLECTED`: update bin in local state
+- [x] Recalculate summary card counts
+- [x] Click bin card → glass popup with field-staff report (status, notes, photo)
+- [x] Popup updates live when report arrives
+- [x] Sonner toast on route collection events
 
 **Checklist — Map**
 
-- [ ] On bin event: update marker icon/color for that binId
-- [ ] Respect W1 council filter (ignore events for other councils unless "All Councils")
+- [x] On bin event: update marker icon/color for that binId (`updateBinLocally`)
+- [x] Council topic subscription matches W1 global council filter
 
 **Test checklist (coordinate with app dev)**
 
@@ -612,62 +611,105 @@ Response:
 - [ ] Superadmin "All Councils" receives events from all councils
 - [ ] Council admin only receives own council events
 
-**Acceptance:** Live bin status on Bin Management and Map without manual refresh.
+**Acceptance:** Live bin status on Bin Management and Map without manual refresh. `[x]` done (code — manual test pending)
 
 ---
 
-### W9 — UI polish + dark theme (Sprint 5 — do last)
+### W9 — UI polish + dark theme (Sprint 5)
 
-**Goal:** Consistent cards/typography without changing light-theme colors. Add green-friendly dark theme.
+**Goal:** Polish the **light theme first** (typography, cards, spacing, consistency). **Do not change brand green** (`#16a34a` / green-600). Dark theme comes **after** all light-theme pages are polished.
 
-**Files**
+**Rule:** Never hardcode colors/typography in pages. Use `src/theme/` tokens + shared layout components.
 
-- `src/app/globals.css`
-- `tailwind.config.ts`
-- `src/app/layout.tsx`
-- `src/components/ui/card.tsx` (and new shared components)
-- All major pages (refactor as you go)
+---
 
-**Checklist — shared components**
+#### W9A — Theme foundation + light polish (page-by-page)
 
-- [ ] Create `src/components/layout/PageHeader.tsx` (title + subtitle + actions slot)
-- [ ] Create `src/components/layout/StatCard.tsx` (clickable summary card for W3 pattern)
-- [ ] Create `src/components/layout/SectionCard.tsx` (bordered content section)
-- [ ] Define typographic scale in `globals.css` or Tailwind extend (page title, section title, body, caption)
-- [ ] Refactor to use shared components:
-  - [ ] `Dashboard.tsx`
-  - [ ] `BinManagement.tsx`
-  - [ ] `VehicleManagement.tsx`
-  - [ ] `ExternalUsers.tsx`
-  - [ ] `InternalUsers.tsx`
+**Theme files (single source of truth)**
 
-**Checklist — dark theme**
+- [x] `src/theme/tokens.css` — CSS variables: brand green, surfaces, typography, shadows
+- [x] `src/theme/colors.ts` — brand/surface/status class bundles
+- [x] `src/theme/typography.ts` — page title, subtitle, section, body, caption
+- [x] `src/theme/layout.ts` — page shell, card, panel class bundles
+- [x] `src/theme/index.ts` — barrel export
+- [x] `tailwind.config.ts` — `brand-*` maps to CSS vars
+- [x] `src/components/ui/button.tsx` — `variant="brand"` uses `--brand-600` / `--brand-700`
 
-- [ ] Tokenize brand green as CSS variables (light values unchanged)
-- [ ] Fill `.dark` token block in `globals.css`:
-  - [ ] Background: slate/near-black (`#0f172a` or similar)
-  - [ ] Card surface: slightly lighter (`#1e293b`)
-  - [ ] Text: high-contrast off-white
-  - [ ] Green accents: keep brand green, ensure WCAG contrast on dark bg
+**Brand green (locked — do not change)**
+
+- Primary: `--brand-600` → `#16a34a`
+- Hover: `--brand-700` → `#15803d`
+- Muted bg: `--brand-50` → `#f0fdf4`
+
+**Shared layout components**
+
+- [x] `src/components/layout/PageHeader.tsx` — title + subtitle + actions
+- [x] `src/components/layout/AuthShell.tsx` — login/auth split layout
+- [ ] `src/components/layout/StatCard.tsx` — clickable summary card (W3 pattern)
+- [ ] `src/components/layout/SectionCard.tsx` — bordered content block
+- [ ] `src/components/layout/AppShell.tsx` — sidebar + main content wrapper
+
+**Page polish order** (one page per PR/session — check off as done)
+
+| # | Page | File(s) | Focus |
+|---|---|---|---|
+| 1 | **Login** ✅ | `Login.tsx`, `AuthShell.tsx` | Auth layout, form inputs, brand CTA, error states |
+| 2 | **App shell** | `Sidebar.tsx`, `page.tsx` | Nav active states, council badge, logout area |
+| 3 | **Dashboard** | `Dashboard.tsx` | PageHeader, stat cards, spacing |
+| 4 | **Bin Management** | `BinManagement.tsx`, `BinReportDetailDialog.tsx` | StatCard, grid cards, popup polish |
+| 5 | **Vehicle Management** | `VehicleManagement.tsx` | StatCard, tables, modals |
+| 6 | **Map** | `Map.tsx`, `MapSidePanel.tsx` | Toolbar, glass panels (already partial) |
+| 7 | **Analytics** | `WasteAnalytics.tsx`, sub-tabs | Chart containers, tab bar |
+| 8 | **External Users** | `ExternalUsers.tsx` | Tables, tabs, detail drawers |
+| 9 | **Internal Users** | `InternalUsers.tsx` | Tables, create modal |
+| 10 | **Gamification** | `GamificationManagement.tsx` | Cards, forms |
+| 11 | **Admin flows** | `AdminEditPassword.tsx`, `AdminAssignment.tsx`, `CreateAdminPage.tsx` | AuthShell or PageHeader pattern |
+
+**Per-page checklist (repeat for each)**
+
+| Page | typography | PageHeader | cards | brand btn | no hex | green OK |
+|---|---|---|---|---|---|---|
+| Login (W9A-1) | [x] | [x] via AuthShell | [x] | [x] | [x] | [x] |
+| Shell (W9A-2) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Dashboard (W9A-3) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Bin Mgmt (W9A-4) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Vehicles (W9A-5) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Map (W9A-6) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Analytics (W9A-7) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| External (W9A-8) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Internal (W9A-9) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Gamification (W9A-10) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+| Admin flows (W9A-11) | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |
+
+**W9A progress**
+
+- [x] Theme token files created
+- [x] Login page polished (W9A-1)
+- [ ] Sidebar + shell (W9A-2)
+- [ ] Dashboard (W9A-3)
+- [ ] Bin Management (W9A-4)
+- [ ] Vehicle Management (W9A-5)
+- [ ] Map (W9A-6)
+- [ ] Analytics (W9A-7)
+- [ ] External Users (W9A-8)
+- [ ] Internal Users (W9A-9)
+- [ ] Gamification (W9A-10)
+- [ ] Admin flows (W9A-11)
+
+**Acceptance (W9A):** Light theme looks more professional and consistent; green brand unchanged; all pages use theme tokens.
+
+---
+
+#### W9B — Dark theme (only after W9A complete)
+
+- [ ] Fill `.dark` block in `tokens.css` + `globals.css` (surfaces, text, borders)
+- [ ] Keep `--brand-600` / `--brand-700` identical in dark mode
 - [ ] Create `src/lib/theme.ts` + `useTheme()` hook
-- [ ] Add theme toggle in sidebar footer or top bar
-- [ ] Persist preference to `localStorage`
-- [ ] Apply `class="dark"` on `<html>` in `layout.tsx` based on preference
-- [ ] Fix dark mode for:
-  - [ ] Charts (Recharts stroke/fill colors)
-  - [ ] Leaflet map tiles or overlay contrast
-  - [ ] Status badges (full/half/empty, vehicle status)
-  - [ ] Sidebar active state
-  - [ ] Sonner toasts
+- [ ] Toggle in sidebar footer; persist `localStorage`
+- [ ] Apply `class="dark"` on `<html>` in `layout.tsx`
+- [ ] Fix: charts, Leaflet, badges, sidebar, Sonner toasts
 
-**Test checklist**
-
-- [ ] Light theme looks the same as before (no accidental color changes)
-- [ ] Dark theme readable on all main pages
-- [ ] Toggle persists across reload
-- [ ] Map legend and route colors visible in dark mode
-
-**Acceptance:** Polished consistent UI; working dark theme with green brand; light theme preserved.
+**Acceptance (W9B):** Dark theme readable on all pages; light theme unchanged; toggle persists.
 
 ---
 
@@ -683,8 +725,9 @@ When you need backend work, send this table row to the other developer. Wait for
 | W6 | Secured `GET /api/admin/thirdparty/registrations/pending` | `[ ]` requested `[ ]` ready |
 | W6 | Secured `POST .../approve` and `.../reject` | `[ ]` requested `[ ]` ready |
 | W6 | `GET /api/complaints/{id}` returns image + full detail | `[ ]` requested `[ ]` ready |
-| W7 | Superadmin create staff with `council` in body | `[ ]` requested `[ ]` ready |
-| W8 | STOMP `/topic/councils/{council}/bins` with `BIN_STATUS_UPDATED` / `BIN_COLLECTED` | `[ ]` requested `[ ]` ready |
+| W7 | Superadmin create staff with `council` in body | `[x]` ready |
+| W8 | STOMP `/topic/councils/{council}/bins` with `BIN_STATUS_UPDATED` / `BIN_COLLECTED` | `[x]` ready |
+| W8 | `GET /api/bins/{id}/latest-report` for admin report popup | `[x]` ready |
 
 ---
 
@@ -709,18 +752,53 @@ When you need backend work, send this table row to the other developer. Wait for
 
 ## 7. Web definition of done
 
+### Features (W0–W8)
+
 - [x] **W0** Shared API client in use for new/edited code
 - [x] **W1** Home removed; global council dropdown for superadmin
-- [x] **W2** Bin Collection page removed; labour in Vehicle Management
+- [x] **W2** Bin Collection page removed (staff via Internal Users)
 - [x] **W3** Click-to-filter on Bin + Vehicle cards; correct bin counts
 - [x] **W4** Map shows latest route by default; per-route toggles work
+- [x] **W4A** Auto multi-route generation + vehicle `maxBins`
+- [x] **W4B** Route planner right glass panel
 - [x] **W5** No manual zone input on bin create
 - [x] **W6** External Users page with Citizens + Collectors sub-tabs
-- [ ] **W7** Internal user create works; superadmin council picker; success message
-- [ ] **W8** Realtime bin updates on Bin Management + Map
-- [ ] **W9** Consistent UI components; dark theme toggle works
+- [x] **W7** Internal user create; superadmin council picker; hide/delete actions
+- [x] **W8** Realtime bin updates + report detail popup (manual app test pending)
+
+### UI polish (W9)
+
+- [~] **W9A** Light theme polish — **1 / 11 pages done** (Login ✅)
+- [ ] **W9B** Dark theme — start only after W9A complete
+
+### Quality
+
 - [ ] No regressions on Login, Analytics, Admin assignment flows
-- [ ] `npm run build` passes with no TypeScript errors
+- [x] `npx tsc --noEmit` passes
+- [ ] `npm run build` passes (requires Node 20+)
+
+---
+
+## 7b. What to start next (UI)
+
+**You are here:** Sprint 6 → **W9A-2 App shell** (`Sidebar.tsx` + `page.tsx`)
+
+**Do this next (in order):**
+
+1. **W9A-2 — Sidebar + app shell** ← **START HERE**
+   - Create `StatCard.tsx` + `AppShell.tsx` (shared layout)
+   - Polish `Sidebar.tsx`: theme tokens, `brand-*` active nav, council badge, logout footer
+   - Polish `page.tsx` top bar: council dropdown chip, consistent spacing with `layout.pagePadding`
+2. **W9A-3 — Dashboard** — first page to use `PageHeader` + `StatCard`
+3. **W9A-4 — Bin Management** — refactor stat cards to `StatCard`; keep report popup
+4. Continue down the W9A table (Vehicles → Map → …)
+
+**Do NOT start yet:** W9B dark theme, or re-opening W0–W8 unless a bug is found.
+
+**Optional bugs (fix when touching nearby files):**
+
+- [ ] `Dashboard.tsx` `onNavigate` not passed from `page.tsx`
+- [ ] `VehicleManagement.tsx` dead `DriversListModal` code
 
 ---
 
@@ -782,7 +860,8 @@ Use these existing endpoints today. New/secured endpoints — confirm with backe
 | GET | `/api/councils` | W1 |
 | GET | `/api/zones?council=` | W5 |
 | GET | `/api/admin/thirdparty/registrations/pending` | W6 |
-| WS STOMP | `/topic/councils/{council}/bins` | W8 |
+| WS STOMP | `/topic/councils/{council}/bins` | W8 ✅ |
+| GET | `/api/bins/{id}/latest-report` | W8 ✅ |
 
 ---
 
@@ -793,6 +872,9 @@ Use these existing endpoints today. New/secured endpoints — confirm with backe
 | 2026-06-08 | Sprint 5 (W4A+W4B+W5) | Auto route generate flow, road-snapped draft preview, mobile side panels, auto zone on bin create |
 | 2026-06-08 | W2 | Removed Bin Collection page; route crew CRUD in Vehicle Management |
 | 2026-06-08 | W6 | External Users page — Citizens + Third-Party Collectors tabs |
+| 2026-06-08 | W7 | Internal Users hide/delete; superadmin create + council picker |
+| 2026-06-08 | W8 | Realtime bins STOMP + report popup on Bin Management |
+| 2026-06-08 | W9A-1 | Theme tokens (`src/theme/`) + Login page polish |
 
 ---
 

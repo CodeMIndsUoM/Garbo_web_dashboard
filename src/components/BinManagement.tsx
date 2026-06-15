@@ -1,28 +1,22 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Trash2, MapPin, AlertTriangle, Search, Plus, Loader2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Trash2, MapPin, CircleAlert, Gauge, CircleCheck, Search, Plus, Loader2, Pencil, TriangleAlert } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "./ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { PageHeader } from './layout/PageHeader';
+import { StatCard, StatCardGrid, ViewModeToggle, type ViewMode } from './layout/management-ui';
+import { AddBinGlassModal } from './bin/AddBinGlassModal';
 import { toast } from "sonner";
 import { apiFetch } from '@/lib/api';
+import { useBinRealtime } from '@/hooks/useBinRealtime';
+import { applyCollectionVisualUpdate, normalizeBinStatus } from '@/lib/bin-realtime';
+import { BinReportDetailDialog, type BinReportDetail } from './bin/BinReportDetailDialog';
+import { BinDiscrepancyBanner } from './bin/BinDiscrepancyBanner';
 
 const BINS_API = '/api/bins';
 const COUNCILS = [
@@ -43,15 +37,40 @@ interface Bin {
   status: string;
   coordinates: string;
   isAssigned?: boolean;
+  assignedToName?: string;
+  assignedToEmpId?: number;
+  priority?: 'low' | 'medium' | 'high';
+  hasDiscrepancy?: boolean;
+  discrepancyStatus?: string;
+  discrepancyPreviousStatus?: string;
+  discrepancyReporterName?: string;
+}
+
+interface StaffMember {
+  empId: number;
+  empName?: string;
+  role?: string;
 }
 
 export function BinManagement({ council, userRole }: { council?: { name?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
   const [bins, setBins] = useState<Bin[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editBin, setEditBin] = useState<Bin | null>(null);
+  const [mentors, setMentors] = useState<StaffMember[]>([]);
+  const [assigningBinId, setAssigningBinId] = useState<number | null>(null);
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
+  const [selectedBin, setSelectedBin] = useState<Bin | null>(null);
+  const selectedBinRef = useRef<Bin | null>(null);
+  const [selectedReport, setSelectedReport] = useState<BinReportDetail | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+
+  useEffect(() => {
+    selectedBinRef.current = selectedBin;
+  }, [selectedBin]);
   
   // Form State
   const [newBin, setNewBin] = useState({
@@ -61,6 +80,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     zone: '',
     status: 'empty',
     coordinates: '',
+    priority: 'medium' as 'low' | 'medium' | 'high',
   });
 
   const isAdmin = userRole === 'admin';
@@ -88,9 +108,189 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
   useEffect(() => {
     fetchBins();
-  }, []);
+  }, [council?.name]);
 
+  const loadMentors = async () => {
+    try {
+      const query = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
+      const { data: result } = await apiFetch<{ success?: boolean; data?: StaffMember[] }>(
+        `/api/admins/staff${query}`
+      );
+      if (result.success && Array.isArray(result.data)) {
+        setMentors(result.data.filter((s) => (s.role || '').toUpperCase().includes('MENTOR')));
+      }
+    } catch {
+      setMentors([]);
+    }
+  };
 
+  useEffect(() => {
+    void loadMentors();
+  }, [council?.name]);
+
+  const loadLatestReport = async (bin: Bin) => {
+    setReportLoading(true);
+    try {
+      const { data: result } = await apiFetch<{ success?: boolean; data?: BinReportDetail | null }>(
+        `${BINS_API}/${bin.id}/latest-report`
+      );
+      if (result.success && result.data) {
+        setSelectedReport(result.data);
+      } else {
+        setSelectedReport({
+          binId: bin.id,
+          binCode: bin.binCode,
+          council: bin.council,
+          status: bin.status,
+          fillLevel: bin.fillLevel,
+        });
+      }
+    } catch {
+      toast.error('Failed to load report details');
+      setSelectedReport(null);
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const openBinDetail = (bin: Bin) => {
+    setSelectedBin(bin);
+    setSelectedReport(null);
+    void loadLatestReport(bin);
+  };
+
+  const closeBinDetail = () => {
+    setSelectedBin(null);
+    setSelectedReport(null);
+    setReportLoading(false);
+  };
+
+  const displayStatus = (bin: Bin) =>
+    bin.hasDiscrepancy && bin.discrepancyStatus ? bin.discrepancyStatus : bin.status;
+
+  useBinRealtime({
+    councilName: council?.name ?? null,
+    onUpdate: (msg) => {
+      const visual = applyCollectionVisualUpdate(msg);
+      setBins((prev) => {
+        const idx = prev.findIndex((b) => b.id === msg.binId);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        const current = next[idx];
+        const collected =
+          msg.type === 'BIN_COLLECTED' && msg.collectionStatus?.toUpperCase() === 'COLLECTED';
+        const reportedDiscrepancy =
+          msg.type === 'BIN_STATUS_UPDATED' && msg.discrepancy === true;
+        const reportedStatus = visual.status
+          ? normalizeBinStatus(visual.status)
+          : current.discrepancyStatus ?? current.status;
+
+        next[idx] = {
+          ...current,
+          status: collected
+            ? (visual.status ?? 'empty')
+            : reportedDiscrepancy
+              ? reportedStatus
+              : (visual.status ?? current.status),
+          fillLevel: visual.fillLevel ?? current.fillLevel,
+          ...(collected
+            ? {
+                hasDiscrepancy: false,
+                discrepancyStatus: undefined,
+                discrepancyPreviousStatus: undefined,
+                discrepancyReporterName: undefined,
+              }
+            : {}),
+          ...(reportedDiscrepancy
+            ? {
+                hasDiscrepancy: true,
+                discrepancyStatus: reportedStatus,
+                discrepancyPreviousStatus: msg.previousStatus ?? current.discrepancyPreviousStatus,
+                discrepancyReporterName: msg.reporterName ?? current.discrepancyReporterName,
+              }
+            : {}),
+        };
+        return next;
+      });
+
+      const activeBin = selectedBinRef.current;
+      if (msg.type === 'BIN_STATUS_UPDATED' && activeBin?.id === msg.binId) {
+        if (msg.changeType === 'STATUS_UNDONE') {
+          setSelectedReport(null);
+        } else if (msg.changeType === 'STATUS_REPORTED' || msg.changeType === 'REPORT_PHOTO_ATTACHED') {
+          setSelectedReport((prev) => ({
+            reportId: msg.reportId ?? prev?.reportId,
+            binId: msg.binId,
+            binCode: activeBin.binCode,
+            council: activeBin.council,
+            status: normalizeBinStatus(visual.status ?? activeBin.status),
+            fillLevel: visual.fillLevel ?? activeBin.fillLevel,
+            notes: msg.notes ?? prev?.notes ?? null,
+            photoUrl: msg.photoUrl ?? prev?.photoUrl ?? null,
+            reporterName: msg.reporterName ?? prev?.reporterName ?? null,
+            reportedAt: msg.reportedAt ?? prev?.reportedAt ?? null,
+            discrepancy: msg.discrepancy ?? prev?.discrepancy,
+            previousStatus: msg.previousStatus ?? prev?.previousStatus ?? null,
+          }));
+        }
+        setSelectedBin((prev) =>
+          prev && prev.id === msg.binId
+            ? {
+                ...prev,
+                status: visual.status ?? prev.status,
+                fillLevel: visual.fillLevel ?? prev.fillLevel,
+                ...(msg.type === 'BIN_COLLECTED' &&
+                msg.collectionStatus?.toUpperCase() === 'COLLECTED'
+                  ? {
+                      hasDiscrepancy: false,
+                      discrepancyStatus: undefined,
+                      discrepancyPreviousStatus: undefined,
+                      discrepancyReporterName: undefined,
+                    }
+                  : {}),
+                ...(msg.type === 'BIN_STATUS_UPDATED' && msg.discrepancy === true
+                  ? {
+                      hasDiscrepancy: true,
+                      discrepancyStatus: normalizeBinStatus(visual.status ?? prev.status),
+                      discrepancyPreviousStatus: msg.previousStatus ?? prev.discrepancyPreviousStatus,
+                      discrepancyReporterName: msg.reporterName ?? prev.discrepancyReporterName,
+                    }
+                  : {}),
+              }
+            : prev
+        );
+      }
+
+      if (
+        msg.type === 'BIN_COLLECTED' &&
+        msg.collectionStatus?.toUpperCase() === 'COLLECTED' &&
+        activeBin?.id === msg.binId
+      ) {
+        setSelectedReport({
+          binId: msg.binId,
+          binCode: activeBin.binCode,
+          council: activeBin.council,
+          status: 'empty',
+          fillLevel: 0,
+          discrepancy: false,
+        });
+        setSelectedBin((prev) =>
+          prev && prev.id === msg.binId
+            ? {
+                ...prev,
+                status: visual.status ?? 'empty',
+                fillLevel: visual.fillLevel ?? 0,
+                hasDiscrepancy: false,
+              }
+            : prev
+        );
+      }
+
+      if (msg.type === 'BIN_COLLECTED' && msg.collectionStatus) {
+        toast.info(`Bin ${msg.binId}: ${msg.collectionStatus}`);
+      }
+    },
+  });
 
   const handleCreateBin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +321,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           zone: '',
           status: 'empty',
           coordinates: '',
+          priority: 'medium',
         });
         fetchBins();
       } else {
@@ -148,8 +349,78 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     }
   };
 
-  const normalizeStatus = (status: string) =>
-    (status || '').toLowerCase().replace(/\s+/g, '_');
+  const handleAssignMentor = async (binId: number, mentorEmpId: string) => {
+    setAssigningBinId(binId);
+    try {
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string; data?: Bin }>(
+        `${BINS_API}/${binId}/assign-mentor`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            mentorEmpId: mentorEmpId ? Number(mentorEmpId) : null,
+          }),
+        }
+      );
+      if (response.ok && result.success) {
+        toast.success(mentorEmpId ? 'Mentor assigned' : 'Mentor unassigned');
+        fetchBins();
+      } else {
+        toast.error(result.message || 'Failed to assign mentor');
+      }
+    } catch {
+      toast.error('Failed to assign mentor');
+    } finally {
+      setAssigningBinId(null);
+    }
+  };
+
+  const openEditModal = (bin: Bin) => {
+    setEditBin(bin);
+    setNewBin({
+      binCode: bin.binCode || '',
+      location: bin.location || bin.coordinates || '',
+      type: 'General Waste',
+      zone: bin.zone || '',
+      status: normalizeBinStatus(bin.status),
+      coordinates: bin.coordinates || bin.location || '',
+      priority: bin.priority || 'medium',
+    });
+  };
+
+  const handleUpdateBin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBin) return;
+    try {
+      const parts = newBin.location.split(',').map((p) => p.trim());
+      const lat = parts.length >= 2 ? Number(parts[0]) : undefined;
+      const lng = parts.length >= 2 ? Number(parts[1]) : undefined;
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string }>(
+        `${BINS_API}/${editBin.id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            binCode: newBin.binCode,
+            location: newBin.location,
+            priority: newBin.priority,
+            ...(lat != null && lng != null && !Number.isNaN(lat) && !Number.isNaN(lng)
+              ? { latitude: lat, longitude: lng }
+              : {}),
+          }),
+        }
+      );
+      if (response.ok && result.success) {
+        toast.success('Bin updated');
+        setEditBin(null);
+        fetchBins();
+      } else {
+        toast.error(result.message || 'Failed to update bin');
+      }
+    } catch {
+      toast.error('Failed to update bin');
+    }
+  };
+
+  const normalizeStatus = (status: string) => normalizeBinStatus(status);
 
   const councilBins = useMemo(() => {
     if (!council?.name) return bins;
@@ -163,17 +434,20 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const binCounts = useMemo(
     () => ({
       total: councilBins.length,
-      full: councilBins.filter((b) => normalizeStatus(b.status) === 'full').length,
-      half: councilBins.filter((b) => normalizeStatus(b.status) === 'half').length,
-      empty: councilBins.filter((b) => normalizeStatus(b.status) === 'empty').length,
+      full: councilBins.filter((b) => normalizeStatus(displayStatus(b)) === 'full').length,
+      half: councilBins.filter((b) => normalizeStatus(displayStatus(b)) === 'half').length,
+      empty: councilBins.filter((b) => normalizeStatus(displayStatus(b)) === 'empty').length,
+      discrepancies: councilBins.filter((b) => b.hasDiscrepancy).length,
     }),
     [councilBins]
   );
 
   const councilScopedBins = useMemo(() => {
     let result = councilBins;
-    if (statusFilter) {
-      result = result.filter((b) => normalizeStatus(b.status) === statusFilter);
+    if (statusFilter === 'discrepancy') {
+      result = result.filter((b) => b.hasDiscrepancy);
+    } else if (statusFilter) {
+      result = result.filter((b) => normalizeStatus(displayStatus(b)) === statusFilter);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -189,11 +463,6 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const handleStatusCardClick = (filter: string | null) => {
     setStatusFilter((prev) => (prev === filter ? null : filter));
   };
-
-  const statCardClass = (active: boolean) =>
-    `bg-white cursor-pointer transition-all hover:shadow-md ${
-      active ? 'ring-2 ring-blue-500 shadow-md' : ''
-    }`;
 
   const nextBinCode = useMemo(() => {
     if (!council?.name) return 'Auto-generated';
@@ -215,137 +484,118 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
 
 
 
+  const statusLabel = (status: string) => {
+    const key = normalizeBinStatus(status);
+    if (key === 'full') return 'Full';
+    if (key === 'half') return 'Half';
+    if (key === 'empty') return 'Empty';
+    return 'Not Checked';
+  };
+
+  const statusBarClass = (status: string) => {
+    const key = normalizeBinStatus(status);
+    if (key === 'full') return 'bg-red-500';
+    if (key === 'half') return 'bg-yellow-400';
+    if (key === 'empty') return 'bg-green-600';
+    return 'bg-gray-200';
+  };
+
+  const statusTextClass = (status: string) => {
+    const key = normalizeBinStatus(status);
+    if (key === 'full') return 'text-red-600';
+    if (key === 'half') return 'text-yellow-700';
+    if (key === 'empty') return 'text-green-700';
+    return 'text-foreground';
+  };
+
   return (
     <div className="p-8">
-      <div className="flex justify-between items-start mb-8">
-        <div>
-          <h2 className="text-gray-900 mb-2">Bin Management</h2>
-          <p className="text-gray-600">Monitor and manage all waste bins in real-time</p>
-        </div>
-        
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add New Bin
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Waste Bin</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreateBin} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Bin Code</label>
-                <Input 
-                  value={nextBinCode}
-                  disabled
-                  className="bg-gray-50 text-gray-500 font-semibold"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">Location (Coordinates)</label>
-                <Input 
-                  placeholder="lat, lng" 
-                  value={newBin.location}
-                  onChange={(e) => setNewBin({...newBin, location: e.target.value})}
-                  required
-                />
-              </div>
-              <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                Zone is assigned automatically from coordinates when you save.
-              </p>
+      <BinReportDetailDialog
+        open={Boolean(selectedBin)}
+        onClose={closeBinDetail}
+        bin={selectedBin}
+        report={selectedReport}
+        loading={reportLoading}
+      />
+      <PageHeader
+        title="Bin Management"
+        subtitle="Monitor and manage all waste bins in real-time"
+        actions={
+          <Button type="button" variant="brand" className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="size-4" />
+            Add New Bin
+          </Button>
+        }
+      />
+      <AddBinGlassModal
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        nextBinCode={nextBinCode}
+        location={newBin.location}
+        onLocationChange={(value) => setNewBin((p) => ({ ...p, location: value }))}
+        priority={newBin.priority}
+        onPriorityChange={(value) => setNewBin((p) => ({ ...p, priority: value }))}
+        onSubmit={handleCreateBin}
+      />
+      <AddBinGlassModal
+        open={Boolean(editBin)}
+        onClose={() => setEditBin(null)}
+        mode="edit"
+        nextBinCode={newBin.binCode}
+        onBinCodeChange={(value) => setNewBin((p) => ({ ...p, binCode: value }))}
+        location={newBin.location}
+        onLocationChange={(value) => setNewBin((p) => ({ ...p, location: value }))}
+        priority={newBin.priority}
+        onPriorityChange={(value) => setNewBin((p) => ({ ...p, priority: value }))}
+        onSubmit={handleUpdateBin}
+      />
 
-              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700">
-                Save Bin
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Stats Summary — click a card to filter the grid below */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card
-          className={statCardClass(statusFilter === null)}
+      <StatCardGrid columns={5} className="mb-8">
+        <StatCard
+          label="Total Bins"
+          value={binCounts.total}
+          icon={Trash2}
+          active={statusFilter === null}
           onClick={() => handleStatusCardClick(null)}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick(null)}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Bins</p>
-                <p className="text-2xl font-semibold text-gray-900">{binCounts.total}</p>
-              </div>
-              <div className="p-3 bg-gray-50 rounded-full">
-                <Trash2 className="w-6 h-6 text-gray-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={statCardClass(statusFilter === 'full')}
+        />
+        <StatCard
+          label="Full"
+          value={binCounts.full}
+          valueClassName="text-status-danger"
+          icon={CircleAlert}
+          iconClassName="text-status-danger/60"
+          active={statusFilter === 'full'}
           onClick={() => handleStatusCardClick('full')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('full')}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Full</p>
-                <p className="text-2xl font-semibold text-red-600">{binCounts.full}</p>
-              </div>
-              <div className="p-3 bg-red-50 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-red-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={statCardClass(statusFilter === 'half')}
+        />
+        <StatCard
+          label="Half"
+          value={binCounts.half}
+          valueClassName="text-yellow-600"
+          icon={Gauge}
+          iconClassName="text-yellow-500"
+          active={statusFilter === 'half'}
           onClick={() => handleStatusCardClick('half')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('half')}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Half</p>
-                <p className="text-2xl font-semibold text-orange-600">{binCounts.half}</p>
-              </div>
-              <div className="p-3 bg-orange-50 rounded-full">
-                <AlertTriangle className="w-6 h-6 text-orange-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={statCardClass(statusFilter === 'empty')}
+        />
+        <StatCard
+          label="Empty"
+          value={binCounts.empty}
+          icon={CircleCheck}
+          iconClassName="text-brand-500"
+          active={statusFilter === 'empty'}
           onClick={() => handleStatusCardClick('empty')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && handleStatusCardClick('empty')}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Empty</p>
-                <p className="text-2xl font-semibold text-green-600">{binCounts.empty}</p>
-              </div>
-              <div className="p-3 bg-green-50 rounded-full">
-                <Trash2 className="w-6 h-6 text-green-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        />
+        <StatCard
+          label="Discrepancies"
+          value={binCounts.discrepancies}
+          valueClassName="text-amber-600"
+          icon={TriangleAlert}
+          iconClassName="text-amber-500"
+          active={statusFilter === 'discrepancy'}
+          activeClassName="border-amber-400 ring-amber-400/40"
+          onClick={() => handleStatusCardClick('discrepancy')}
+          detail="Reported full/half while marked empty"
+        />
+      </StatCardGrid>
 
       {/* Search and Filters */}
       {councilFilterUnavailable && (
@@ -353,9 +603,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           Council-specific bin filtering is not available from backend data yet, so all bins are shown for this section.
         </div>
       )}
-      <div className="mb-6">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search bins by ID or location..."
             className="pl-10"
@@ -363,35 +613,151 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        <ViewModeToggle value={viewMode} onChange={setViewMode} />
       </div>
 
-      {/* Bins Grid */}
+      {/* Bins */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-          <p className="text-gray-600">Loading bin data...</p>
+          <Loader2 className="w-10 h-10 text-green-600 animate-spin mb-4" />
+          <p className="text-muted-foreground">Loading bin data...</p>
         </div>
       ) : councilScopedBins.length === 0 ? (
-        <div className="text-center py-20 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-          <Trash2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">No bins found</p>
-          <p className="text-sm text-gray-400 mt-1">Start by adding a new waste bin to the system.</p>
+        <div className="text-center py-20 bg-muted rounded-xl border-2 border-dashed border-border">
+          <Trash2 className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+          <p className="text-muted-foreground font-medium">No bins found</p>
+          <p className="text-sm text-muted-foreground mt-1">Start by adding a new waste bin to the system.</p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/80 hover:bg-muted/80">
+                <TableHead>Bin</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Assignment</TableHead>
+                <TableHead>Fill status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {councilScopedBins.map((bin) => (
+                <TableRow
+                  key={bin.id}
+                  className={`cursor-pointer ${bin.hasDiscrepancy ? 'bg-amber-50/50 hover:bg-amber-50' : ''}`}
+                  onClick={() => openBinDetail(bin)}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{bin.binCode}</span>
+                      {bin.hasDiscrepancy && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 text-[10px] px-1.5 py-0">
+                          <CircleAlert className="mr-1 h-3 w-3" />
+                          Discrepancy
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-[220px]">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{bin.location}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      {bin.assignedToName ? (
+                        <span className="text-xs font-medium text-green-700">{bin.assignedToName}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unassigned</span>
+                      )}
+                      <select
+                        className="h-8 max-w-[160px] rounded border border-border bg-background px-2 text-xs"
+                        value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
+                        disabled={assigningBinId === bin.id}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          void handleAssignMentor(bin.id, e.target.value);
+                        }}
+                      >
+                        <option value="">Unassign</option>
+                        {mentors.map((m) => (
+                          <option key={m.empId} value={String(m.empId)}>
+                            {m.empName || `Mentor #${m.empId}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <span className={`font-semibold ${statusTextClass(displayStatus(bin))}`}>
+                        {statusLabel(displayStatus(bin))}
+                      </span>
+                      {bin.hasDiscrepancy && (
+                        <div className="mt-2 max-w-xs">
+                          <BinDiscrepancyBanner bin={bin} compact />
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(bin);
+                        }}
+                        className="p-1.5 text-muted-foreground hover:text-brand-600"
+                        aria-label="Edit bin"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBin(bin.id);
+                        }}
+                        className="p-1.5 text-muted-foreground hover:text-red-600"
+                        aria-label="Delete bin"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {councilScopedBins.map((bin) => (
-            <Card key={bin.id} className="hover:shadow-lg transition-all duration-300 border-gray-100 group overflow-hidden relative">
-              <div className={`absolute top-0 left-0 right-0 h-1.5 ${
-                bin.status === 'full' ? 'bg-red-500' :
-                bin.status === 'half' ? 'bg-yellow-400' :
-                bin.status === 'empty' ? 'bg-green-500' :
-                'bg-white'
-              }`} />
+            <Card
+              key={bin.id}
+              className={`hover:shadow-lg transition-all duration-300 border-border group overflow-hidden relative cursor-pointer ${
+                bin.hasDiscrepancy ? 'ring-2 ring-amber-300/80 border-amber-200' : ''
+              }`}
+              onClick={() => openBinDetail(bin)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && openBinDetail(bin)}
+            >
+              <div className={`absolute top-0 left-0 right-0 h-1.5 ${statusBarClass(displayStatus(bin))}`} />
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-gray-900 font-semibold mb-1">{bin.binCode}</h3>
-                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-foreground font-semibold">{bin.binCode}</h3>
+                      {bin.hasDiscrepancy && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 text-[10px] px-1.5 py-0">
+                          <CircleAlert className="mr-1 h-3 w-3" />
+                          Discrepancy
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="w-4 h-4" />
                       <span className="line-clamp-1">{bin.location}</span>
                     </div>
@@ -400,37 +766,66 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                     <Badge
                       className={
                         bin.isAssigned
-                          ? 'bg-blue-50 text-blue-700 border-blue-100'
-                          : 'bg-gray-50 text-gray-700 border-gray-100'
+                          ? 'bg-green-50 text-green-700 border-green-200'
+                          : 'bg-muted text-muted-foreground border-border'
                       }
                       variant="outline"
                     >
                       {bin.isAssigned ? 'Assigned' : 'Not Assigned'}
                     </Badge>
-                    <button 
-                      onClick={() => handleDeleteBin(bin.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-all"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteBin(bin.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-600 transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
+                {bin.hasDiscrepancy && (
+                  <div className="mb-4">
+                    <BinDiscrepancyBanner bin={bin} />
+                  </div>
+                )}
+
                 <div className="space-y-4">
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Field mentor</span>
+                    <div className="mt-1 flex flex-col gap-1">
+                      {bin.assignedToName ? (
+                        <span className="text-xs font-medium text-green-700">{bin.assignedToName}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unassigned</span>
+                      )}
+                      <select
+                        className="h-8 w-full rounded border border-border bg-background px-2 text-xs"
+                        value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
+                        disabled={assigningBinId === bin.id}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          void handleAssignMentor(bin.id, e.target.value);
+                        }}
+                      >
+                        <option value="">Unassign</option>
+                        {mentors.map((m) => (
+                          <option key={m.empId} value={String(m.empId)}>
+                            {m.empName || `Mentor #${m.empId}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   {/* Fill Level */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-600">Fill Status</span>
-                      <span className={`text-sm font-bold ${
-                        bin.status === 'full' ? 'text-red-600' :
-                        bin.status === 'half' ? 'text-yellow-600' :
-                        bin.status === 'empty' ? 'text-green-600' :
-                        'text-gray-400'
-                      }`}>
-                        {bin.status === 'full' ? 'Full' :
-                         bin.status === 'half' ? 'Half' :
-                         bin.status === 'empty' ? 'Empty' :
-                         'Not Checked'}
+                      <span className="text-sm font-medium text-muted-foreground">Fill Status</span>
+                      <span className={`text-sm font-bold ${statusTextClass(displayStatus(bin))}`}>
+                        {statusLabel(displayStatus(bin))}
                       </span>
                     </div>
                   </div>
