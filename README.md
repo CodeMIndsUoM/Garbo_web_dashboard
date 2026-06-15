@@ -6,8 +6,8 @@ Admin dashboard UI for the Garbo Smart Waste Management System, built with **Nex
 
 ## Production
 
-- **Live URL**: http://13.233.77.40/
-- **API base** (baked at build time): `http://13.233.77.40` — do not add `/api` suffix
+- **Live URL**: https://garboadmin.duckdns.org/
+- **API base** (baked at build time): `https://garboadmin.duckdns.org` — do not add `/api` suffix
 - **Deploy branch**: `devops/platform` (CI tests, CD deploys frontend only)
 
 ## Prerequisites
