@@ -57,7 +57,7 @@ export function GarboBrand({ className, size = 'md', iconOnly = false }: GarboBr
   return (
     <div className={cn('inline-flex items-center gap-2.5', className)} aria-label="Garbo">
       <GarboBinIcon height={iconHeight} />
-      <span className={cn('font-extrabold tracking-tight text-brand-600', wordmark)}>Garbo</span>
+      <span className={cn('font-extrabold tracking-tight text-brand-600 dark:text-brand-500', wordmark)}>Garbo</span>
     </div>
   );
 }
