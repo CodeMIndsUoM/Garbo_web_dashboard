@@ -18,5 +18,5 @@ export const cssVars = {
 /** Public assets referenced by auth layout */
 export const authAssets = {
   heroImage: '/images/login-hero.jpg',
-  logoSvg: '/brand/garbo-logo.svg',
+  logoSvg: '/brand/garbo-bin-icon-green.png',
 } as const;
