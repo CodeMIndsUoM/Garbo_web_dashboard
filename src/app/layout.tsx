@@ -8,6 +8,13 @@ export const metadata: Metadata = {
   description: 'Garbo - Waste Management System',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+};
+
 export default function RootLayout({
   children,
 }: {
