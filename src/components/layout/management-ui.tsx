@@ -133,7 +133,7 @@ export function StatCard({
 
 interface StatCardGridProps {
   children: React.ReactNode;
-  columns?: 2 | 3 | 4;
+  columns?: 2 | 3 | 4 | 5;
   className?: string;
 }
 
@@ -144,6 +144,8 @@ export function StatCardGrid({ children, columns = 4, className }: StatCardGridP
       ? 'md:grid-cols-2'
       : columns === 3
         ? 'md:grid-cols-3'
+        : columns === 5
+          ? 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'
         : 'md:grid-cols-2 xl:grid-cols-4';
 
   return (

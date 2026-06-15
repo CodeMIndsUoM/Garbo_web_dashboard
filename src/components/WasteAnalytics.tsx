@@ -528,7 +528,7 @@ export function WasteAnalytics({
     );
     return [
       { name: 'Empty', value: totals.empty, color: CHART.brand },
-      { name: 'Half', value: totals.half, color: '#22c55e' },
+      { name: 'Half', value: totals.half, color: '#FACC15' },
       { name: 'Full', value: totals.full, color: CHART.alert },
       { name: 'Not Checked', value: totals.notChecked, color: '#d1d5db' },
     ].filter((item) => item.value > 0);

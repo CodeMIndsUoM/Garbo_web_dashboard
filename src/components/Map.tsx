@@ -57,7 +57,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 };
 
 // Generates beautiful custom SVG bin HTML based on status, fill level, and selection state
-const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel: number = 0, isSelected: 'route' | 'delete' | boolean = false) => {
+const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel: number = 0, isSelected: 'route' | 'delete' | boolean = false, hasDiscrepancy: boolean = false) => {
   const color = STATUS_COLOR_MAP[status.toLowerCase()] || STATUS_COLOR_MAP['not_checked'];
   let fillPercent = fillLevel;
   if (fillPercent <= 1) fillPercent = fillPercent * 100;
@@ -96,14 +96,22 @@ const createBinIconHtml = (id: string, status: string = 'not_checked', fillLevel
         </svg>
       </div>
       ` : ''}
+      ${hasDiscrepancy ? `
+      <div class="absolute -top-1.5 -left-1.5 bg-amber-500 text-white rounded-full border-2 border-white flex items-center justify-center shadow-lg" style="width: 17px; height: 17px; z-index: 10;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="8" x2="12" y2="13"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      ` : ''}
     </div>
   `;
 };
 
 // Generates L.divIcon using the customized SVG bin content
-const getStatusIcon = (id: string, status?: string, fillLevel?: number, isSelected?: 'route' | 'delete' | boolean) => {
+const getStatusIcon = (id: string, status?: string, fillLevel?: number, isSelected?: 'route' | 'delete' | boolean, hasDiscrepancy?: boolean) => {
   return L.divIcon({
-    html: createBinIconHtml(id, status, fillLevel, isSelected),
+    html: createBinIconHtml(id, status, fillLevel, isSelected, hasDiscrepancy),
     className: '',
     iconSize: [28, 34],
     iconAnchor: [14, 34],
@@ -132,6 +140,10 @@ interface BinData {
   priority: 'low' | 'medium' | 'high';
   zone: string;
   binCode?: string;
+  assignedToEmpId?: number;
+  assignedToName?: string;
+  hasDiscrepancy?: boolean;
+  discrepancyStatus?: string;
 }
 
 interface RouteBinStop {
@@ -292,10 +304,63 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const [hoverPreview, setHoverPreview] = useState(false);
   const [loadedRouteSessions, setLoadedRouteSessions] = useState<LoadedRouteSession[]>([]);
   const [visibleSessionIds, setVisibleSessionIds] = useState<Record<string, boolean>>({});
+  const [mentors, setMentors] = useState<{ empId: number; empName?: string }[]>([]);
+  const [routeComplaintIds, setRouteComplaintIds] = useState<number[]>([]);
+  const [routePrefill, setRoutePrefill] = useState<{ complaintIds?: number[]; lat?: number; lng?: number } | null>(null);
+
+  const ZONE_OPTIONS = ['A', 'B', 'C', 'D', 'E', 'unassigned'];
 
   useEffect(() => {
     visibleSessionIdsRef.current = visibleSessionIds;
   }, [visibleSessionIds]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('garbo_route_prefill');
+    if (!raw) return;
+    sessionStorage.removeItem('garbo_route_prefill');
+    try {
+      setRoutePrefill(JSON.parse(raw));
+    } catch {
+      setRoutePrefill(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!routePrefill || markers.size === 0) return;
+    setSelectionMode(true);
+    setShowRoutePlanner(true);
+    setRoutePlannerTab('manual');
+    if (Array.isArray(routePrefill.complaintIds)) {
+      setRouteComplaintIds(routePrefill.complaintIds);
+    }
+    const fullBinIds = Array.from(markers.entries())
+      .filter(([, entry]) => entry.data.status === 'full')
+      .slice(0, 8)
+      .map(([id]) => id);
+    if (fullBinIds.length > 0) {
+      setSelectedBins(fullBinIds);
+    }
+    toast.info('Route planner opened with complaint stop and nearby full bins');
+    setRoutePrefill(null);
+  }, [routePrefill, markers]);
+
+  useEffect(() => {
+    const loadMentors = async () => {
+      try {
+        const councilQuery = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
+        const res = await fetch(`${API_ORIGIN}/api/admins/staff${councilQuery}`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const list = Array.isArray(json?.data) ? json.data : [];
+        setMentors(list.filter((s: any) => String(s.role || '').toUpperCase().includes('MENTOR')));
+      } catch {
+        setMentors([]);
+      }
+    };
+    void loadMentors();
+  }, [council?.name]);
 
   const canManageBin = (binId: string) => {
     const entry = markers.get(binId);
@@ -457,7 +522,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         const item = m.get(id);
         if (item) {
           // Revert to fill-status icon if deselecting, otherwise apply the selection checkmark
-          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected ? 'route' : false));
+          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected ? 'route' : false, item.data.hasDiscrepancy));
         }
         return m;
       });
@@ -483,7 +548,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         const item = m.get(id);
         if (item) {
           // Revert to fill-status icon if deselecting, otherwise apply the deletion cross
-          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected ? 'delete' : false));
+          item.marker.setIcon(getStatusIcon(id, item.data.status, item.data.fillLevel, !isSelected ? 'delete' : false, item.data.hasDiscrepancy));
         }
         return m;
       });
@@ -495,7 +560,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const clearSelectedBinIcons = (ids: string[]) => {
     ids.forEach(id => {
       const entry = markersRef.current.get(id);
-      if (entry) entry.marker.setIcon(getStatusIcon(id, entry.data.status, entry.data.fillLevel, false));
+      if (entry) entry.marker.setIcon(getStatusIcon(id, entry.data.status, entry.data.fillLevel, false, entry.data.hasDiscrepancy));
     });
   };
 
@@ -590,7 +655,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       const entry = markers.get(id);
       if (entry && !selectedBins.includes(id) && !selectedBinsToDelete.includes(id)) {
         entry.marker.setIcon(
-          getStatusIcon(id, entry.data.status, entry.data.fillLevel, false)
+          getStatusIcon(id, entry.data.status, entry.data.fillLevel, false, entry.data.hasDiscrepancy)
         );
       }
     }
@@ -606,7 +671,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       const entry = markers.get(id);
       if (entry && !selectedBins.includes(id) && !selectedBinsToDelete.includes(id)) {
         entry.marker.setIcon(
-          getStatusIcon(id, entry.data.status, entry.data.fillLevel, false)
+          getStatusIcon(id, entry.data.status, entry.data.fillLevel, false, entry.data.hasDiscrepancy)
         );
       }
     }
@@ -623,7 +688,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         const entry = markers.get(id);
         if (entry) {
           entry.marker.setIcon(
-            getStatusIcon(id, entry.data.status, entry.data.fillLevel, 'route')
+            getStatusIcon(id, entry.data.status, entry.data.fillLevel, 'route', entry.data.hasDiscrepancy)
           );
           draftHighlightedBinIdsRef.current.add(id);
         }
@@ -1030,6 +1095,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         selectedBinIds,
         vehicleId: Number(vehicleId),
         driverId: Number(driverId),
+        ...(routeComplaintIds.length > 0 ? { complaintIds: routeComplaintIds } : {}),
       }),
     });
     if (!res.ok) {
@@ -1053,6 +1119,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     setAssignedRoutes((prev) => [newRouteItem, ...prev]);
     loadRouteHistory();
     connectRouteSocket(snapshot.sessionId);
+    setRouteComplaintIds([]);
     return snapshot;
   };
 
@@ -1929,20 +1996,27 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         council: bin.council,
         priority: bin.priority || 'medium',
         zone: bin.zone || 'unassigned',
-        status: bin.status || 'not_checked'
+        status: bin.status || 'not_checked',
+        assignedToEmpId: bin.assignedToEmpId ?? undefined,
+        assignedToName: bin.assignedToName ?? undefined,
+        hasDiscrepancy: Boolean(bin.hasDiscrepancy),
+        discrepancyStatus: bin.discrepancyStatus ?? undefined,
       });
     });
   };
 
   // Builds the HTML tooltip content shown when hovering over a bin marker
   const renderTooltip = (d: BinData) => {
-    const statusLabel = d.status === 'full' ? 'Full' : d.status === 'half' ? 'Half' :
-      d.status === 'empty' ? 'Empty' : 'Not Checked';
+    const statusKey = d.hasDiscrepancy && d.discrepancyStatus ? d.discrepancyStatus : d.status;
+    const statusLabel = statusKey === 'full' ? 'Full' : statusKey === 'half' ? 'Half' :
+      statusKey === 'empty' ? 'Empty' : 'Not Checked';
     return `<div>
       <strong>Code:</strong> ${d.binCode || d.id}<br/>
       <strong>Fill Status:</strong> ${statusLabel}<br/>
+      ${d.hasDiscrepancy ? '<strong style="color:#d97706;">Status discrepancy reported</strong><br/>' : ''}
       <strong>Priority:</strong> ${d.priority}<br/>
-      <strong>Zone:</strong> ${d.zone}
+      <strong>Zone:</strong> ${d.zone}<br/>
+      <strong>Mentor:</strong> ${d.assignedToName || 'Unassigned'}
     </div>`;
   };
 
@@ -1950,7 +2024,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const addMarker = (data: BinData) => {
     if (!leafletMapRef.current) return;
     const isSelected = selectedBins.includes(data.id) ? 'route' : (selectedBinsToDelete.includes(data.id) ? 'delete' : false);
-    const marker = L.marker([data.lat, data.lng], { icon: getStatusIcon(data.id, data.status, data.fillLevel, isSelected) })
+    const marker = L.marker([data.lat, data.lng], { icon: getStatusIcon(data.id, data.status, data.fillLevel, isSelected, data.hasDiscrepancy) })
       .addTo(leafletMapRef.current);
     marker.bindTooltip(renderTooltip(data));
     marker.on('click', () => {
@@ -2117,7 +2191,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     entry.data = newData;
     entry.marker.bindTooltip(renderTooltip(newData));
     const isSelected = selectedBins.includes(id) ? 'route' : (selectedBinsToDelete.includes(id) ? 'delete' : false);
-    entry.marker.setIcon(getStatusIcon(id, newData.status, newData.fillLevel, isSelected));
+    entry.marker.setIcon(getStatusIcon(id, newData.status, newData.fillLevel, isSelected, newData.hasDiscrepancy));
     setMarkers((prev) => {
       const next = new Map(prev);
       const existing = next.get(id);
@@ -2144,6 +2218,20 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         updates.status = statusMap[normalized];
       }
       if (visual.fillLevel != null) updates.fillLevel = visual.fillLevel;
+      const collected =
+        msg.type === 'BIN_COLLECTED' && msg.collectionStatus?.toUpperCase() === 'COLLECTED';
+      const reportedDiscrepancy =
+        msg.type === 'BIN_STATUS_UPDATED' && msg.discrepancy === true;
+      if (collected) {
+        updates.hasDiscrepancy = false;
+        updates.discrepancyStatus = undefined;
+      } else if (reportedDiscrepancy) {
+        updates.hasDiscrepancy = true;
+        if (statusMap[normalized]) {
+          updates.discrepancyStatus = statusMap[normalized];
+          updates.status = statusMap[normalized];
+        }
+      }
       if (Object.keys(updates).length > 0) {
         updateBinLocally(String(msg.binId), updates);
       }
@@ -2179,6 +2267,56 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       if (!res.ok) throw new Error(`Zone update failed: ${res.status}`);
       updateBinLocally(id, { zone });
     } catch (e) { console.error("Failed to update zone", e); }
+  };
+
+  const assignMentorToBin = async (id: string, mentorEmpId: string) => {
+    try {
+      if (!canManageBin(id)) {
+        toast.error('You can only manage bins from your assigned council.');
+        return;
+      }
+      const res = await fetch(`${BINS_API}/${id}/assign-mentor`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ mentorEmpId: mentorEmpId ? Number(mentorEmpId) : null }),
+      });
+      const payload = await res.json().catch(() => ({} as { success?: boolean; message?: string; data?: { assignedToEmpId?: number; assignedToName?: string } }));
+      if (!res.ok || payload.success === false) {
+        throw new Error(payload.message || 'Mentor assignment failed');
+      }
+      const mentorFromList = mentors.find((m) => String(m.empId) === mentorEmpId);
+      updateBinLocally(id, {
+        assignedToEmpId: mentorEmpId ? Number(mentorEmpId) : undefined,
+        assignedToName: mentorEmpId
+          ? (payload.data?.assignedToName ?? mentorFromList?.empName ?? `Mentor #${mentorEmpId}`)
+          : undefined,
+      });
+      toast.success(mentorEmpId ? 'Mentor assigned' : 'Mentor unassigned');
+      setContextMenu(null);
+    } catch (e) {
+      console.error('Failed to assign mentor', e);
+      toast.error(e instanceof Error ? e.message : 'Failed to assign mentor');
+    }
+  };
+
+  const adminCollectBin = async (id: string) => {
+    try {
+      if (!canManageBin(id)) {
+        toast.error('You can only manage bins from your assigned council.');
+        return;
+      }
+      const res = await fetch(`${BINS_API}/${id}/admin-collect`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error('Admin collect failed');
+      updateBinLocally(id, { status: 'empty', fillLevel: 0 });
+      toast.success('Bin marked as collected');
+      setContextMenu(null);
+    } catch (e) {
+      console.error('Failed to mark bin collected', e);
+      toast.error('Failed to mark bin as collected');
+    }
   };
 
   // Restores active route sessions — only the latest is visible by default (W4)
@@ -3177,6 +3315,11 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
             <span>Manage Bin</span>
             <button onClick={() => setContextMenu(null)} className="text-muted-foreground hover:text-muted-foreground">✕</button>
           </div>
+          {markers.get(contextMenu.binId)?.data.hasDiscrepancy && (
+            <div className="mx-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[10px] font-semibold text-amber-800">
+              Status discrepancy reported
+            </div>
+          )}
           <div className="px-2 py-0.5">
             <label className="text-[10px] text-muted-foreground font-bold block mb-1 uppercase tracking-wider">Priority</label>
             <select className="w-full text-xs border border-border rounded p-1.5 bg-muted focus:ring focus:ring-green-200 outline-none"
@@ -3187,13 +3330,47 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               <option value="high">High</option>
             </select>
           </div>
-          <div className="px-2 py-0.5 text-xs text-[var(--glass-text-muted)]">
-            <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Zone</span>
-            <p className="mt-1 font-medium text-[var(--glass-text)]">
-              {markers.get(contextMenu.binId)?.data.zone || '—'}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Assigned by system</p>
+          <div className="px-2 py-0.5">
+            <label className="text-[10px] text-muted-foreground font-bold block mb-1 uppercase tracking-wider">Assign mentor</label>
+            {markers.get(contextMenu.binId)?.data.assignedToName ? (
+              <p className="mb-1 text-xs font-medium text-green-700">
+                {markers.get(contextMenu.binId)?.data.assignedToName}
+              </p>
+            ) : (
+              <p className="mb-1 text-xs text-muted-foreground">Unassigned</p>
+            )}
+            <select
+              className="w-full text-xs border border-border rounded p-1.5 bg-muted focus:ring focus:ring-green-200 outline-none"
+              value={markers.get(contextMenu.binId)?.data.assignedToEmpId ? String(markers.get(contextMenu.binId)?.data.assignedToEmpId) : ''}
+              onChange={(e) => assignMentorToBin(contextMenu.binId, e.target.value)}
+            >
+              <option value="">Unassign</option>
+              {mentors.map((m) => (
+                <option key={m.empId} value={String(m.empId)}>
+                  {m.empName || `Mentor #${m.empId}`}
+                </option>
+              ))}
+            </select>
           </div>
+          <div className="px-2 py-0.5">
+            <label className="text-[10px] text-muted-foreground font-bold block mb-1 uppercase tracking-wider">Zone</label>
+            <select
+              className="w-full text-xs border border-border rounded p-1.5 bg-muted focus:ring focus:ring-green-200 outline-none"
+              value={markers.get(contextMenu.binId)?.data.zone || 'unassigned'}
+              onChange={(e) => updateZone(contextMenu.binId, e.target.value)}
+            >
+              {ZONE_OPTIONS.map((zone) => (
+                <option key={zone} value={zone}>{zone}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => adminCollectBin(contextMenu.binId)}
+            disabled={!canManageBin(contextMenu.binId)}
+            className="text-left px-2 py-2 text-xs text-green-700 hover:bg-green-50 rounded-md transition-colors font-bold disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Mark as collected
+          </button>
           <hr className="my-1 border-border" />
           <button onClick={() => removeBin(contextMenu.binId)}
             disabled={!canManageBin(contextMenu.binId)}

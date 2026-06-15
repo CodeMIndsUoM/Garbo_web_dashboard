@@ -33,7 +33,7 @@ export function ThemeToggle() {
       type="button"
       variant="outline"
       size="sm"
-      className="h-9 gap-2 border-border bg-card px-3 text-foreground hover:bg-accent"
+      className="h-9 w-full gap-2 border-border bg-card px-3 text-foreground hover:bg-accent"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
