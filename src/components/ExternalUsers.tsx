@@ -27,6 +27,7 @@ import {
   filterComplaintsByCouncil,
   isPendingComplaint,
   patchComplaintStatus,
+  storeRoutePrefillFromComplaint,
 } from '@/lib/complaints';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -149,7 +150,13 @@ function categoryBadgeClass(category?: string) {
   return 'bg-blue-100 text-blue-800';
 }
 
-export function ExternalUsers({ council }: { council?: { name?: string } | null }) {
+export function ExternalUsers({
+  council,
+  onNavigateToMap,
+}: {
+  council?: { name?: string } | null;
+  onNavigateToMap?: () => void;
+}) {
   const [tab, setTab] = useState<Tab>('citizens');
 
   const primaryTabs: NavItem<Tab>[] = [
@@ -167,7 +174,11 @@ export function ExternalUsers({ council }: { council?: { name?: string } | null 
 
       <PagePrimaryTabs items={primaryTabs} active={tab} onChange={setTab} />
 
-      {tab === 'citizens' ? <CitizensTab council={council} /> : <CollectorsTab council={council} />}
+      {tab === 'citizens' ? (
+        <CitizensTab council={council} onNavigateToMap={onNavigateToMap} />
+      ) : (
+        <CollectorsTab council={council} />
+      )}
     </div>
   );
 }
@@ -176,7 +187,13 @@ function councilQuery(councilName?: string): string {
   return councilName ? `?council=${encodeURIComponent(councilName)}` : '';
 }
 
-function CitizensTab({ council }: { council?: { name?: string } | null }) {
+function CitizensTab({
+  council,
+  onNavigateToMap,
+}: {
+  council?: { name?: string } | null;
+  onNavigateToMap?: () => void;
+}) {
   const [section, setSection] = useState<CitizensSection>('users');
   const [citizens, setCitizens] = useState<CitizenUser[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
@@ -542,6 +559,19 @@ function CitizensTab({ council }: { council?: { name?: string } | null }) {
                             </Button>
                           </>
                         )}
+                        {(complaint.status || '').toUpperCase() === 'APPROVED' ||
+                        (complaint.status || '').toUpperCase() === 'ACCEPTED' ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              storeRoutePrefillFromComplaint(complaint);
+                              onNavigateToMap?.();
+                            }}
+                          >
+                            Send to route
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   );

@@ -19,6 +19,9 @@ export interface BinRealtimeMessage {
   photoUrl?: string;
   reporterName?: string;
   reportedAt?: string;
+  hasDiscrepancy?: boolean;
+  discrepancy?: boolean;
+  previousStatus?: string;
 }
 
 /** Normalize backend status strings for UI comparisons. */

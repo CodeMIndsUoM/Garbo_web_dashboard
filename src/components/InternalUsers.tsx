@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { HardHat, Trash2, Users } from 'lucide-react';
+import { HardHat, MapPin, Trash2, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 import { isSuperadmin } from '@/lib/auth';
@@ -23,7 +23,18 @@ import {
   type NavItem,
 } from './layout/management-ui';
 
-type InternalSection = 'field-staff' | 'bin-collectors';
+import {
+  binSuggestionImageUrl,
+  binSuggestionStatusBadgeClass,
+  binSuggestionStatusLabel,
+  binSuggestionTitle,
+  filterBinSuggestionsByCouncil,
+  isPendingBinSuggestion,
+  patchBinSuggestionStatus,
+  type BinSuggestionItem,
+} from '@/lib/bin-suggestions';
+
+type InternalSection = 'field-staff' | 'bin-collectors' | 'bin-suggestions';
 type StaffRole = 'FIELD_MENTOR' | 'BIN_COLLECTOR';
 
 interface InternalUser {
@@ -63,6 +74,18 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [editUser, setEditUser] = useState<InternalUser | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  const [suggestions, setSuggestions] = useState<BinSuggestionItem[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [actingSuggestionId, setActingSuggestionId] = useState<number | null>(null);
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<number | null>(null);
+  const [suggestionDetail, setSuggestionDetail] = useState<BinSuggestionItem | null>(null);
+  const [suggestionDetailLoading, setSuggestionDetailLoading] = useState(false);
+  const [suggestionResolutionNotes, setSuggestionResolutionNotes] = useState('');
 
   const activeRole: StaffRole = section === 'field-staff' ? 'FIELD_MENTOR' : 'BIN_COLLECTOR';
 
@@ -108,6 +131,75 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
       setCreateCouncil(council.name);
     }
   }, [council?.name]);
+
+  const loadSuggestions = async () => {
+    setSuggestionsLoading(true);
+    try {
+      const { response, data } = await apiFetch<BinSuggestionItem[]>('/api/bin-suggestions');
+      if (!response.ok) {
+        toast.error('Failed to load bin suggestions');
+        setSuggestions([]);
+        return;
+      }
+      const raw = Array.isArray(data) ? data : [];
+      const filtered = filterBinSuggestionsByCouncil(raw, council?.name);
+      filtered.sort((a, b) => {
+        const aPending = isPendingBinSuggestion(a.status) ? 0 : 1;
+        const bPending = isPendingBinSuggestion(b.status) ? 0 : 1;
+        if (aPending !== bPending) return aPending - bPending;
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+      setSuggestions(filtered);
+    } catch {
+      toast.error('Network error while loading bin suggestions');
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSuggestions();
+  }, [council?.id]);
+
+  const openSuggestion = async (id: number) => {
+    setSelectedSuggestionId(id);
+    setSuggestionDetailLoading(true);
+    try {
+      const { data } = await apiFetch<BinSuggestionItem>(`/api/bin-suggestions/${id}`);
+      setSuggestionDetail(data);
+      setSuggestionResolutionNotes(data.resolutionNotes || '');
+    } catch {
+      toast.error('Could not load suggestion details');
+      setSelectedSuggestionId(null);
+    } finally {
+      setSuggestionDetailLoading(false);
+    }
+  };
+
+  const updateSuggestion = async (
+    id: number,
+    status: 'APPROVED' | 'REJECTED',
+    notes?: string,
+  ) => {
+    setActingSuggestionId(id);
+    try {
+      await patchBinSuggestionStatus(id, status, notes);
+      toast.success(status === 'APPROVED' ? 'Bin suggestion approved' : 'Bin suggestion rejected');
+      if (selectedSuggestionId === id) {
+        setSelectedSuggestionId(null);
+        setSuggestionDetail(null);
+        setSuggestionResolutionNotes('');
+      }
+      void loadSuggestions();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update bin suggestion');
+    } finally {
+      setActingSuggestionId(null);
+    }
+  };
 
   const resetForm = () => {
     setFullName('');
@@ -224,6 +316,42 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
     }
   };
 
+  const openEditUser = (user: InternalUser) => {
+    setEditUser(user);
+    setEditName(user.empName || '');
+    setEditPhone('');
+  };
+
+  const saveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editUser) return;
+    setEditSaving(true);
+    try {
+      const isMentor = isFieldStaff(editUser);
+      const path = isMentor
+        ? `/api/admins/staff/field-mentors/${editUser.empId}`
+        : `/api/admins/staff/bin-collectors/${editUser.empId}`;
+      const { response, data } = await apiFetch<ApiListResponse<unknown>>(path, {
+        method: 'PUT',
+        body: JSON.stringify({
+          fullName: editName.trim(),
+          contactNumber: editPhone.trim() || undefined,
+        }),
+      });
+      if (!response.ok) {
+        toast.error(data?.message || 'Failed to update user');
+        return;
+      }
+      toast.success('User updated');
+      setEditUser(null);
+      void loadData();
+    } catch {
+      toast.error('Network error while updating user');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const internalSections: NavItem<InternalSection>[] = [
     {
       id: 'field-staff',
@@ -239,10 +367,23 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
       count: binCollectors.length,
       description: 'Bin collectors assigned to council routes.',
     },
+    {
+      id: 'bin-suggestions',
+      label: 'Bin Suggestions',
+      icon: <MapPin className="size-4" />,
+      count: suggestions.filter((s) => isPendingBinSuggestion(s.status)).length,
+      description: 'Review new bin location suggestions from field mentors.',
+    },
   ];
 
-  const sectionTitle = section === 'field-staff' ? 'Field Staff' : 'Bin Collectors';
+  const sectionTitle =
+    section === 'field-staff'
+      ? 'Field Staff'
+      : section === 'bin-collectors'
+        ? 'Bin Collectors'
+        : 'Bin Suggestions';
   const createLabel = section === 'field-staff' ? 'Create Field Staff' : 'Create Bin Collector';
+  const showStaffManagement = section !== 'bin-suggestions';
 
   return (
     <div className="p-8 space-y-6">
@@ -260,6 +401,8 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
       />
 
       <div className="space-y-6">
+      {showStaffManagement ? (
+      <>
       <Card>
         <CardHeader>
           <CardTitle>{createLabel}</CardTitle>
@@ -338,7 +481,85 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
           </form>
         </CardContent>
       </Card>
+      </>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Field Mentor Bin Suggestions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {suggestionsLoading ? (
+              <p className="text-muted-foreground">Loading suggestions...</p>
+            ) : suggestions.length === 0 ? (
+              <p className="text-muted-foreground">No bin suggestions found.</p>
+            ) : (
+              <div className="space-y-3">
+                {suggestions.map((suggestion) => {
+                  const pending = isPendingBinSuggestion(suggestion.status);
+                  const isActing = actingSuggestionId === suggestion.id;
+                  return (
+                    <div
+                      key={suggestion.id}
+                      className="p-4 border border-border rounded-lg hover:border-green-300 hover:bg-green-50/30 transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void openSuggestion(suggestion.id)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <p className="text-foreground font-medium">{binSuggestionTitle(suggestion)}</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {suggestion.location || 'No location'}
+                        </p>
+                        {suggestion.mentorName && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Suggested by: {suggestion.mentorName}
+                          </p>
+                        )}
+                        {suggestion.category && (
+                          <p className="text-xs text-muted-foreground mt-1">Category: {suggestion.category}</p>
+                        )}
+                        {suggestion.createdAt && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(suggestion.createdAt).toLocaleString()}
+                          </p>
+                        )}
+                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge className={binSuggestionStatusBadgeClass(suggestion.status)}>
+                          {binSuggestionStatusLabel(suggestion.status)}
+                        </Badge>
+                        {pending && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700"
+                              disabled={isActing}
+                              onClick={() => void updateSuggestion(suggestion.id, 'APPROVED')}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isActing}
+                              onClick={() => void updateSuggestion(suggestion.id, 'REJECTED')}
+                            >
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
+      {showStaffManagement ? (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -377,10 +598,15 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <TableRowActions
-                          onHide={() => void hideUser(user.empId)}
-                          onDelete={() => void deleteUser(user.empId)}
-                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => openEditUser(user)}>
+                            Edit
+                          </Button>
+                          <TableRowActions
+                            onHide={() => void hideUser(user.empId)}
+                            onDelete={() => void deleteUser(user.empId)}
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -390,6 +616,162 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
           )}
         </CardContent>
       </Card>
+      ) : null}
+      {editUser ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit {editUser.empName || `User #${editUser.empId}`}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={saveEditUser}>
+              <FormPanel>
+                <FormField label="Full name" htmlFor="edit-full-name">
+                  <Input
+                    id="edit-full-name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    required
+                  />
+                </FormField>
+                <FormField label="Contact number" htmlFor="edit-contact">
+                  <Input
+                    id="edit-contact"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="Leave blank to keep current"
+                  />
+                </FormField>
+              </FormPanel>
+              <FormActions>
+                <Button type="button" variant="outline" onClick={() => setEditUser(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="brand" disabled={editSaving}>
+                  {editSaving ? 'Saving...' : 'Save changes'}
+                </Button>
+              </FormActions>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {selectedSuggestionId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <h3 className="text-lg font-semibold text-foreground">
+                Bin Suggestion #{selectedSuggestionId}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSuggestionId(null);
+                  setSuggestionDetail(null);
+                }}
+                className="text-muted-foreground hover:text-muted-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {suggestionDetailLoading ? (
+                <p className="text-muted-foreground">Loading...</p>
+              ) : suggestionDetail ? (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge className={binSuggestionStatusBadgeClass(suggestionDetail.status)}>
+                      {binSuggestionStatusLabel(suggestionDetail.status)}
+                    </Badge>
+                    {suggestionDetail.mentorName && (
+                      <span className="text-xs text-muted-foreground">
+                        Mentor: {suggestionDetail.mentorName}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {binSuggestionTitle(suggestionDetail)}
+                    </p>
+                    {suggestionDetail.category && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Category: {suggestionDetail.category}
+                      </p>
+                    )}
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {suggestionDetail.location || 'No location provided'}
+                    </p>
+                    {suggestionDetail.notes && (
+                      <p className="text-sm text-foreground mt-3 whitespace-pre-wrap">
+                        {suggestionDetail.notes}
+                      </p>
+                    )}
+                  </div>
+                  {binSuggestionImageUrl(suggestionDetail.imageUrl) && (
+                    <img
+                      src={binSuggestionImageUrl(suggestionDetail.imageUrl)!}
+                      alt="Suggestion"
+                      className="rounded-lg border border-border max-h-48 object-cover w-full"
+                    />
+                  )}
+                  {suggestionDetail.resolutionNotes && (
+                    <div className="rounded-lg bg-muted p-3">
+                      <p className="text-xs font-medium text-muted-foreground">Resolution notes</p>
+                      <p className="text-sm text-foreground mt-1">{suggestionDetail.resolutionNotes}</p>
+                    </div>
+                  )}
+                  {suggestionDetail.createdBinId && (
+                    <p className="text-sm text-status-success">
+                      Created bin ID: {suggestionDetail.createdBinId}
+                    </p>
+                  )}
+                  {isPendingBinSuggestion(suggestionDetail.status) && (
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <FormField label="Resolution notes (optional)" htmlFor="suggestion-notes">
+                        <Input
+                          id="suggestion-notes"
+                          placeholder="Add notes for the mentor"
+                          value={suggestionResolutionNotes}
+                          onChange={(e) => setSuggestionResolutionNotes(e.target.value)}
+                        />
+                      </FormField>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          disabled={actingSuggestionId === suggestionDetail.id}
+                          onClick={() =>
+                            void updateSuggestion(
+                              suggestionDetail.id,
+                              'REJECTED',
+                              suggestionResolutionNotes,
+                            )
+                          }
+                        >
+                          Reject
+                        </Button>
+                        <Button
+                          className="bg-green-600 hover:bg-green-700"
+                          disabled={actingSuggestionId === suggestionDetail.id}
+                          onClick={() =>
+                            void updateSuggestion(
+                              suggestionDetail.id,
+                              'APPROVED',
+                              suggestionResolutionNotes,
+                            )
+                          }
+                        >
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-muted-foreground">Suggestion not found.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
