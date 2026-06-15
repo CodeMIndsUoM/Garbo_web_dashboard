@@ -93,7 +93,7 @@ function AuthenticatedShell({
       case 'map':
         return <MapView council={activeCouncil} />;
       case 'external-users':
-        return <ExternalUsers council={activeCouncil} />;
+        return <ExternalUsers council={activeCouncil} onNavigateToMap={() => setCurrentPage('map')} />;
       case 'gamification':
         return <GamificationManagement />;
       case 'internal-users':

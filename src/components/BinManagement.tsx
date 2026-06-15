@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Trash2, MapPin, CircleAlert, Gauge, CircleCheck, Search, Plus, Loader2 } from 'lucide-react';
+import { Trash2, MapPin, CircleAlert, Gauge, CircleCheck, Search, Plus, Loader2, Pencil, TriangleAlert } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -16,6 +16,7 @@ import { apiFetch } from '@/lib/api';
 import { useBinRealtime } from '@/hooks/useBinRealtime';
 import { applyCollectionVisualUpdate, normalizeBinStatus } from '@/lib/bin-realtime';
 import { BinReportDetailDialog, type BinReportDetail } from './bin/BinReportDetailDialog';
+import { BinDiscrepancyBanner } from './bin/BinDiscrepancyBanner';
 
 const BINS_API = '/api/bins';
 const COUNCILS = [
@@ -36,6 +37,19 @@ interface Bin {
   status: string;
   coordinates: string;
   isAssigned?: boolean;
+  assignedToName?: string;
+  assignedToEmpId?: number;
+  priority?: 'low' | 'medium' | 'high';
+  hasDiscrepancy?: boolean;
+  discrepancyStatus?: string;
+  discrepancyPreviousStatus?: string;
+  discrepancyReporterName?: string;
+}
+
+interface StaffMember {
+  empId: number;
+  empName?: string;
+  role?: string;
 }
 
 export function BinManagement({ council, userRole }: { council?: { name?: string } | null; userRole?: 'admin' | 'superadmin' | null }) {
@@ -45,6 +59,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editBin, setEditBin] = useState<Bin | null>(null);
+  const [mentors, setMentors] = useState<StaffMember[]>([]);
+  const [assigningBinId, setAssigningBinId] = useState<number | null>(null);
   const [councilFilterUnavailable, setCouncilFilterUnavailable] = useState(false);
   const [selectedBin, setSelectedBin] = useState<Bin | null>(null);
   const selectedBinRef = useRef<Bin | null>(null);
@@ -93,6 +110,24 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     fetchBins();
   }, [council?.name]);
 
+  const loadMentors = async () => {
+    try {
+      const query = council?.name ? `?council=${encodeURIComponent(council.name)}` : '';
+      const { data: result } = await apiFetch<{ success?: boolean; data?: StaffMember[] }>(
+        `/api/admins/staff${query}`
+      );
+      if (result.success && Array.isArray(result.data)) {
+        setMentors(result.data.filter((s) => (s.role || '').toUpperCase().includes('MENTOR')));
+      }
+    } catch {
+      setMentors([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadMentors();
+  }, [council?.name]);
+
   const loadLatestReport = async (bin: Bin) => {
     setReportLoading(true);
     try {
@@ -130,6 +165,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     setReportLoading(false);
   };
 
+  const displayStatus = (bin: Bin) =>
+    bin.hasDiscrepancy && bin.discrepancyStatus ? bin.discrepancyStatus : bin.status;
+
   useBinRealtime({
     councilName: council?.name ?? null,
     onUpdate: (msg) => {
@@ -139,10 +177,38 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         if (idx === -1) return prev;
         const next = [...prev];
         const current = next[idx];
+        const collected =
+          msg.type === 'BIN_COLLECTED' && msg.collectionStatus?.toUpperCase() === 'COLLECTED';
+        const reportedDiscrepancy =
+          msg.type === 'BIN_STATUS_UPDATED' && msg.discrepancy === true;
+        const reportedStatus = visual.status
+          ? normalizeBinStatus(visual.status)
+          : current.discrepancyStatus ?? current.status;
+
         next[idx] = {
           ...current,
-          status: visual.status ?? current.status,
+          status: collected
+            ? (visual.status ?? 'empty')
+            : reportedDiscrepancy
+              ? reportedStatus
+              : (visual.status ?? current.status),
           fillLevel: visual.fillLevel ?? current.fillLevel,
+          ...(collected
+            ? {
+                hasDiscrepancy: false,
+                discrepancyStatus: undefined,
+                discrepancyPreviousStatus: undefined,
+                discrepancyReporterName: undefined,
+              }
+            : {}),
+          ...(reportedDiscrepancy
+            ? {
+                hasDiscrepancy: true,
+                discrepancyStatus: reportedStatus,
+                discrepancyPreviousStatus: msg.previousStatus ?? current.discrepancyPreviousStatus,
+                discrepancyReporterName: msg.reporterName ?? current.discrepancyReporterName,
+              }
+            : {}),
         };
         return next;
       });
@@ -163,6 +229,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             photoUrl: msg.photoUrl ?? prev?.photoUrl ?? null,
             reporterName: msg.reporterName ?? prev?.reporterName ?? null,
             reportedAt: msg.reportedAt ?? prev?.reportedAt ?? null,
+            discrepancy: msg.discrepancy ?? prev?.discrepancy,
+            previousStatus: msg.previousStatus ?? prev?.previousStatus ?? null,
           }));
         }
         setSelectedBin((prev) =>
@@ -171,6 +239,48 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                 ...prev,
                 status: visual.status ?? prev.status,
                 fillLevel: visual.fillLevel ?? prev.fillLevel,
+                ...(msg.type === 'BIN_COLLECTED' &&
+                msg.collectionStatus?.toUpperCase() === 'COLLECTED'
+                  ? {
+                      hasDiscrepancy: false,
+                      discrepancyStatus: undefined,
+                      discrepancyPreviousStatus: undefined,
+                      discrepancyReporterName: undefined,
+                    }
+                  : {}),
+                ...(msg.type === 'BIN_STATUS_UPDATED' && msg.discrepancy === true
+                  ? {
+                      hasDiscrepancy: true,
+                      discrepancyStatus: normalizeBinStatus(visual.status ?? prev.status),
+                      discrepancyPreviousStatus: msg.previousStatus ?? prev.discrepancyPreviousStatus,
+                      discrepancyReporterName: msg.reporterName ?? prev.discrepancyReporterName,
+                    }
+                  : {}),
+              }
+            : prev
+        );
+      }
+
+      if (
+        msg.type === 'BIN_COLLECTED' &&
+        msg.collectionStatus?.toUpperCase() === 'COLLECTED' &&
+        activeBin?.id === msg.binId
+      ) {
+        setSelectedReport({
+          binId: msg.binId,
+          binCode: activeBin.binCode,
+          council: activeBin.council,
+          status: 'empty',
+          fillLevel: 0,
+          discrepancy: false,
+        });
+        setSelectedBin((prev) =>
+          prev && prev.id === msg.binId
+            ? {
+                ...prev,
+                status: visual.status ?? 'empty',
+                fillLevel: visual.fillLevel ?? 0,
+                hasDiscrepancy: false,
               }
             : prev
         );
@@ -239,6 +349,77 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
     }
   };
 
+  const handleAssignMentor = async (binId: number, mentorEmpId: string) => {
+    setAssigningBinId(binId);
+    try {
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string; data?: Bin }>(
+        `${BINS_API}/${binId}/assign-mentor`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            mentorEmpId: mentorEmpId ? Number(mentorEmpId) : null,
+          }),
+        }
+      );
+      if (response.ok && result.success) {
+        toast.success(mentorEmpId ? 'Mentor assigned' : 'Mentor unassigned');
+        fetchBins();
+      } else {
+        toast.error(result.message || 'Failed to assign mentor');
+      }
+    } catch {
+      toast.error('Failed to assign mentor');
+    } finally {
+      setAssigningBinId(null);
+    }
+  };
+
+  const openEditModal = (bin: Bin) => {
+    setEditBin(bin);
+    setNewBin({
+      binCode: bin.binCode || '',
+      location: bin.location || bin.coordinates || '',
+      type: 'General Waste',
+      zone: bin.zone || '',
+      status: normalizeBinStatus(bin.status),
+      coordinates: bin.coordinates || bin.location || '',
+      priority: bin.priority || 'medium',
+    });
+  };
+
+  const handleUpdateBin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBin) return;
+    try {
+      const parts = newBin.location.split(',').map((p) => p.trim());
+      const lat = parts.length >= 2 ? Number(parts[0]) : undefined;
+      const lng = parts.length >= 2 ? Number(parts[1]) : undefined;
+      const { response, data: result } = await apiFetch<{ success?: boolean; message?: string }>(
+        `${BINS_API}/${editBin.id}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            binCode: newBin.binCode,
+            location: newBin.location,
+            priority: newBin.priority,
+            ...(lat != null && lng != null && !Number.isNaN(lat) && !Number.isNaN(lng)
+              ? { latitude: lat, longitude: lng }
+              : {}),
+          }),
+        }
+      );
+      if (response.ok && result.success) {
+        toast.success('Bin updated');
+        setEditBin(null);
+        fetchBins();
+      } else {
+        toast.error(result.message || 'Failed to update bin');
+      }
+    } catch {
+      toast.error('Failed to update bin');
+    }
+  };
+
   const normalizeStatus = (status: string) => normalizeBinStatus(status);
 
   const councilBins = useMemo(() => {
@@ -253,17 +434,20 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const binCounts = useMemo(
     () => ({
       total: councilBins.length,
-      full: councilBins.filter((b) => normalizeStatus(b.status) === 'full').length,
-      half: councilBins.filter((b) => normalizeStatus(b.status) === 'half').length,
-      empty: councilBins.filter((b) => normalizeStatus(b.status) === 'empty').length,
+      full: councilBins.filter((b) => normalizeStatus(displayStatus(b)) === 'full').length,
+      half: councilBins.filter((b) => normalizeStatus(displayStatus(b)) === 'half').length,
+      empty: councilBins.filter((b) => normalizeStatus(displayStatus(b)) === 'empty').length,
+      discrepancies: councilBins.filter((b) => b.hasDiscrepancy).length,
     }),
     [councilBins]
   );
 
   const councilScopedBins = useMemo(() => {
     let result = councilBins;
-    if (statusFilter) {
-      result = result.filter((b) => normalizeStatus(b.status) === statusFilter);
+    if (statusFilter === 'discrepancy') {
+      result = result.filter((b) => b.hasDiscrepancy);
+    } else if (statusFilter) {
+      result = result.filter((b) => normalizeStatus(displayStatus(b)) === statusFilter);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -351,8 +535,20 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         onPriorityChange={(value) => setNewBin((p) => ({ ...p, priority: value }))}
         onSubmit={handleCreateBin}
       />
+      <AddBinGlassModal
+        open={Boolean(editBin)}
+        onClose={() => setEditBin(null)}
+        mode="edit"
+        nextBinCode={newBin.binCode}
+        onBinCodeChange={(value) => setNewBin((p) => ({ ...p, binCode: value }))}
+        location={newBin.location}
+        onLocationChange={(value) => setNewBin((p) => ({ ...p, location: value }))}
+        priority={newBin.priority}
+        onPriorityChange={(value) => setNewBin((p) => ({ ...p, priority: value }))}
+        onSubmit={handleUpdateBin}
+      />
 
-      <StatCardGrid columns={4} className="mb-8">
+      <StatCardGrid columns={5} className="mb-8">
         <StatCard
           label="Total Bins"
           value={binCounts.total}
@@ -384,6 +580,17 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           iconClassName="text-brand-500"
           active={statusFilter === 'empty'}
           onClick={() => handleStatusCardClick('empty')}
+        />
+        <StatCard
+          label="Discrepancies"
+          value={binCounts.discrepancies}
+          valueClassName="text-amber-600"
+          icon={TriangleAlert}
+          iconClassName="text-amber-500"
+          active={statusFilter === 'discrepancy'}
+          activeClassName="border-amber-400 ring-amber-400/40"
+          onClick={() => handleStatusCardClick('discrepancy')}
+          detail="Reported full/half while marked empty"
         />
       </StatCardGrid>
 
@@ -434,10 +641,20 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
               {councilScopedBins.map((bin) => (
                 <TableRow
                   key={bin.id}
-                  className="cursor-pointer"
+                  className={`cursor-pointer ${bin.hasDiscrepancy ? 'bg-amber-50/50 hover:bg-amber-50' : ''}`}
                   onClick={() => openBinDetail(bin)}
                 >
-                  <TableCell className="font-medium">{bin.binCode}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{bin.binCode}</span>
+                      {bin.hasDiscrepancy && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 text-[10px] px-1.5 py-0">
+                          <CircleAlert className="mr-1 h-3 w-3" />
+                          Discrepancy
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="max-w-[220px]">
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -445,24 +662,55 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        bin.isAssigned
-                          ? 'border-green-200 bg-green-50 text-green-700'
-                          : 'border-border bg-muted text-muted-foreground'
-                      }
-                    >
-                      {bin.isAssigned ? 'Assigned' : 'Not Assigned'}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      {bin.assignedToName ? (
+                        <span className="text-xs font-medium text-green-700">{bin.assignedToName}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unassigned</span>
+                      )}
+                      <select
+                        className="h-8 max-w-[160px] rounded border border-border bg-background px-2 text-xs"
+                        value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
+                        disabled={assigningBinId === bin.id}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          void handleAssignMentor(bin.id, e.target.value);
+                        }}
+                      >
+                        <option value="">Unassign</option>
+                        {mentors.map((m) => (
+                          <option key={m.empId} value={String(m.empId)}>
+                            {m.empName || `Mentor #${m.empId}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </TableCell>
                   <TableCell>
-                    <span className={`font-semibold ${statusTextClass(bin.status)}`}>
-                      {statusLabel(bin.status)}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className={`font-semibold ${statusTextClass(displayStatus(bin))}`}>
+                        {statusLabel(displayStatus(bin))}
+                      </span>
+                      {bin.hasDiscrepancy && (
+                        <div className="mt-2 max-w-xs">
+                          <BinDiscrepancyBanner bin={bin} compact />
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(bin);
+                        }}
+                        className="p-1.5 text-muted-foreground hover:text-brand-600"
+                        aria-label="Edit bin"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -485,17 +733,27 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           {councilScopedBins.map((bin) => (
             <Card
               key={bin.id}
-              className="hover:shadow-lg transition-all duration-300 border-border group overflow-hidden relative cursor-pointer"
+              className={`hover:shadow-lg transition-all duration-300 border-border group overflow-hidden relative cursor-pointer ${
+                bin.hasDiscrepancy ? 'ring-2 ring-amber-300/80 border-amber-200' : ''
+              }`}
               onClick={() => openBinDetail(bin)}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && openBinDetail(bin)}
             >
-              <div className={`absolute top-0 left-0 right-0 h-1.5 ${statusBarClass(bin.status)}`} />
+              <div className={`absolute top-0 left-0 right-0 h-1.5 ${statusBarClass(displayStatus(bin))}`} />
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-foreground font-semibold mb-1">{bin.binCode}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-foreground font-semibold">{bin.binCode}</h3>
+                      {bin.hasDiscrepancy && (
+                        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 text-[10px] px-1.5 py-0">
+                          <CircleAlert className="mr-1 h-3 w-3" />
+                          Discrepancy
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="w-4 h-4" />
                       <span className="line-clamp-1">{bin.location}</span>
@@ -524,13 +782,47 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                   </div>
                 </div>
 
+                {bin.hasDiscrepancy && (
+                  <div className="mb-4">
+                    <BinDiscrepancyBanner bin={bin} />
+                  </div>
+                )}
+
                 <div className="space-y-4">
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Field mentor</span>
+                    <div className="mt-1 flex flex-col gap-1">
+                      {bin.assignedToName ? (
+                        <span className="text-xs font-medium text-green-700">{bin.assignedToName}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unassigned</span>
+                      )}
+                      <select
+                        className="h-8 w-full rounded border border-border bg-background px-2 text-xs"
+                        value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
+                        disabled={assigningBinId === bin.id}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          void handleAssignMentor(bin.id, e.target.value);
+                        }}
+                      >
+                        <option value="">Unassign</option>
+                        {mentors.map((m) => (
+                          <option key={m.empId} value={String(m.empId)}>
+                            {m.empName || `Mentor #${m.empId}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   {/* Fill Level */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-muted-foreground">Fill Status</span>
-                      <span className={`text-sm font-bold ${statusTextClass(bin.status)}`}>
-                        {statusLabel(bin.status)}
+                      <span className={`text-sm font-bold ${statusTextClass(displayStatus(bin))}`}>
+                        {statusLabel(displayStatus(bin))}
                       </span>
                     </div>
                   </div>
