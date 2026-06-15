@@ -11,6 +11,8 @@ WORKDIR /app
 ARG NEXT_PUBLIC_API_BASE=http://localhost:8081
 ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
 ENV NEXT_TELEMETRY_DISABLED=1
+# Allow Next.js font optimization to build without reaching Google Fonts in Docker/CI
+ENV NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
