@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.git/
+.idea/
+.vscode/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+tsconfig.tsbuildinfo
+build/
+PLAN_*.md
+frontend.log
+frontend.pid
