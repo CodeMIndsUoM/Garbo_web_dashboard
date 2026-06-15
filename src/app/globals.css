@@ -1,84 +1,9 @@
 @import "leaflet/dist/leaflet.css";
+@import "../theme/tokens.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-
-:root {
-  --font-size: 16px;
-  --background: #ffffff;
-  --foreground: #171717;
-  --card: #ffffff;
-  --card-foreground: #171717;
-  --popover: #ffffff;
-  --popover-foreground: #171717;
-  --primary: #030213;
-  --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
-  --destructive: #d4183d;
-  --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
-  --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --ring: #a3a3a3;
-  --chart-1: #ea580c;
-  --chart-2: #16a34a;
-  --chart-3: #334155;
-  --chart-4: #ca8a04;
-  --chart-5: #d97706;
-  --radius: 0.625rem;
-  --sidebar: #fafafa;
-  --sidebar-foreground: #171717;
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #f5f5f5;
-  --sidebar-accent-foreground: #262626;
-  --sidebar-border: #e5e5e5;
-  --sidebar-ring: #a3a3a3;
-}
-
-.dark {
-  --background: #171717;
-  --foreground: #fafafa;
-  --card: #171717;
-  --card-foreground: #fafafa;
-  --popover: #171717;
-  --popover-foreground: #fafafa;
-  --primary: #fafafa;
-  --primary-foreground: #262626;
-  --secondary: #404040;
-  --secondary-foreground: #fafafa;
-  --muted: #404040;
-  --muted-foreground: #a3a3a3;
-  --accent: #404040;
-  --accent-foreground: #fafafa;
-  --destructive: #7f1d1d;
-  --destructive-foreground: #ef4444;
-  --border: #404040;
-  --input: #404040;
-  --ring: #525252;
-  --chart-1: #6366f1;
-  --chart-2: #14b8a6;
-  --chart-3: #d97706;
-  --chart-4: #a855f7;
-  --chart-5: #ec4899;
-  --sidebar: #262626;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #6366f1;
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #404040;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #404040;
-  --sidebar-ring: #525252;
-}
 
 @layer base {
   * {
@@ -130,7 +55,36 @@ html {
 }
 
 .leaflet-container {
-  background: #f8fafc !important;
+  background: var(--surface-page) !important;
+}
+
+/* Dim map tiles in dark mode — UI overlays stay full brightness */
+.dark .garbo-map-root .leaflet-tile-pane {
+  filter: brightness(var(--map-brightness)) contrast(var(--map-contrast));
+}
+
+.dark .garbo-map-root .leaflet-container {
+  background: var(--surface-page) !important;
+}
+
+/* Recharts — axis, legend, and grid follow theme tokens */
+.dark .recharts-cartesian-grid line {
+  stroke: var(--chart-grid);
+}
+
+.dark .recharts-text,
+.dark .recharts-legend-item-text {
+  fill: var(--muted-foreground) !important;
+}
+
+.dark .recharts-default-tooltip {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+
+.recharts-tooltip-cursor {
+  fill: var(--chart-cursor) !important;
 }
 
 .leaflet-container:focus,
@@ -145,3 +99,197 @@ html {
   border: none !important;
 }
 
+/* Auth / login layout — explicit classes so shadow & radius always apply */
+@layer components {
+  .garbo-auth-shell {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-page);
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-shell {
+      flex-direction: row;
+    }
+  }
+
+  .garbo-auth-form-column {
+    display: flex;
+    width: 100%;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1.5rem;
+    order: 1;
+    background: var(--auth-form-column-bg, var(--surface-page));
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-form-column {
+      width: 46%;
+      max-width: 46%;
+      flex: 0 0 46%;
+      padding: 3rem 2.75rem;
+      justify-content: center;
+    }
+  }
+
+  .garbo-auth-form-stack {
+    width: 100%;
+    max-width: 26rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .garbo-auth-brand-header {
+    padding: 0 0.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-brand-header {
+      padding-bottom: 0.25rem;
+    }
+  }
+
+  .garbo-auth-form-card {
+    width: 100%;
+    padding: 2rem 2.25rem;
+    border-radius: var(--radius-auth-card);
+    border: 1px solid var(--surface-border);
+    background: var(--auth-form-backdrop);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-auth-card);
+  }
+
+  @media (min-width: 640px) {
+    .garbo-auth-form-card {
+      padding: 2.5rem 2.75rem;
+    }
+  }
+
+  .garbo-auth-hero-column {
+    position: relative;
+    order: 2;
+    min-height: 280px;
+    width: 100%;
+    flex: 1;
+    overflow: hidden;
+    background-color: var(--brand-800);
+    background-image: var(--auth-hero-image);
+    background-size: cover;
+    background-position: center;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-hero-column {
+      width: 54%;
+      max-width: 54%;
+      flex: 0 0 54%;
+      min-height: 100vh;
+      height: 100vh;
+    }
+  }
+
+  .garbo-auth-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(145deg,
+        var(--auth-hero-brand-tint) 0%,
+        var(--auth-hero-overlay) 50%,
+        rgb(15 23 42 / 0.58) 100%);
+    backdrop-filter: blur(1px);
+  }
+
+  .garbo-auth-hero-inner {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 2rem 1.75rem;
+    color: #fff;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-hero-inner {
+      padding: 2.5rem 3rem 2.25rem;
+    }
+  }
+
+  .garbo-auth-hero-header {
+    flex-shrink: 0;
+  }
+
+  .garbo-auth-hero-main {
+    margin-top: auto;
+    width: 100%;
+    max-width: 32rem;
+    padding-top: 2rem;
+    padding-bottom: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .garbo-auth-hero-main {
+      padding-bottom: 1rem;
+    }
+  }
+
+  .garbo-auth-hero-footer {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: rgb(255 255 255 / 0.7);
+    padding-top: 0.25rem;
+  }
+
+  .garbo-auth-hero-rotator {
+    width: 100%;
+    max-width: 30rem;
+  }
+
+  .garbo-auth-hero-title {
+    font-size: clamp(1.35rem, 2.4vw, 2rem);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 16px rgb(0 0 0 / 0.35);
+  }
+
+  .garbo-auth-hero-body {
+    margin-top: 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: rgb(255 255 255 / 0.92);
+    text-shadow: 0 1px 10px rgb(0 0 0 / 0.3);
+    max-width: 28rem;
+  }
+
+  .garbo-auth-hero-dots {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .garbo-auth-hero-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: rgb(255 255 255 / 0.35);
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+
+  .garbo-auth-hero-dot--active {
+    width: 1.5rem;
+    background: rgb(255 255 255 / 0.95);
+  }
+
+  .garbo-auth-hero-dot:hover {
+    background: rgb(255 255 255 / 0.65);
+  }
+}

@@ -1,9 +1,18 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Trash2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
+import {
+  AnalyticsChartCard,
+  AnalyticsErrorBanner,
+  AnalyticsPageHeader,
+  AnalyticsPageShell,
+  AnalyticsStatCard,
+  CHART,
+  type PieChartEntry,
+} from './layout/analytics-ui';
+import { AnalyticsDonutChart } from './layout/AnalyticsDonutChart';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
@@ -28,10 +37,10 @@ interface ZoneData {
 }
 
 const statusColors = {
-  empty:      '#10b981',
-  half:       '#3b82f6',
-  full:       '#ef4444',
-  notChecked: '#94a3b8',
+  empty: CHART.brand,
+  half: '#FACC15',
+  full: CHART.alert,
+  notChecked: '#d1d5db',
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
@@ -73,113 +82,108 @@ export function BinAnalytics({
       });
   }, [council?.name]);
 
+  const fillStatusPie: PieChartEntry[] = zoneData.reduce(
+    (acc, zone) => {
+      acc[0].value += zone.empty;
+      acc[1].value += zone.half;
+      acc[2].value += zone.full;
+      acc[3].value += zone.notChecked;
+      return acc;
+    },
+    [
+      { name: 'Empty', value: 0, color: CHART.brand },
+      { name: 'Half', value: 0, color: CHART.neutral },
+      { name: 'Full', value: 0, color: CHART.alert },
+      { name: 'Not Checked', value: 0, color: '#d1d5db' },
+    ] as PieChartEntry[]
+  ).filter((item) => item.value > 0);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50/30">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-          <p className="text-gray-500 font-medium">Loading bin analytics...</p>
-        </div>
-      </div>
+      <AnalyticsPageShell>
+        <AnalyticsPageHeader
+          title="Bin Analytics"
+          subtitle={
+            council?.name
+              ? `${council.name} — real-time bin monitoring across zones`
+              : 'Detailed real-time monitoring of bin status across zones'
+          }
+          onBack={onBack}
+        />
+        <div className="py-20 text-center text-sm text-gray-500">Loading bin analytics...</div>
+      </AnalyticsPageShell>
     );
   }
 
   return (
-    <div className="p-8 bg-gray-50/30 min-h-screen">
+    <AnalyticsPageShell>
+      <AnalyticsPageHeader
+        title="Bin Analytics"
+        subtitle={
+          council?.name
+            ? `${council.name} — real-time bin monitoring across zones`
+            : 'Detailed real-time monitoring of bin status across zones'
+        }
+        onBack={onBack}
+      />
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-full shadow-sm hover:bg-gray-100 transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Bin Analytics</h1>
-            <p className="text-gray-500 text-lg">
-              {council?.name
-                ? `${council.name} — real-time bin monitoring across zones`
-                : 'Detailed real-time monitoring of bin status across zones'}
-            </p>
-          </div>
-        </div>
-      </div>
+      {error ? <AnalyticsErrorBanner message={error} /> : null}
 
-      {/* Error */}
-      {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          ⚠️ {error}
-        </div>
-      )}
-
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-
-        <Card className="border-none bg-white shadow-md ring-1 ring-gray-100 hover:shadow-lg transition-all duration-300">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Total Active Bins</CardTitle>
-            <div className="p-2.5 bg-blue-50 rounded-xl">
-              <Trash2 className="w-5 h-5 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 mb-1">{totalBins}</div>
-            <div className="text-sm text-green-600 flex items-center gap-1 font-medium">
-              <CheckCircle2 className="w-4 h-4" />
-              Operational
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none bg-gradient-to-br from-white to-red-50/30 shadow-md ring-1 ring-gray-100 hover:shadow-lg transition-all duration-300">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Urgent to Collect</CardTitle>
-            <div className="p-2.5 bg-red-50 rounded-xl">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-600 mb-1">{urgentBins}</div>
-            <div className="text-sm text-red-500 font-medium">Full bins — immediate action needed</div>
-          </CardContent>
-        </Card>
-
+        <AnalyticsStatCard
+          label="Total Active Bins"
+          value={totalBins}
+          detail="Operational across all zones"
+          icon={Trash2}
+        />
+        <AnalyticsStatCard
+          label="Urgent to Collect"
+          value={urgentBins}
+          detail="Full bins need immediate action"
+          icon={AlertTriangle}
+        />
       </div>
 
-      {/* Bar Chart */}
-      <Card className="border-none shadow-md ring-1 ring-gray-100 bg-white overflow-hidden mb-8">
-        <CardHeader className="border-b border-gray-50 bg-gray-50/50">
-          <CardTitle className="text-lg font-bold text-gray-800">Bin Status by Zone</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          {zoneData.length === 0 ? (
-            <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-              No zone data available
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={zoneData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 13 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 13 }} />
-                <Tooltip
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                <Bar dataKey="empty"      name="Empty"       stackId="a" fill={statusColors.empty}      />
-                <Bar dataKey="half"       name="Half"        stackId="a" fill={statusColors.half}       />
-                <Bar dataKey="full"       name="Full"        stackId="a" fill={statusColors.full}       />
-                <Bar dataKey="notChecked" name="Not Checked" stackId="a" fill={statusColors.notChecked} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <AnalyticsChartCard
+          title="Fill Status Overview"
+          subtitle="Council-wide bin status from zone data"
+          className="lg:col-span-1"
+        >
+          <AnalyticsDonutChart
+            data={fillStatusPie}
+            centerValue={totalBins}
+            centerLabel="Total bins"
+            height={280}
+          />
+        </AnalyticsChartCard>
 
-      {/* Priority Table */}
-      <Card className="border-none shadow-md ring-1 ring-gray-100 bg-white overflow-hidden">
-        <CardHeader className="border-b border-gray-50 bg-gray-50/50">
-          <CardTitle className="text-lg font-bold text-gray-800">Priority Breakdown by Zone</CardTitle>
+        <AnalyticsChartCard title="Bin Status by Zone" className="lg:col-span-2">
+        {zoneData.length === 0 ? (
+          <div className="flex h-40 items-center justify-center text-sm text-gray-400">
+            No zone data available
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={zoneData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART.grid} />
+              <XAxis dataKey="zone" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 13 }} dy={10} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 13 }} />
+              <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={CHART.tooltipStyle} />
+              <Legend wrapperStyle={{ paddingTop: '20px' }} />
+              <Bar dataKey="empty" name="Empty" stackId="a" fill={statusColors.empty} />
+              <Bar dataKey="half" name="Half" stackId="a" fill={statusColors.half} />
+              <Bar dataKey="full" name="Full" stackId="a" fill={statusColors.full} />
+              <Bar dataKey="notChecked" name="Not Checked" stackId="a" fill={statusColors.notChecked} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+        </AnalyticsChartCard>
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-gray-100 pb-4">
+          <CardTitle className="text-gray-900">Priority Breakdown by Zone</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="overflow-x-auto">
@@ -229,6 +233,6 @@ export function BinAnalytics({
         </CardContent>
       </Card>
 
-    </div>
+    </AnalyticsPageShell>
   );
 }

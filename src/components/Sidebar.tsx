@@ -1,6 +1,17 @@
 'use client';
 
-import { LayoutDashboard, Trash2, Truck, BarChart3, Map as MapIcon, Shield, UserCircle, Trophy } from 'lucide-react';
+import { LayoutDashboard, Trash2, Truck, Map as MapIcon, Shield, UserCircle, Trophy, FileText } from 'lucide-react';
+import { AuthBrandLogo } from '@/components/brand/AuthBrandLogo';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
+import { useCouncil, type CouncilFilterId } from '@/lib/council-context';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -11,33 +22,38 @@ interface SidebarProps {
   selectedCouncil?: { name?: string } | null;
 }
 
+const DASHBOARD_DRILL_PAGES: PageType[] = [
+  'total-collection',
+  'bin-analytics',
+  'staff-analytics',
+  'complaint-analytics',
+  'third-party-analytics',
+  'vehicle-analytics',
+  'bin-report-analytics',
+];
+
 export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selectedCouncil }: SidebarProps) {
+  const { isSuperadmin, selectedCouncilId, setSelectedCouncilId, councils } = useCouncil();
   const menuItems = [
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
     { id: 'vehicles' as PageType, label: 'Vehicle Management', icon: Truck },
     { id: 'map' as PageType, label: 'Map', icon: MapIcon },
-    { id: 'analytics' as PageType, label: 'Analytics', icon: BarChart3 },
+    { id: 'reports' as PageType, label: 'Reports', icon: FileText },
     { id: 'external-users' as PageType, label: 'External Users', icon: UserCircle },
     { id: 'gamification' as PageType, label: 'Gamification', icon: Trophy },
     { id: 'internal-users' as PageType, label: 'Internal Users', icon: Shield },
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-            <Trash2 className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-gray-900">Garbo</h1>
-            <p className="text-xs text-gray-500">Management System</p>
-          </div>
-        </div>
-        {/* Council name display */}
+    <aside className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      <div className="border-b border-sidebar-border p-6">
+        <AuthBrandLogo size="sm" />
         {selectedCouncil && selectedCouncil.name && (
-          <div className="mt-4 text-sm font-semibold text-green-700 truncate" title={selectedCouncil.name}>
+          <div
+            className="mt-4 truncate text-sm font-semibold text-brand-700 dark:text-brand-muted-foreground"
+            title={selectedCouncil.name}
+          >
             {selectedCouncil.name}
           </div>
         )}
@@ -47,19 +63,23 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
         <ul className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentPage === item.id;
-            
+            const isActive =
+              item.id === 'dashboard'
+                ? currentPage === 'dashboard' || DASHBOARD_DRILL_PAGES.includes(currentPage)
+                : item.id === 'internal-users'
+                  ? currentPage === 'internal-users' || currentPage === 'staff-notifications'
+                  : currentPage === item.id;
+
             return (
               <li key={item.id}>
                 <button
                   onClick={() => onPageChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-green-50 text-green-700'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                  className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 transition-colors ${isActive
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                      : 'text-sidebar-foreground hover:bg-accent'
+                    }`}
                 >
-                  <Icon className="w-5 h-5 shrink-0" />
+                  <Icon className="h-5 w-5 shrink-0" />
                   <span className="whitespace-nowrap">{item.label}</span>
                 </button>
               </li>
@@ -68,36 +88,82 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-200">
+      <div className="border-t border-sidebar-border p-4">
         {userRole && (
-          <div className={`rounded-xl border p-2 ${
-            userRole === 'superadmin' ? 'bg-purple-50 border-purple-100' : 'bg-blue-50 border-blue-100'
-          }`}>
+          <div
+            className={`rounded-xl border p-2 ${userRole === 'superadmin'
+                ? 'border-brand-200 bg-brand-muted dark:border-brand-200/30'
+                : 'border-border bg-secondary'
+              }`}
+          >
             <button
               onClick={() => {
                 if (userRole === 'superadmin') {
                   onPageChange('admin-assignment');
-                }
-                if (userRole === 'admin') {
+                } else if (userRole === 'admin') {
                   onPageChange('admin-edit-password');
                 }
               }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors select-none ${
-                userRole === 'superadmin'
-                  ? 'hover:bg-purple-100 cursor-pointer'
-                  : 'hover:bg-blue-100 cursor-pointer'
-              }`}
-              disabled={userRole !== 'superadmin' && userRole !== 'admin'}
+              className={`flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 transition-colors ${userRole === 'superadmin' ? 'hover:bg-brand-100 dark:hover:bg-brand-muted' : 'hover:bg-accent'
+                }`}
             >
-              <Shield className={`w-4 h-4 shrink-0 ${
-                userRole === 'superadmin' ? 'text-purple-600' : 'text-blue-600'
-              }`} />
-              <span className={`text-xs font-medium capitalize ${
-                userRole === 'superadmin' ? 'text-purple-700' : 'text-blue-700'
-              }`}>
+              <Shield
+                className={`h-4 w-4 shrink-0 ${userRole === 'superadmin' ? 'text-brand-600 dark:text-brand-500' : 'text-status-info'
+                  }`}
+              />
+              <span
+                className={`text-xs font-medium capitalize ${userRole === 'superadmin' ? 'text-brand-700 dark:text-brand-muted-foreground' : 'text-foreground'
+                  }`}
+              >
                 {userRole === 'superadmin' ? 'Superadmin' : 'Admin'}
               </span>
             </button>
+            {userRole === 'superadmin' ? (
+              <button
+                onClick={() => onPageChange('admin-edit-password')}
+                className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+              >
+                Change password
+              </button>
+            ) : null}
+            {isSuperadmin ? (
+              <div className="mt-2 px-1">
+                <label
+                  htmlFor="sidebar-council-filter"
+                  className="mb-1.5 block px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  Council filter
+                </label>
+                <Select
+                  value={selectedCouncilId}
+                  onValueChange={(value) => setSelectedCouncilId(value as CouncilFilterId)}
+                >
+                  <SelectTrigger
+                    id="sidebar-council-filter"
+                    className="h-8 w-full rounded-lg border-border bg-card px-2 text-xs text-foreground shadow-sm"
+                    aria-label="Select council"
+                  >
+                    <SelectValue placeholder="Select council" />
+                  </SelectTrigger>
+                  <SelectContent align="start" className="min-w-[12rem] border-border bg-popover text-popover-foreground">
+                    <SelectItem value="all">All Councils</SelectItem>
+                    {councils.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className="mt-2 flex items-center gap-2 px-1">
+              <div className="min-w-0 flex-1">
+                <ThemeToggle />
+              </div>
+              <div className="flex shrink-0 items-center rounded-lg border border-border bg-card">
+                <NotificationBell menuSide="top" />
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -4,14 +4,13 @@ import { useEffect, useState } from 'react';
 import { decodeJwtPayload } from '@/lib/jwt';
 import {
   CouncilProvider,
-  CouncilTopBar,
   useCouncil,
   type Council,
 } from '@/lib/council-context';
+import { NotificationProvider } from '@/lib/notification-context';
 import { Dashboard } from '@/components/Dashboard';
 import { BinManagement } from '@/components/BinManagement';
 import { VehicleManagement } from '@/components/VehicleManagement';
-import { WasteAnalytics } from '@/components/WasteAnalytics';
 import { Reports } from '@/components/Reports';
 import { Sidebar } from '@/components/Sidebar';
 import { Login } from '@/components/Login';
@@ -28,6 +27,7 @@ import { BinReportAnalytics } from '@/components/BinReportAnalytics';
 import { ExternalUsers } from '@/components/ExternalUsers';
 import { GamificationManagement } from '@/components/GamificationManagement';
 import { InternalUsers } from '@/components/InternalUsers';
+import { StaffNotifications } from '@/components/StaffNotifications';
 import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
@@ -37,10 +37,10 @@ export type PageType =
   | 'bins'
   | 'map'
   | 'vehicles'
-  | 'analytics'
   | 'external-users'
   | 'gamification'
   | 'internal-users'
+  | 'staff-notifications'
   | 'reports'
   | 'admin-assignment'
   | 'admin-edit-password'
@@ -78,7 +78,12 @@ function AuthenticatedShell({
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard council={activeCouncil} />;
+        return (
+          <Dashboard
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+            council={activeCouncil}
+          />
+        );
       case 'bins':
         return (
           <BinManagement council={activeCouncil} userRole={userRole} />
@@ -89,30 +94,35 @@ function AuthenticatedShell({
         );
       case 'map':
         return <MapView council={activeCouncil} />;
-      case 'analytics':
-        return (
-          <WasteAnalytics
-            onNavigate={(page) => setCurrentPage(page as PageType)}
-            council={activeCouncil}
-          />
-        );
       case 'external-users':
-        return <ExternalUsers council={activeCouncil} />;
+        return <ExternalUsers council={activeCouncil} onNavigateToMap={() => setCurrentPage('map')} />;
       case 'gamification':
         return <GamificationManagement />;
       case 'internal-users':
-        return <InternalUsers council={activeCouncil} />;
+        return (
+          <InternalUsers
+            council={activeCouncil}
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+          />
+        );
+      case 'staff-notifications':
+        return (
+          <StaffNotifications
+            council={activeCouncil}
+            onBack={() => setCurrentPage('internal-users')}
+          />
+        );
       case 'total-collection':
         return (
           <TotalCollection
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'bin-analytics':
         return (
           <BinAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             onNavigate={(page) => setCurrentPage(page as PageType)}
             council={activeCouncil}
           />
@@ -120,35 +130,35 @@ function AuthenticatedShell({
       case 'staff-analytics':
         return (
           <StaffAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'complaint-analytics':
         return (
           <ComplaintAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'third-party-analytics':
         return (
           <ThirdPartyAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'vehicle-analytics':
         return (
           <VehicleAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
       case 'bin-report-analytics':
         return (
           <BinReportAnalytics
-            onBack={() => setCurrentPage('analytics')}
+            onBack={() => setCurrentPage('dashboard')}
             council={activeCouncil}
           />
         );
@@ -173,12 +183,17 @@ function AuthenticatedShell({
           <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />
         );
       default:
-        return <Dashboard council={activeCouncil} />;
+        return (
+          <Dashboard
+            onNavigate={(page) => setCurrentPage(page as PageType)}
+            council={activeCouncil}
+          />
+        );
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}
@@ -186,8 +201,7 @@ function AuthenticatedShell({
         userRole={userRole}
         selectedCouncil={activeCouncil}
       />
-      <main className="flex-1 overflow-auto">
-        <CouncilTopBar />
+      <main className="relative flex-1 overflow-auto">
         {renderPage()}
       </main>
     </div>
@@ -201,6 +215,7 @@ export default function Home() {
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [lockedCouncil, setLockedCouncil] = useState<Council | null>(null);
+  const [adminUserId, setAdminUserId] = useState<number | null>(null);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
@@ -262,6 +277,9 @@ export default function Home() {
             (roleFromToken as UserRole) ||
             (sessionStorage.getItem('role') as UserRole);
           setUserRole(role);
+          const storedUserId = sessionStorage.getItem('userId');
+          const parsedUserId = storedUserId ? Number(storedUserId) : NaN;
+          setAdminUserId(Number.isFinite(parsedUserId) && parsedUserId > 0 ? parsedUserId : null);
           if (role === 'admin') {
             try {
               const storedCouncil = sessionStorage.getItem('council');
@@ -299,6 +317,7 @@ export default function Home() {
     setLockedCouncil(null);
     setIsAuthenticated(false);
     setUserRole(null);
+    setAdminUserId(null);
   };
 
   const handleLogin = (opts?: { mustChangePassword?: boolean }) => {
@@ -322,6 +341,9 @@ export default function Home() {
 
     const role = sessionStorage.getItem('role') as UserRole;
     setUserRole(role);
+    const storedUserId = sessionStorage.getItem('userId');
+    const parsedUserId = storedUserId ? Number(storedUserId) : NaN;
+    setAdminUserId(Number.isFinite(parsedUserId) && parsedUserId > 0 ? parsedUserId : null);
     if (role === 'admin') {
       try {
         const stored = sessionStorage.getItem('council');
@@ -349,13 +371,15 @@ export default function Home() {
 
   return (
     <CouncilProvider userRole={userRole} lockedCouncil={lockedCouncil}>
-      <AuthenticatedShell
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        userRole={userRole}
-        onLogout={handleLogout}
-        onLoginAfterPasswordChange={handleLogin}
-      />
+      <NotificationProvider userId={adminUserId} onNavigate={setCurrentPage}>
+        <AuthenticatedShell
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          userRole={userRole}
+          onLogout={handleLogout}
+          onLoginAfterPasswordChange={handleLogin}
+        />
+      </NotificationProvider>
     </CouncilProvider>
   );
 }

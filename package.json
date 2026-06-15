@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "bash scripts/dev.sh",
+    "stop:dev": "node scripts/stop-dev.mjs",
     "dev:turbo": "next dev --turbo",
     "build": "next build --webpack",
     "start": "next start",
