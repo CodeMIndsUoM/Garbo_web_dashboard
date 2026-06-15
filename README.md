@@ -4,6 +4,12 @@ Admin dashboard UI for the Garbo Smart Waste Management System, built with **Nex
 
 > CD: push to `devops/platform` deploys to AWS EC2 via GitHub Actions.
 
+## Production
+
+- **Live URL**: http://13.233.77.40/
+- **API base** (baked at build time): `http://13.233.77.40` — do not add `/api` suffix
+- **Deploy branch**: `devops/platform` (CI tests, CD deploys frontend only)
+
 ## Prerequisites
 
 - **Node.js** (recommended: latest LTS)
