@@ -38,7 +38,7 @@ interface ZoneData {
 
 const statusColors = {
   empty: CHART.brand,
-  half: CHART.neutral,
+  half: '#FACC15',
   full: CHART.alert,
   notChecked: '#d1d5db',
 };

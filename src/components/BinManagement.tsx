@@ -495,7 +495,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const statusBarClass = (status: string) => {
     const key = normalizeBinStatus(status);
     if (key === 'full') return 'bg-red-500';
-    if (key === 'half') return 'bg-gray-400';
+    if (key === 'half') return 'bg-yellow-400';
     if (key === 'empty') return 'bg-green-600';
     return 'bg-gray-200';
   };
@@ -503,6 +503,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   const statusTextClass = (status: string) => {
     const key = normalizeBinStatus(status);
     if (key === 'full') return 'text-red-600';
+    if (key === 'half') return 'text-yellow-700';
+    if (key === 'empty') return 'text-green-700';
     return 'text-foreground';
   };
 
@@ -568,8 +570,9 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
         <StatCard
           label="Half"
           value={binCounts.half}
+          valueClassName="text-yellow-600"
           icon={Gauge}
-          iconClassName="text-amber-400"
+          iconClassName="text-yellow-500"
           active={statusFilter === 'half'}
           onClick={() => handleStatusCardClick('half')}
         />
