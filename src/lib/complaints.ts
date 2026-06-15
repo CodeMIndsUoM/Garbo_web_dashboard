@@ -78,6 +78,29 @@ export function filterComplaintsByCouncil(
   });
 }
 
+function parseComplaintLatLng(location?: string): { lat?: number; lng?: number } {
+  if (!location) return {};
+  const parts = location.split(',').map((p) => p.trim());
+  if (parts.length < 2) return {};
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return {};
+  return { lat, lng };
+}
+
+export function storeRoutePrefillFromComplaint(complaint: ComplaintItem): void {
+  if (typeof window === 'undefined') return;
+  const { lat, lng } = parseComplaintLatLng(complaint.location);
+  sessionStorage.setItem(
+    'garbo_route_prefill',
+    JSON.stringify({
+      complaintIds: [complaint.id],
+      lat,
+      lng,
+    }),
+  );
+}
+
 export async function patchComplaintStatus(
   id: number,
   status: ComplaintDecision,

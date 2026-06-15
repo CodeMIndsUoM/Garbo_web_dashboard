@@ -128,84 +128,157 @@
 }
 
 .dark {
-  --brand-50: #052e16;
-  --brand-100: #14532d;
-  --brand-200: #166534;
-  --brand-500: #22c55e;
-  --brand-600: #22c55e;
-  --brand-700: #16a34a;
-  --brand-800: #bbf7d0;
-  --brand-muted: rgb(22 163 74 / 0.15);
-  --brand-muted-foreground: #86efac;
+  /*
+   * Dark theme — aligned with Garbo-flutter AppColors (colors.dart).
+   * Surfaces stay neutral; accents use lighter tints for contrast on #1a1a1a.
+   */
 
-  --surface-page: #0f172a;
-  --surface-elevated: #1e293b;
-  --surface-subtle: #334155;
-  --surface-border: #475569;
-  --surface-topbar: #1e293b;
+  /* Brand — bright greens for text/icons, deeper green for button fills */
+  --brand-50: #0d2218;
+  --brand-100: #143528;
+  --brand-200: #1f4d38;
+  --brand-500: #4ade80;
+  --brand-600: #15803d;
+  --brand-700: #166534;
+  --brand-800: #4ade80;
+  --brand-primary: #15803d;
+  --brand-primary-hover: #166534;
+  --brand-primary-foreground: #ffffff;
+  --brand-muted: #143528;
+  --brand-muted-foreground: #4ade80;
+  --brand-ring: #4ade80;
 
-  --status-danger: #f87171;
-  --status-danger-muted: rgb(127 29 29 / 0.35);
-  --status-danger-border: rgb(248 113 113 / 0.35);
+  /* Surfaces */
+  --surface-page: #1a1a1a;
+  --surface-elevated: #242424;
+  --surface-subtle: #2a2a2a;
+  --surface-border: #3d3d3d;
+  --surface-topbar: #242424;
+
+  /* Status — lighter text on dark tinted fills */
+  --status-danger: #fca5a5;
+  --status-danger-muted: #2a1515;
+  --status-danger-border: #6b3a3a;
   --status-info: #60a5fa;
-  --status-info-muted: rgb(30 58 138 / 0.35);
-  --status-info-border: rgb(96 165 250 / 0.35);
+  --status-info-muted: #142238;
+  --status-info-border: #1e3a5f;
   --status-success: #4ade80;
-  --status-success-muted: rgb(22 163 74 / 0.18);
-  --status-success-border: rgb(74 222 128 / 0.35);
-  --status-warning: #fbbf24;
-  --status-warning-muted: rgb(217 119 6 / 0.18);
-  --status-warning-border: rgb(251 191 36 / 0.35);
+  --status-success-muted: #142a1c;
+  --status-success-border: #2a5c3a;
+  --status-warning: #fcd34d;
+  --status-warning-muted: #3d3010;
+  --status-warning-border: #6b5525;
 
+  /* shadcn semantic */
   --background: var(--surface-page);
-  --foreground: #f1f5f9;
+  --foreground: #f0f0f0;
   --card: var(--surface-elevated);
-  --card-foreground: #f1f5f9;
+  --card-foreground: #f0f0f0;
   --popover: var(--surface-elevated);
-  --popover-foreground: #f1f5f9;
+  --popover-foreground: #f0f0f0;
   --primary: var(--brand-primary);
-  --primary-foreground: #ffffff;
-  --secondary: var(--surface-subtle);
-  --secondary-foreground: #f1f5f9;
-  --muted: var(--surface-subtle);
-  --muted-foreground: #94a3b8;
-  --accent: var(--surface-subtle);
-  --accent-foreground: #f1f5f9;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
+  --primary-foreground: var(--brand-primary-foreground);
+  --secondary: #2a2a2a;
+  --secondary-foreground: #e8e8e8;
+  --muted: #2a2a2a;
+  --muted-foreground: #a3a3a3;
+  --accent: #333333;
+  --accent-foreground: #f0f0f0;
+  --destructive: #f87171;
+  --destructive-foreground: #1a1a1a;
   --border: var(--surface-border);
-  --input: var(--surface-border);
-  --input-background: var(--surface-elevated);
-  --ring: var(--brand-500);
-  --chart-1: #818cf8;
-  --chart-2: #34d399;
-  --chart-3: #fbbf24;
+  --input: #404040;
+  --input-background: #2a2a2a;
+  --ring: var(--brand-ring);
+
+  /* Charts */
+  --chart-1: #60a5fa;
+  --chart-2: #4ade80;
+  --chart-3: #fcd34d;
   --chart-4: #c084fc;
-  --chart-5: #f472b6;
-  --sidebar: #1e293b;
-  --sidebar-foreground: #f1f5f9;
+  --chart-5: #fb923c;
+
+  /* Sidebar */
+  --sidebar: #1e1e1e;
+  --sidebar-foreground: #f0f0f0;
   --sidebar-primary: var(--brand-primary);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: var(--brand-muted);
-  --sidebar-accent-foreground: var(--brand-muted-foreground);
+  --sidebar-primary-foreground: var(--brand-primary-foreground);
+  --sidebar-accent: #2a2a2a;
+  --sidebar-accent-foreground: #4ade80;
   --sidebar-border: var(--surface-border);
   --sidebar-ring: var(--brand-ring);
 
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.35);
-  --shadow-elevated: 0 10px 40px -10px rgb(0 0 0 / 0.45);
-  --auth-form-backdrop: rgb(30 41 59 / 0.92);
+  /* Tailwind utility scales (overrides only in dark) */
+  --green-50: #142a1c;
+  --green-100: #1a3324;
+  --green-200: #2a5c3a;
+  --green-300: #3d7a52;
+  --green-400: #4ade80;
+  --green-500: #4ade80;
+  --green-600: #15803d;
+  --green-700: #166534;
+  --green-800: #86efac;
+  --green-900: #bbf7d0;
+
+  --gray-50: #2a2a2a;
+  --gray-100: #333333;
+  --gray-200: #404040;
+  --gray-300: #525252;
+  --gray-400: #737373;
+  --gray-500: #939393;
+  --gray-600: #ababab;
+  --gray-700: #c4c4c4;
+  --gray-800: #e0e0e0;
+  --gray-900: #f0f0f0;
+
+  --amber-50: #3d3010;
+  --amber-100: #4a3a12;
+  --amber-200: #6b5525;
+  --amber-300: #92702e;
+  --amber-400: #fbbf24;
+  --amber-500: #fcd34d;
+  --amber-600: #fde68a;
+  --amber-700: #fef3c7;
+  --amber-800: #fef9c3;
+  --amber-900: #fffbeb;
+
+  --red-50: #2a1515;
+  --red-100: #3d1a1a;
+  --red-200: #5c3030;
+  --red-300: #7f4444;
+  --red-400: #f87171;
+  --red-500: #fca5a5;
+  --red-600: #fca5a5;
+  --red-700: #fecaca;
+  --red-800: #fee2e2;
+  --red-900: #fef2f2;
+
+  --blue-50: #142238;
+  --blue-100: #1a3050;
+  --blue-200: #1e3a5f;
+  --blue-300: #2563a8;
+  --blue-400: #60a5fa;
+  --blue-500: #93c5fd;
+  --blue-600: #93c5fd;
+  --blue-700: #bfdbfe;
+  --blue-800: #dbeafe;
+  --blue-900: #eff6ff;
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.45), 0 1px 2px -1px rgb(0 0 0 / 0.45);
+  --shadow-elevated: 0 10px 40px -10px rgb(0 0 0 / 0.55);
+  --auth-form-backdrop: rgb(36 36 36 / 0.92);
   --auth-form-column-bg: var(--surface-page);
 
-  --glass-surface: rgb(30 41 59 / 0.78);
-  --glass-surface-solid: rgb(30 41 59 / 0.9);
-  --glass-border: rgb(71 85 105 / 0.55);
-  --glass-field: rgb(15 23 42 / 0.85);
-  --glass-text: #f1f5f9;
-  --glass-text-muted: #94a3b8;
+  --glass-surface: rgb(36 36 36 / 0.82);
+  --glass-surface-solid: rgb(36 36 36 / 0.92);
+  --glass-border: rgb(61 61 61 / 0.65);
+  --glass-field: rgb(26 26 26 / 0.88);
+  --glass-text: #f0f0f0;
+  --glass-text-muted: #a3a3a3;
 
-  --chart-grid: #334155;
-  --chart-neutral: #64748b;
-  --chart-cursor: rgb(51 65 85 / 0.45);
+  --chart-grid: #3d3d3d;
+  --chart-neutral: #939393;
+  --chart-cursor: rgb(42 42 42 / 0.5);
 
   --map-brightness: 0.72;
   --map-contrast: 0.92;
