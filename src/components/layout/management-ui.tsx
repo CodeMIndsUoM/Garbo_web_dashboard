@@ -43,7 +43,7 @@ function pageTabCountClass(isActive: boolean) {
 const pageTabListClass =
   'inline-flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1 shadow-sm';
 
-interface StatCardProps {
+export interface StatCardProps {
   label: string;
   value: React.ReactNode;
   detail?: string;
