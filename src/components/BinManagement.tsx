@@ -644,10 +644,10 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
               {councilScopedBins.map((bin) => (
                 <TableRow
                   key={bin.id}
-                  className={`cursor-pointer ${bin.hasDiscrepancy ? 'bg-amber-50/50 hover:bg-amber-50' : ''}`}
+                  className={`cursor-pointer align-middle ${bin.hasDiscrepancy ? 'bg-amber-50/50 hover:bg-amber-50' : ''}`}
                   onClick={() => openBinDetail(bin)}
                 >
-                  <TableCell className="font-medium">
+                  <TableCell className="align-middle font-medium">
                     <div className="flex items-center gap-2">
                       <span>{bin.binCode}</span>
                       {bin.hasDiscrepancy && (
@@ -658,51 +658,37 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[220px]">
+                  <TableCell className="align-middle max-w-[220px]">
                     <div className="flex items-center gap-1 text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{bin.location}</span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      {bin.assignedToName ? (
-                        <span className="text-xs font-medium text-green-700">{bin.assignedToName}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Unassigned</span>
-                      )}
-                      <select
-                        className="h-8 max-w-[160px] rounded border border-border bg-background px-2 text-xs"
-                        value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
-                        disabled={assigningBinId === bin.id}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          void handleAssignMentor(bin.id, e.target.value);
-                        }}
-                      >
-                        <option value="">Unassign</option>
-                        {mentors.map((m) => (
-                          <option key={m.empId} value={String(m.empId)}>
-                            {m.empName || `Mentor #${m.empId}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <TableCell className="align-middle">
+                    <select
+                      className="h-8 w-full max-w-[160px] rounded border border-border bg-background px-2 text-xs"
+                      value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
+                      disabled={assigningBinId === bin.id}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        void handleAssignMentor(bin.id, e.target.value);
+                      }}
+                    >
+                      <option value="">Unassigned</option>
+                      {mentors.map((m) => (
+                        <option key={m.empId} value={String(m.empId)}>
+                          {m.empName || `Mentor #${m.empId}`}
+                        </option>
+                      ))}
+                    </select>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span className={`font-semibold ${statusTextClass(displayStatus(bin))}`}>
-                        {statusLabel(displayStatus(bin))}
-                      </span>
-                      {bin.hasDiscrepancy && (
-                        <div className="mt-2 max-w-xs">
-                          <BinDiscrepancyBanner bin={bin} compact />
-                        </div>
-                      )}
-                    </div>
+                  <TableCell className="align-middle">
+                    <span className={`font-semibold ${statusTextClass(displayStatus(bin))}`}>
+                      {statusLabel(displayStatus(bin))}
+                    </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="align-middle">
                     <div className="flex justify-end gap-1">
                       <button
                         onClick={(e) => {
@@ -746,10 +732,10 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
             >
               <div className={`absolute top-0 left-0 right-0 h-1.5 ${statusBarClass(displayStatus(bin))}`} />
               <CardContent className="pt-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-foreground font-semibold">{bin.binCode}</h3>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-foreground">{bin.binCode}</h3>
                       {bin.hasDiscrepancy && (
                         <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 text-[10px] px-1.5 py-0">
                           <CircleAlert className="mr-1 h-3 w-3" />
@@ -757,17 +743,17 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
+                    <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4 shrink-0" />
                       <span className="line-clamp-1">{bin.location}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Badge
                       className={
                         bin.isAssigned
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-muted text-muted-foreground border-border'
+                          ? 'border-green-200 bg-green-50 text-green-700'
+                          : 'border-border bg-muted text-muted-foreground'
                       }
                       variant="outline"
                     >
@@ -778,58 +764,48 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
                         e.stopPropagation();
                         handleDeleteBin(bin.id);
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-600 transition-all"
+                      className="p-1 text-muted-foreground opacity-0 transition-all hover:text-red-600 group-hover:opacity-100"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
 
                 {bin.hasDiscrepancy && (
-                  <div className="mb-4">
-                    <BinDiscrepancyBanner bin={bin} />
+                  <div className="mb-3">
+                    <BinDiscrepancyBanner bin={bin} compact />
                   </div>
                 )}
 
                 <div className="space-y-4">
                   <div>
                     <span className="text-sm font-medium text-muted-foreground">Field mentor</span>
-                    <div className="mt-1 flex flex-col gap-1">
-                      {bin.assignedToName ? (
-                        <span className="text-xs font-medium text-green-700">{bin.assignedToName}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Unassigned</span>
-                      )}
-                      <select
-                        className="h-8 w-full rounded border border-border bg-background px-2 text-xs"
-                        value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
-                        disabled={assigningBinId === bin.id}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          void handleAssignMentor(bin.id, e.target.value);
-                        }}
-                      >
-                        <option value="">Unassign</option>
-                        {mentors.map((m) => (
-                          <option key={m.empId} value={String(m.empId)}>
-                            {m.empName || `Mentor #${m.empId}`}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <select
+                      className="mt-1 h-8 w-full rounded border border-border bg-background px-2 text-xs"
+                      value={bin.assignedToEmpId ? String(bin.assignedToEmpId) : ''}
+                      disabled={assigningBinId === bin.id}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        void handleAssignMentor(bin.id, e.target.value);
+                      }}
+                    >
+                      <option value="">Unassigned</option>
+                      {mentors.map((m) => (
+                        <option key={m.empId} value={String(m.empId)}>
+                          {m.empName || `Mentor #${m.empId}`}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Fill Level */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-muted-foreground">Fill Status</span>
-                      <span className={`text-sm font-bold ${statusTextClass(displayStatus(bin))}`}>
-                        {statusLabel(displayStatus(bin))}
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Fill Status</span>
+                    <span className={`text-sm font-bold ${statusTextClass(displayStatus(bin))}`}>
+                      {statusLabel(displayStatus(bin))}
+                    </span>
                   </div>
-
                 </div>
               </CardContent>
             </Card>
