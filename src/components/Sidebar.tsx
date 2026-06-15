@@ -1,7 +1,7 @@
 'use client';
 
 import { LayoutDashboard, Trash2, Truck, Map as MapIcon, Shield, UserCircle, Trophy, FileText } from 'lucide-react';
-import { AuthBrandLogo } from '@/components/brand/AuthBrandLogo';
+import { GarboBrand } from '@/components/brand/GarboIcon';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { useCouncil, type CouncilFilterId } from '@/lib/council-context';
@@ -48,7 +48,12 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
   return (
     <aside className="flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="border-b border-sidebar-border p-6">
-        <AuthBrandLogo size="sm" />
+        <div className="flex items-center justify-between gap-3">
+          <GarboBrand size="sm" />
+          <div className="ml-2 mt-0.5 flex shrink-0 items-center rounded-lg border border-border bg-card">
+            <NotificationBell menuSide="bottom" menuAlign="center" sideOffset={12} alignOffset={10} />
+          </div>
+        </div>
         {selectedCouncil && selectedCouncil.name && (
           <div
             className="mt-4 truncate text-sm font-semibold text-brand-700 dark:text-brand-muted-foreground"
@@ -156,13 +161,8 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
                 </Select>
               </div>
             ) : null}
-            <div className="mt-2 flex items-center gap-2 px-1">
-              <div className="min-w-0 flex-1">
-                <ThemeToggle />
-              </div>
-              <div className="flex shrink-0 items-center rounded-lg border border-border bg-card">
-                <NotificationBell menuSide="top" />
-              </div>
+            <div className="mt-2 px-1">
+              <ThemeToggle />
             </div>
           </div>
         )}

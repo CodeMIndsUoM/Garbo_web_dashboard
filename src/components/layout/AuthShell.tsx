@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AuthBrandLogo } from '@/components/brand/AuthBrandLogo';
+import { GarboBrand } from '@/components/brand/GarboIcon';
 import { AuthHeroRotator } from '@/components/layout/AuthHeroRotator';
 import { typography } from '@/theme';
 import { cn } from '@/components/ui/utils';
@@ -19,7 +19,7 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
       <div className="garbo-auth-form-column">
         <div className="garbo-auth-form-stack">
           <div className="garbo-auth-brand-header">
-            <AuthBrandLogo />
+            <GarboBrand size="lg" />
             <p className={`${typography.caption} mt-5 max-w-sm leading-relaxed text-muted-foreground`}>
               Council operations dashboard for bins, routes, and field teams.
             </p>
