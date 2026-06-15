@@ -555,7 +555,7 @@ export function WasteAnalytics({
   );
 
   return (
-    <div className="p-8">
+    <div className="p-3 sm:p-4 md:p-8">
       <PageHeader
         title="Dashboard"
         subtitle={
@@ -707,7 +707,7 @@ export function WasteAnalytics({
       </DashboardSection>
 
       <DashboardSection title="Live Analytics" description="Animated charts from real-time system data">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:grid-rows-[auto_auto]">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6 xl:grid-cols-12 xl:grid-rows-[auto_auto]">
           <AnalyticsChartCard
             className="xl:col-span-8 xl:row-start-1"
             title="Today's Field Activity"
@@ -826,7 +826,7 @@ export function WasteAnalytics({
           </AnalyticsChartCard>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:mt-6 sm:gap-4 md:gap-6 lg:grid-cols-2">
           <AnalyticsChartCard
             title="Complaint Overview"
             subtitle={`${activeCouncilLabel} — today's status and 30-day trend`}
@@ -839,7 +839,7 @@ export function WasteAnalytics({
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-center">
                     <p className="text-xs text-red-700">Pending</p>
                     <p className="text-lg font-semibold text-red-900">{complaintSummary?.pendingCount ?? 0}</p>

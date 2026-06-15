@@ -130,7 +130,7 @@ export function StaffNotifications({
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-4 p-3 sm:space-y-6 sm:p-4 md:p-8">
       <PageHeader
         title="Staff Notifications"
         subtitle="Send one-way messages to field mentors and bin collectors. Recipients see them in the mobile app inbox and cannot reply."

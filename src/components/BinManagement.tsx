@@ -509,7 +509,7 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
   };
 
   return (
-    <div className="p-8">
+    <div className="p-3 sm:p-4 md:p-8">
       <BinReportDetailDialog
         open={Boolean(selectedBin)}
         onClose={closeBinDetail}
@@ -603,8 +603,8 @@ export function BinManagement({ council, userRole }: { council?: { name?: string
           Council-specific bin filtering is not available from backend data yet, so all bins are shown for this section.
         </div>
       )}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="relative w-full max-w-md">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search bins by ID or location..."
