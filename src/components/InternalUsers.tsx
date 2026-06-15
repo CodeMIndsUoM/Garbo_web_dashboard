@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { HardHat, MapPin, Trash2, Users, X } from 'lucide-react';
+import { HardHat, MapPin, Megaphone, Trash2, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
+import { sendAdminDirectNotification } from '@/lib/admin-broadcast-api';
 import { isSuperadmin } from '@/lib/auth';
 import { COUNCILS } from '@/lib/council-context';
 import type { ApiListResponse } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { PageHeader } from './layout/PageHeader';
@@ -59,7 +61,13 @@ function isBinCollector(user: InternalUser): boolean {
   return role === 'BIN_COLLECTOR';
 }
 
-export function InternalUsers({ council }: { council?: { id?: string; name?: string } | null }) {
+export function InternalUsers({
+  council,
+  onNavigate,
+}: {
+  council?: { id?: string; name?: string } | null;
+  onNavigate?: (page: string) => void;
+}) {
   const [section, setSection] = useState<InternalSection>('field-staff');
   const [users, setUsers] = useState<InternalUser[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -78,6 +86,12 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+
+  const [directMessageSending, setDirectMessageSending] = useState(false);
+  const [messageUser, setMessageUser] = useState<InternalUser | null>(null);
+  const [directMessageTitle, setDirectMessageTitle] = useState('');
+  const [directMessageBody, setDirectMessageBody] = useState('');
+  const [directMessagePriority, setDirectMessagePriority] = useState<'NORMAL' | 'HIGH'>('NORMAL');
 
   const [suggestions, setSuggestions] = useState<BinSuggestionItem[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -131,6 +145,41 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
       setCreateCouncil(council.name);
     }
   }, [council?.name]);
+
+  const sendDirectMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messageUser) return;
+    if (!directMessageTitle.trim() || !directMessageBody.trim()) {
+      toast.error('Title and message are required');
+      return;
+    }
+
+    setDirectMessageSending(true);
+    try {
+      await sendAdminDirectNotification({
+        empId: messageUser.empId,
+        title: directMessageTitle.trim(),
+        body: directMessageBody.trim(),
+        priority: directMessagePriority,
+      });
+      toast.success(`Notification sent to ${messageUser.empName || messageUser.email || 'staff member'}`);
+      setMessageUser(null);
+      setDirectMessageTitle('');
+      setDirectMessageBody('');
+      setDirectMessagePriority('NORMAL');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setDirectMessageSending(false);
+    }
+  };
+
+  const openDirectMessage = (user: InternalUser) => {
+    setMessageUser(user);
+    setDirectMessageTitle('');
+    setDirectMessageBody('');
+    setDirectMessagePriority('NORMAL');
+  };
 
   const loadSuggestions = async () => {
     setSuggestionsLoading(true);
@@ -391,6 +440,17 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
         title="Internal Users"
         subtitle="Manage field staff and bin collectors for your council."
         extra={council?.name ? `Council context: ${council.name}` : undefined}
+        actions={
+          <Button
+            type="button"
+            variant="brand"
+            className="gap-2"
+            onClick={() => onNavigate?.('staff-notifications')}
+          >
+            <Megaphone className="size-4" />
+            New notification
+          </Button>
+        }
       />
 
       <PageSubSectionNav
@@ -599,6 +659,14 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDirectMessage(user)}
+                          >
+                            Notify
+                          </Button>
                           <Button type="button" size="sm" variant="outline" onClick={() => openEditUser(user)}>
                             Edit
                           </Button>
@@ -653,6 +721,73 @@ export function InternalUsers({ council }: { council?: { id?: string; name?: str
             </form>
           </CardContent>
         </Card>
+      ) : null}
+      {messageUser ? (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-border">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  Send notification
+                </h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  To {messageUser.empName || messageUser.email || `User #${messageUser.empId}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMessageUser(null)}
+                className="text-muted-foreground hover:text-muted-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={sendDirectMessage} className="p-5 space-y-4">
+              <FormField label="Title" htmlFor="direct-message-title">
+                <Input
+                  id="direct-message-title"
+                  placeholder="Notification title"
+                  value={directMessageTitle}
+                  onChange={(e) => setDirectMessageTitle(e.target.value)}
+                  maxLength={255}
+                  required
+                />
+              </FormField>
+              <FormField label="Message" htmlFor="direct-message-body">
+                <Textarea
+                  id="direct-message-body"
+                  placeholder="Write your message..."
+                  value={directMessageBody}
+                  onChange={(e) => setDirectMessageBody(e.target.value)}
+                  rows={4}
+                  maxLength={4000}
+                  required
+                />
+              </FormField>
+              <FormField label="Priority" htmlFor="direct-message-priority">
+                <FormSelect
+                  id="direct-message-priority"
+                  value={directMessagePriority}
+                  onChange={(e) => setDirectMessagePriority(e.target.value as 'NORMAL' | 'HIGH')}
+                >
+                  <option value="NORMAL">Normal</option>
+                  <option value="HIGH">High</option>
+                </FormSelect>
+              </FormField>
+              <p className="text-xs text-muted-foreground">
+                This is a one-way message. The recipient will see it in their mobile app inbox and cannot reply.
+              </p>
+              <div className="flex gap-2 justify-end pt-2">
+                <Button type="button" variant="outline" onClick={() => setMessageUser(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="brand" disabled={directMessageSending}>
+                  {directMessageSending ? 'Sending...' : 'Send notification'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       ) : null}
 
       {selectedSuggestionId !== null && (

@@ -9,14 +9,6 @@ import {
   type ReactNode,
 } from 'react';
 import type { UserRole } from '@/app/page';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export interface Council {
   id: string;
@@ -125,67 +117,4 @@ export function useCouncil(): CouncilContextValue {
     throw new Error('useCouncil must be used within CouncilProvider');
   }
   return ctx;
-}
-
-/** Global council filter bar — superadmin dropdown; council-admin read-only chip. */
-export function CouncilTopBar() {
-  const {
-    isSuperadmin,
-    displayLabel,
-    selectedCouncilId,
-    setSelectedCouncilId,
-    councils,
-  } = useCouncil();
-
-  if (!isSuperadmin) {
-    return (
-      <div className="flex items-center justify-between gap-4 border-b border-border bg-surface-topbar px-6 py-3">
-        <p className="text-sm text-muted-foreground">Showing data for council</p>
-        <div className="flex items-center gap-3">
-          <span className="rounded-lg border border-brand-200 bg-brand-muted px-3 py-1.5 text-xs font-semibold text-brand-700 dark:text-brand-muted-foreground">
-            {displayLabel}
-          </span>
-          <ThemeToggle />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center justify-between gap-4 border-b border-border bg-surface-topbar px-6 py-3">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Viewing</p>
-        <p className="text-sm font-semibold text-foreground">{displayLabel}</p>
-      </div>
-      <div className="flex items-center gap-3">
-        <label
-          htmlFor="global-council-filter"
-          className="shrink-0 text-sm font-medium text-muted-foreground"
-        >
-          Council
-        </label>
-        <Select
-          value={selectedCouncilId}
-          onValueChange={(value) => setSelectedCouncilId(value as CouncilFilterId)}
-        >
-          <SelectTrigger
-            id="global-council-filter"
-            className="h-9 w-[15rem] rounded-lg border-border bg-card px-3 text-sm text-foreground shadow-sm hover:bg-accent focus-visible:border-brand-500 focus-visible:ring-brand-500/25"
-            aria-label="Select council"
-          >
-            <SelectValue placeholder="Select council" />
-          </SelectTrigger>
-          <SelectContent align="end" className="z-[100] min-w-[15rem] border-border bg-popover text-popover-foreground">
-            <SelectItem value="all">All Councils</SelectItem>
-            {councils.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <ThemeToggle />
-      </div>
-    </div>
-  );
 }

@@ -2,6 +2,16 @@
 
 import { LayoutDashboard, Trash2, Truck, Map as MapIcon, Shield, UserCircle, Trophy, FileText } from 'lucide-react';
 import { AuthBrandLogo } from '@/components/brand/AuthBrandLogo';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
+import { useCouncil, type CouncilFilterId } from '@/lib/council-context';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { PageType, UserRole } from '@/app/page';
 
 interface SidebarProps {
@@ -23,6 +33,7 @@ const DASHBOARD_DRILL_PAGES: PageType[] = [
 ];
 
 export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selectedCouncil }: SidebarProps) {
+  const { isSuperadmin, selectedCouncilId, setSelectedCouncilId, councils } = useCouncil();
   const menuItems = [
     { id: 'dashboard' as PageType, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'bins' as PageType, label: 'Bin Management', icon: Trash2 },
@@ -55,7 +66,9 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
             const isActive =
               item.id === 'dashboard'
                 ? currentPage === 'dashboard' || DASHBOARD_DRILL_PAGES.includes(currentPage)
-                : currentPage === item.id;
+                : item.id === 'internal-users'
+                  ? currentPage === 'internal-users' || currentPage === 'staff-notifications'
+                  : currentPage === item.id;
 
             return (
               <li key={item.id}>
@@ -113,6 +126,44 @@ export function Sidebar({ currentPage, onPageChange, onLogout, userRole, selecte
                 Change password
               </button>
             ) : null}
+            {isSuperadmin ? (
+              <div className="mt-2 px-1">
+                <label
+                  htmlFor="sidebar-council-filter"
+                  className="mb-1.5 block px-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  Council filter
+                </label>
+                <Select
+                  value={selectedCouncilId}
+                  onValueChange={(value) => setSelectedCouncilId(value as CouncilFilterId)}
+                >
+                  <SelectTrigger
+                    id="sidebar-council-filter"
+                    className="h-8 w-full rounded-lg border-border bg-card px-2 text-xs text-foreground shadow-sm"
+                    aria-label="Select council"
+                  >
+                    <SelectValue placeholder="Select council" />
+                  </SelectTrigger>
+                  <SelectContent align="start" className="min-w-[12rem] border-border bg-popover text-popover-foreground">
+                    <SelectItem value="all">All Councils</SelectItem>
+                    {councils.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className="mt-2 flex items-center gap-2 px-1">
+              <div className="min-w-0 flex-1">
+                <ThemeToggle />
+              </div>
+              <div className="flex shrink-0 items-center rounded-lg border border-border bg-card">
+                <NotificationBell menuSide="top" />
+              </div>
+            </div>
           </div>
         )}
       </div>
