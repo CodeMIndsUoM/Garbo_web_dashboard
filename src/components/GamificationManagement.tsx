@@ -178,7 +178,7 @@ export function GamificationManagement() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-4 p-3 sm:space-y-6 sm:p-4 md:p-8">
       <PageHeader
         title="Gamification"
         subtitle="Manage task families and gamification tasks for collectors and field mentors"
