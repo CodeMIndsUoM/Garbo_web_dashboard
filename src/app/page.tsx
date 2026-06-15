@@ -12,7 +12,7 @@ import { Dashboard } from '@/components/Dashboard';
 import { BinManagement } from '@/components/BinManagement';
 import { VehicleManagement } from '@/components/VehicleManagement';
 import { Reports } from '@/components/Reports';
-import { Sidebar } from '@/components/Sidebar';
+import { DashboardShell } from '@/components/layout/DashboardShell';
 import { Login } from '@/components/Login';
 import { AdminAssignment } from '@/components/AdminAssignment';
 import AdminEditPassword from '@/components/AdminEditPassword';
@@ -193,18 +193,15 @@ function AuthenticatedShell({
   };
 
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-        onLogout={onLogout}
-        userRole={userRole}
-        selectedCouncil={activeCouncil}
-      />
-      <main className="relative flex-1 overflow-auto">
-        {renderPage()}
-      </main>
-    </div>
+    <DashboardShell
+      currentPage={currentPage}
+      setCurrentPage={setCurrentPage}
+      userRole={userRole}
+      onLogout={onLogout}
+      selectedCouncil={activeCouncil}
+    >
+      {renderPage()}
+    </DashboardShell>
   );
 }
 

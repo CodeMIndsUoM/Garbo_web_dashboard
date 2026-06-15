@@ -103,9 +103,10 @@
   --sidebar-ring: var(--brand-ring);
 
   /* ── Auth layout ── */
-  --auth-hero-image: url('/images/login-hero.jpg');
-  --auth-hero-overlay: rgb(15 23 42 / 0.42);
-  --auth-hero-brand-tint: rgb(22 163 74 / 0.28);
+  --auth-hero-bg: #0f3d22;
+  --auth-hero-image: url('/images/login-hero-community.png');
+  --auth-hero-overlay: rgb(15 23 42 / 0.18);
+  --auth-hero-brand-tint: rgb(22 163 74 / 0.12);
   --auth-form-backdrop: rgba(255, 255, 255, 0.97);
   --auth-form-column-bg: linear-gradient(180deg, #f1f5f9 0%, var(--surface-page) 72%);
 
@@ -268,6 +269,7 @@
   --shadow-elevated: 0 10px 40px -10px rgb(0 0 0 / 0.55);
   --auth-form-backdrop: rgb(36 36 36 / 0.92);
   --auth-form-column-bg: var(--surface-page);
+  --auth-hero-bg: #0f3d22;
 
   --glass-surface: rgb(36 36 36 / 0.82);
   --glass-surface-solid: rgb(36 36 36 / 0.92);

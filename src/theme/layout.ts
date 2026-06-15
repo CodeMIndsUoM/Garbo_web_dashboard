@@ -4,7 +4,7 @@
 
 export const layout = {
   page: 'min-h-screen bg-[var(--surface-page)]',
-  pagePadding: 'p-6 md:p-8',
+  pagePadding: 'p-3 sm:p-4 md:p-8',
   card: 'rounded-[var(--radius-card)] border border-[var(--surface-border)] bg-[var(--surface-elevated)] shadow-[var(--shadow-card)]',
   cardInteractive: 'rounded-[var(--radius-card)] border border-[var(--surface-border)] bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--shadow-elevated)]',
   panel: 'rounded-[var(--radius-panel)] border border-[var(--surface-border)] bg-[var(--surface-elevated)] shadow-[var(--shadow-elevated)]',

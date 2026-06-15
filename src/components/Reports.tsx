@@ -129,11 +129,11 @@ export function Reports({ council }: { council?: Council | null }) {
   ];
 
   return (
-    <div className="p-8">
+    <div className="p-3 sm:p-4 md:p-8">
 
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-gray-900 mb-2">Monthly Reports</h2>
           <p className="text-gray-600">
             {council?.name
@@ -141,7 +141,7 @@ export function Reports({ council }: { council?: Council | null }) {
               : 'Generate and download monthly analytics summaries'}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Button variant="outline" onClick={fetchReports} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh

@@ -2410,14 +2410,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
 
   if (boundaryLoading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-background">
+      <div className="flex h-full min-h-[calc(100dvh-3.75rem)] w-full items-center justify-center bg-background md:min-h-0">
         <GarboLoader variant="inline" message="Loading map..." size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="garbo-map-root w-full h-full relative overflow-hidden bg-background">
+    <div className="garbo-map-root relative h-full min-h-[calc(100dvh-3.75rem)] w-full overflow-hidden bg-background md:min-h-0">
       {/* Global CSS Style tag for Leaflet Polyline Dashed Flow Animation */}
       <style>{`
         @keyframes leaflet-dash {

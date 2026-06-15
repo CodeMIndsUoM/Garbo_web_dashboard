@@ -40,7 +40,13 @@ export function AuthShell({ children, title, subtitle }: AuthShellProps) {
       </div>
 
       {/* Right — hero image + rotating copy */}
-      <div className="garbo-auth-hero-column" role="img" aria-label="Waste management operations">
+      <div className="garbo-auth-hero-column" role="img" aria-label="Community waste cleanup">
+        <img
+          src="/images/login-hero-community.png"
+          alt=""
+          className="garbo-auth-hero-photo"
+          aria-hidden
+        />
         <div className="garbo-auth-hero-overlay" aria-hidden />
 
         <div className="garbo-auth-hero-inner">

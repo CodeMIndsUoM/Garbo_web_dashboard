@@ -435,7 +435,7 @@ export function InternalUsers({
   const showStaffManagement = section !== 'bin-suggestions';
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-4 p-3 sm:space-y-6 sm:p-4 md:p-8">
       <PageHeader
         title="Internal Users"
         subtitle="Manage field staff and bin collectors for your council."
