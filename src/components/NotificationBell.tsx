@@ -24,7 +24,19 @@ function formatWhen(createdAt?: string): string {
   });
 }
 
-export function NotificationBell({ menuSide = 'bottom' }: { menuSide?: 'top' | 'bottom' }) {
+type NotificationBellProps = {
+  menuSide?: 'top' | 'bottom';
+  menuAlign?: 'start' | 'center' | 'end';
+  sideOffset?: number;
+  alignOffset?: number;
+};
+
+export function NotificationBell({
+  menuSide = 'bottom',
+  menuAlign = 'center',
+  sideOffset = 12,
+  alignOffset = 8,
+}: NotificationBellProps) {
   const {
     notifications,
     unreadCount,
@@ -54,7 +66,14 @@ export function NotificationBell({ menuSide = 'bottom' }: { menuSide?: 'top' | '
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={menuSide} align="end" className="w-80">
+      <DropdownMenuContent
+        side={menuSide}
+        align={menuAlign}
+        sideOffset={sideOffset}
+        alignOffset={alignOffset}
+        collisionPadding={{ top: 16, left: 20, right: 8, bottom: 8 }}
+        className="w-80"
+      >
         <DropdownMenuLabel className="flex items-center justify-between gap-2">
           <span>Notifications</span>
           {unreadCount > 0 ? (
