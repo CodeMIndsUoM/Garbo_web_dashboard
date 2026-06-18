@@ -224,7 +224,7 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
   };
 
   return (
-    <div className="p-8">
+    <div className="p-3 sm:p-4 md:p-8">
       <PageHeader
         title="Vehicle Management"
         subtitle="Manage collection vehicles, assignments, and availability"
@@ -286,8 +286,8 @@ export function VehicleManagement({ council, userRole }: { council?: { name?: st
       </StatCardGrid>
 
       {/* Search + view toggle — card grid below is unchanged */}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div className="relative min-w-0 w-full max-w-none flex-1">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative min-w-0 w-full sm:max-w-md">
           <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search vehicles by license plate or type..."

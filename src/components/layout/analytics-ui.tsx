@@ -40,10 +40,12 @@ interface DashboardSectionProps {
 
 export function DashboardSection({ title, description, children }: DashboardSectionProps) {
   return (
-    <section className="mb-8">
-      <div className="mb-4 border-b border-border pb-3">
+    <section className="mb-5 md:mb-8">
+      <div className="mb-3 border-b border-border pb-2 md:mb-4 md:pb-3">
         <h3 className={typography.sectionEyebrow}>{title}</h3>
-        {description ? <p className={`${typography.caption} mt-1`}>{description}</p> : null}
+        {description ? (
+          <p className={`${typography.caption} mt-1 hidden sm:block`}>{description}</p>
+        ) : null}
       </div>
       {children}
     </section>
@@ -69,7 +71,7 @@ export function DashboardAlertBanner({ items }: DashboardAlertBannerProps) {
 }
 
 export function AnalyticsPageShell({ children }: { children: React.ReactNode }) {
-  return <div className="p-8">{children}</div>;
+  return <div className="p-3 sm:p-4 md:p-8">{children}</div>;
 }
 
 interface AnalyticsPageHeaderProps {
@@ -126,17 +128,17 @@ export function AnalyticsChartCard({
   className,
 }: AnalyticsChartCardProps) {
   return (
-    <Card className={cn('overflow-hidden border-border shadow-[var(--shadow-card)]', className)}>
-      <CardHeader className="border-b border-border pb-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className={`${typography.sectionTitle} mb-1`}>{title}</h3>
-            {subtitle ? <p className={typography.caption}>{subtitle}</p> : null}
+    <Card className={cn('min-w-0 overflow-hidden border-border shadow-[var(--shadow-card)]', className)}>
+      <CardHeader className="border-b border-border p-3 pb-3 sm:p-6 sm:pb-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h3 className={`${typography.sectionTitle} mb-0.5 text-base sm:mb-1 sm:text-lg`}>{title}</h3>
+            {subtitle ? <p className={`${typography.caption} hidden sm:block`}>{subtitle}</p> : null}
           </div>
           {actions}
         </div>
       </CardHeader>
-      <CardContent className="pt-6">{children}</CardContent>
+      <CardContent className="min-w-0 p-3 pt-3 sm:p-6 sm:pt-6">{children}</CardContent>
     </Card>
   );
 }
