@@ -1,16 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileText, Download, Loader2, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { ReportPrintView } from './Reportprintview';
+import { getCouncilApiName } from '@/lib/council-context';
+import { apiFetch } from '@/lib/api';
 
 // Summary rows returned from the reports list endpoint.
 interface ReportSummary {
   id: number;
   title: string;
+  council?: string | null;
   periodStart: string;
   periodEnd: string;
   status: string;
@@ -39,6 +42,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8081';
 
 export function Reports({ council }: { council?: Council | null }) {
 
+  const councilName = getCouncilApiName(council);
+
   // Main view state: list, loading flags, selected report, and UI error text.
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,24 +52,27 @@ export function Reports({ council }: { council?: Council | null }) {
   const [loadingReport, setLoadingReport] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch report list on first mount so the table is populated immediately.
-  useEffect(() => { fetchReports(); }, []);
-
-  // Loads all generated reports for the current admin scope.
-  async function fetchReports() {
+  const fetchReports = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/admin/reports`);
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
-      const data: ReportSummary[] = await res.json();
-      setReports(data);
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to load reports');
+      const params = new URLSearchParams();
+      if (councilName) params.set('councilId', councilName);
+      const path = `/api/admin/reports${params.toString() ? `?${params.toString()}` : ''}`;
+      const { response, data } = await apiFetch<ReportSummary[]>(path);
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+      setReports(Array.isArray(data) ? data : []);
+    } catch (e: unknown) {
+      setReports([]);
+      setError(e instanceof Error ? e.message : 'Failed to load reports');
     } finally {
       setLoading(false);
     }
-  }
+  }, [councilName]);
+
+  useEffect(() => {
+    void fetchReports();
+  }, [fetchReports]);
 
   // Creates a new report on the backend, then refreshes the list.
   async function handleGenerate() {
@@ -72,7 +80,7 @@ export function Reports({ council }: { council?: Council | null }) {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (council?.name) params.set('councilId', council.name);
+      if (councilName) params.set('councilId', councilName);
 
       const res = await fetch(
         `${API_BASE}/api/admin/reports/generate?${params.toString()}`,
@@ -83,8 +91,8 @@ export function Reports({ council }: { council?: Council | null }) {
         throw new Error(err.message ?? `Server error: ${res.status}`);
       }
       await fetchReports();
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to generate report');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to generate report');
     } finally {
       setGenerating(false);
     }
@@ -136,13 +144,13 @@ export function Reports({ council }: { council?: Council | null }) {
         <div className="min-w-0">
           <h2 className="text-gray-900 mb-2">Monthly Reports</h2>
           <p className="text-gray-600">
-            {council?.name
-              ? `${council.name} — generate and download monthly analytics summaries`
-              : 'Generate and download monthly analytics summaries'}
+            {councilName
+              ? `${councilName} — generate and download monthly analytics summaries for this council only`
+              : 'Generate and download monthly analytics summaries (all councils)'}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={fetchReports} disabled={loading}>
+          <Button variant="outline" onClick={() => void fetchReports()} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -200,7 +208,10 @@ export function Reports({ council }: { council?: Council | null }) {
           ) : reports.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>No reports yet. Click <strong>Generate Report</strong> to create the first one.</p>
+              <p>
+                No reports yet for {councilName ? councilName : 'this scope'}.
+                Click <strong>Generate Report</strong> to create the first one.
+              </p>
             </div>
           ) : (
             <div className="space-y-4">

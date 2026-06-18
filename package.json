@@ -6,7 +6,7 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "dev": "bash scripts/dev.sh",
+    "dev": "node scripts/dev.mjs",
     "stop:dev": "node scripts/stop-dev.mjs",
     "dev:turbo": "next dev --turbo",
     "build": "next build --webpack",
