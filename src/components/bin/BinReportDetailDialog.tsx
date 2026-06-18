@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera, Frown, Loader2, Meh, Smile, X } from 'lucide-react';
+import { Camera, Frown, Loader2, Meh, Smile, TriangleAlert, X } from 'lucide-react';
 import { normalizeBinStatus } from '@/lib/bin-realtime';
 
 export interface BinReportDetail {
@@ -14,6 +14,8 @@ export interface BinReportDetail {
   photoUrl?: string | null;
   reporterName?: string | null;
   reportedAt?: string | null;
+  discrepancy?: boolean;
+  previousStatus?: string | null;
 }
 
 function resolveMediaUrl(url?: string | null): string | null {
@@ -71,6 +73,11 @@ export function BinReportDetailDialog({
   const activeStatus = normalizeBinStatus(report?.status ?? bin.status);
   const photoSrc = resolveMediaUrl(report?.photoUrl);
   const badgeLabel = [bin.binCode, bin.council].filter(Boolean).join(' | ');
+  const reportedStatusLabel =
+    activeStatus === 'full' ? 'FULL' : activeStatus === 'half' ? 'HALF' : activeStatus.toUpperCase();
+  const previousStatusLabel = report?.previousStatus
+    ? report.previousStatus.toUpperCase()
+    : 'EMPTY';
 
   return (
     <div
@@ -103,6 +110,21 @@ export function BinReportDetailDialog({
           <div className="inline-flex rounded-full border border-slate-200 bg-slate-100/80 px-3 py-1 text-sm font-medium text-slate-700">
             {badgeLabel}
           </div>
+
+          {report?.discrepancy && (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
+              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <p className="text-sm font-semibold">Status discrepancy reported</p>
+                <p className="mt-1 text-xs text-amber-800">
+                  {report.reporterName ? `${report.reporterName} reported` : 'Field mentor reported'}{' '}
+                  <span className="font-semibold">{reportedStatusLabel}</span>, but the bin was previously marked{' '}
+                  <span className="font-semibold">{previousStatusLabel}</span>
+                  {previousStatusLabel === 'EMPTY' ? ' (e.g. after collection)' : ''}.
+                </p>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 text-slate-500">

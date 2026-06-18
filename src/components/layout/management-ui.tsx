@@ -43,7 +43,7 @@ function pageTabCountClass(isActive: boolean) {
 const pageTabListClass =
   'inline-flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1 shadow-sm';
 
-interface StatCardProps {
+export interface StatCardProps {
   label: string;
   value: React.ReactNode;
   detail?: string;
@@ -100,26 +100,30 @@ export function StatCard({
           : undefined
       }
     >
-      <CardContent className="pt-6">
+      <CardContent className="p-3 pt-3 sm:p-4 md:pt-6">
         {loading ? (
-          <div className="flex items-center gap-2 py-2">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <div className="flex items-center gap-2 py-1 md:py-2">
+            <Loader2 className="size-4 animate-spin text-muted-foreground md:size-5" />
             <span className={typography.caption}>Loading…</span>
           </div>
         ) : error ? (
           <p className={`${typography.caption} text-status-danger`}>{error}</p>
         ) : (
-          <div className="flex min-h-[5.5rem] items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
             <div className="min-w-0">
-              <p className={`${typography.caption} mb-1`}>{label}</p>
-              <p className={cn(typography.statValue, valueClassName)}>{value}</p>
+              <p className={`${typography.caption} mb-0.5 line-clamp-2 text-[11px] leading-tight sm:mb-1 sm:text-xs`}>
+                {label}
+              </p>
+              <p className={cn('text-xl font-semibold leading-tight sm:text-2xl md:text-[length:var(--text-stat-value)]', valueClassName)}>
+                {value}
+              </p>
               {detail ? (
-                <p className={`${typography.micro} mt-1 line-clamp-2`}>{detail}</p>
+                <p className={`${typography.micro} mt-0.5 line-clamp-2 sm:mt-1`}>{detail}</p>
               ) : null}
             </div>
             {Icon ? (
               <Icon
-                className={cn('size-10 shrink-0 text-muted-foreground', iconClassName)}
+                className={cn('size-7 shrink-0 text-muted-foreground sm:size-8 md:size-10', iconClassName)}
                 strokeWidth={1.5}
                 aria-hidden
               />
@@ -133,21 +137,34 @@ export function StatCard({
 
 interface StatCardGridProps {
   children: React.ReactNode;
-  columns?: 2 | 3 | 4;
+  columns?: 2 | 3 | 4 | 5;
   className?: string;
+}
+
+/** Standard page padding for admin screens. */
+export function PageShell({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={cn('p-3 sm:p-4 md:p-8', className)}>{children}</div>;
 }
 
 /** Responsive grid for StatCard rows — consistent gap across pages. */
 export function StatCardGrid({ children, columns = 4, className }: StatCardGridProps) {
   const columnClass =
     columns === 2
-      ? 'md:grid-cols-2'
+      ? 'grid-cols-2 md:grid-cols-2'
       : columns === 3
-        ? 'md:grid-cols-3'
-        : 'md:grid-cols-2 xl:grid-cols-4';
+        ? 'grid-cols-2 md:grid-cols-3'
+        : columns === 5
+          ? 'grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-5'
+        : 'grid-cols-2 md:grid-cols-2 xl:grid-cols-4';
 
   return (
-    <div className={cn('grid grid-cols-1 items-stretch gap-6', columnClass, className)}>
+    <div className={cn('grid items-stretch gap-3 sm:gap-4 md:gap-6', columnClass, className)}>
       {children}
     </div>
   );

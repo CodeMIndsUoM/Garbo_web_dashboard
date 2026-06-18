@@ -23,7 +23,9 @@ const PRIORITY_OPTIONS: { value: BinPriority; label: string; hint: string }[] = 
 interface AddBinGlassModalProps {
   open: boolean;
   onClose: () => void;
+  mode?: 'create' | 'edit';
   nextBinCode: string;
+  onBinCodeChange?: (value: string) => void;
   location: string;
   onLocationChange: (value: string) => void;
   priority?: BinPriority;
@@ -38,7 +40,9 @@ interface AddBinGlassModalProps {
 export function AddBinGlassModal({
   open,
   onClose,
+  mode = 'create',
   nextBinCode,
+  onBinCodeChange,
   location,
   onLocationChange,
   priority = 'medium',
@@ -50,29 +54,31 @@ export function AddBinGlassModal({
   zIndex = 50,
 }: AddBinGlassModalProps) {
   const formId = 'add-bin-glass-form';
+  const isEdit = mode === 'edit';
 
   return (
     <GlassFormModal
       open={open}
       onClose={onClose}
       zIndex={zIndex}
-      title="Add New Waste Bin"
+      title={isEdit ? 'Edit Waste Bin' : 'Add New Waste Bin'}
       icon={<Trash2 className="size-5 shrink-0 text-brand-500" />}
       footer={
         <div className="flex w-full justify-end">
           <Button type="submit" form={formId} variant="brand" size="sm" className="w-full sm:w-auto">
-            Save Bin
+            {isEdit ? 'Save Changes' : 'Save Bin'}
           </Button>
         </div>
       }
     >
       <form id={formId} onSubmit={onSubmit}>
-        <GlassFormCard title={nextBinCode || 'New bin'} accentClass="bg-brand-500">
+        <GlassFormCard title={nextBinCode || (isEdit ? 'Edit bin' : 'New bin')} accentClass="bg-brand-500">
           <GlassFormRow label="Bin code:">
             <Input
               value={nextBinCode}
-              disabled
-              className={cn(glassFieldCompactClass, 'w-[10rem] font-semibold text-muted-foreground')}
+              disabled={!isEdit}
+              onChange={(e) => onBinCodeChange?.(e.target.value)}
+              className={cn(glassFieldCompactClass, 'w-[10rem] font-semibold', !isEdit && 'text-muted-foreground')}
             />
           </GlassFormRow>
           <GlassFormRow label="Location:">
@@ -123,9 +129,11 @@ export function AddBinGlassModal({
                 'Set how urgently this bin should be collected — e.g. high for hospitals.'}
             </p>
           ) : null}
-          <p className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-surface)] px-3 py-2 text-[10px] leading-relaxed text-[var(--glass-text-muted)]">
-            Zone is assigned automatically from coordinates when you save.
-          </p>
+          {!isEdit ? (
+            <p className="rounded-lg border border-[var(--glass-border)] bg-[var(--glass-surface)] px-3 py-2 text-[10px] leading-relaxed text-[var(--glass-text-muted)]">
+              Zone is assigned automatically from coordinates when you save.
+            </p>
+          ) : null}
         </GlassFormCard>
       </form>
     </GlassFormModal>

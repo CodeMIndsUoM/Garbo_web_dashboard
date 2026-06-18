@@ -1,14 +1,18 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from '@/components/providers';
 
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
   title: 'Garbage Management Dashboard',
   description: 'Garbo - Waste Management System',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -18,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <Providers>
           {children}
           <Toaster />
