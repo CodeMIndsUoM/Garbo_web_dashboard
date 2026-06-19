@@ -218,6 +218,12 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('sentry-test')) {
+        throw new Error('Sentry Client Test Error from Garbo Web Dashboard');
+      }
+    }
   }, []);
 
   useEffect(() => {
