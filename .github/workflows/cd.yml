@@ -40,8 +40,11 @@ jobs:
           API_BASE="${NEXT_PUBLIC_API_BASE%/api}"
           API_BASE="${API_BASE%/}"
           TAG="${GITHUB_SHA}"
+          # Fetch Sentry DSN from AWS SSM dynamically
+          SENTRY_DSN_VAL=$(aws ssm get-parameter --name "/garbo/prod/next-public-sentry-dsn" --with-decryption --query "Parameter.Value" --output text --region ap-south-1 || echo "")
           docker build --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_API_BASE="${API_BASE}" \
+            --build-arg NEXT_PUBLIC_SENTRY_DSN="${SENTRY_DSN_VAL}" \
             -t "$ECR_REGISTRY/$ECR_REPOSITORY:$TAG" \
             -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$TAG"
