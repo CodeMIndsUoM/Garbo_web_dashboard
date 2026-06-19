@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Truck, Container, Users, CircleAlert, Briefcase, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { apiFetch, getApiBase } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import {
   type ComplaintItem,
   complaintStatusBadgeClass,
@@ -40,8 +40,6 @@ import {
   Legend,
   Cell,
 } from 'recharts';
-
-const BASE_URL = getApiBase();
 
 interface ZonePoint {
   zone: string;
@@ -107,7 +105,28 @@ interface CouncilReportCount {
   council: string;
   weekCount: number;
   todayCount: number;
+  affectedBinsToday: number;
   isActive: boolean;
+}
+
+async function fetchDashboardData<T>(path: string): Promise<T | null> {
+  try {
+    const { response, data } = await apiFetch<T>(path);
+    if (!response.ok) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function withCouncilParam(
+  params: URLSearchParams,
+  council: { id?: string; name?: string } | null | undefined,
+  key: 'council' | 'councilId'
+) {
+  const councilName = getCouncilApiName(council);
+  if (councilName) params.set(key, councilName);
+  return params;
 }
 
 const formatActivityTime = (raw: string) => {
@@ -175,15 +194,13 @@ export function WasteAnalytics({
           Weekly: 'WEEKLY',
           Monthly: 'MONTHLY',
         };
-        const url = new URL(`${BASE_URL}/api/admin/analytics/zone-collection`);
-        url.searchParams.set('filter', filterMap[zoneFilter]);
-        const councilName = getCouncilApiName(council);
-        if (councilName) url.searchParams.set('council', councilName);
+        const params = new URLSearchParams({ filter: filterMap[zoneFilter] });
+        withCouncilParam(params, council, 'council');
 
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const rows: ZonePoint[] = await res.json();
-        setZoneData(rows);
+        const rows = await fetchDashboardData<ZonePoint[]>(
+          `/api/admin/analytics/zone-collection?${params.toString()}`
+        );
+        setZoneData(rows ?? []);
       } catch {
         setZoneData([]);
       } finally {
@@ -195,25 +212,33 @@ export function WasteAnalytics({
 
   useEffect(() => {
     const fetchDaySummary = async () => {
+      setLoading(true);
+      setActivityLoading(true);
+      setError(null);
       try {
-        const url = new URL(`${BASE_URL}/api/admin/analytics`);
-        url.searchParams.set('filter', 'DAY');
-        const councilName = getCouncilApiName(council);
-        if (councilName) url.searchParams.set('council', councilName);
+        const params = new URLSearchParams({ filter: 'DAY' });
+        withCouncilParam(params, council, 'council');
 
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const json = await res.json();
-        setSummary({ assigned: json.assigned, collected: json.collected, missed: json.missed });
+        const json = await fetchDashboardData<DaySummary & { chartData?: ActivityPoint[] }>(
+          `/api/admin/analytics?${params.toString()}`
+        );
+        if (!json) throw new Error('Failed to load collection summary');
+        setSummary({
+          assigned: json.assigned ?? 0,
+          collected: json.collected ?? 0,
+          missed: json.missed ?? 0,
+        });
         setActivityData(
-          (json.chartData ?? []).map((point: ActivityPoint) => ({
+          (json.chartData ?? []).map((point) => ({
             time: formatActivityTime(point.time),
-            collected: point.collected,
-            missed: point.missed,
+            collected: point.collected ?? 0,
+            missed: point.missed ?? 0,
           }))
         );
-      } catch (err: any) {
-        setError(err.message ?? 'Failed to load');
+      } catch (err: unknown) {
+        setSummary(null);
+        setActivityData([]);
+        setError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
         setLoading(false);
         setActivityLoading(false);
@@ -224,22 +249,24 @@ export function WasteAnalytics({
 
   useEffect(() => {
     const fetchStaffSummary = async () => {
+      setStaffLoading(true);
       try {
-        const params = new URLSearchParams();
-        const councilName = getCouncilApiName(council);
-        if (councilName) params.set('councilId', councilName);
-
-        const res = await fetch(`${BASE_URL}/api/admin/staffanalytics?${params.toString()}`);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const json = await res.json();
+        const params = withCouncilParam(new URLSearchParams(), council, 'councilId');
+        const json = await fetchDashboardData<{ summary?: StaffSummary }>(
+          `/api/admin/staffanalytics?${params.toString()}`
+        );
+        if (!json?.summary) {
+          setStaffSummary(null);
+          return;
+        }
         setStaffSummary({
-          totalStaff: json.summary.totalStaff,
-          onDutyCount: json.summary.onDutyCount,
-          onLeaveCount: json.summary.onLeaveCount,
-          attendanceRate: json.summary.attendanceRate,
+          totalStaff: json.summary.totalStaff ?? 0,
+          onDutyCount: json.summary.onDutyCount ?? 0,
+          onLeaveCount: json.summary.onLeaveCount ?? 0,
+          attendanceRate: json.summary.attendanceRate ?? 0,
         });
       } catch {
-        /* ignore */
+        setStaffSummary(null);
       } finally {
         setStaffLoading(false);
       }
@@ -256,7 +283,11 @@ export function WasteAnalytics({
         if (councilName) params.set('council', councilName);
 
         const path = `/api/admin/citizens${params.toString() ? `?${params.toString()}` : ''}`;
-        const { data: json } = await apiFetch<{ success?: boolean; data?: unknown[] } | unknown[]>(path);
+        const { response, data: json } = await apiFetch<{ success?: boolean; data?: unknown[] } | unknown[]>(path);
+        if (!response.ok) {
+          setCitizenCount(0);
+          return;
+        }
         const list =
           json && typeof json === 'object' && 'data' in json && Array.isArray(json.data)
             ? json.data
@@ -278,31 +309,32 @@ export function WasteAnalytics({
       setComplaintLoading(true);
       setComplaintChartLoading(true);
       try {
-        const councilName = getCouncilApiName(council);
-        const baseParams = new URLSearchParams();
-        if (councilName) baseParams.set('councilId', councilName);
+        const baseParams = withCouncilParam(new URLSearchParams(), council, 'councilId');
 
         const todayParams = new URLSearchParams(baseParams);
         todayParams.set('filter', 'TODAY');
-        const todayRes = await fetch(`${BASE_URL}/api/admin/complaintanalytics?${todayParams.toString()}`);
-        if (todayRes.ok) {
-          const todayJson = await todayRes.json();
+        const todayJson = await fetchDashboardData<{
+          summary?: ComplaintSummary;
+        }>(`/api/admin/complaintanalytics?${todayParams.toString()}`);
+        if (todayJson?.summary) {
           setComplaintSummary({
-            pendingCount: todayJson.summary.pendingCount ?? todayJson.summary.newCount ?? 0,
+            pendingCount: todayJson.summary.pendingCount ?? 0,
             acceptedCount: todayJson.summary.acceptedCount ?? 0,
-            resolutionRate: todayJson.summary.resolutionRate,
+            resolutionRate: todayJson.summary.resolutionRate ?? 0,
           });
+        } else {
+          setComplaintSummary(null);
         }
 
         const monthParams = new URLSearchParams(baseParams);
         monthParams.set('filter', 'MONTH');
-        const monthRes = await fetch(`${BASE_URL}/api/admin/complaintanalytics?${monthParams.toString()}`);
-        if (monthRes.ok) {
-          const monthJson = await monthRes.json();
-          setComplaintMonthTrend(monthJson.chartData ?? []);
-        }
+        const monthJson = await fetchDashboardData<{ chartData?: ComplaintTrendPoint[] }>(
+          `/api/admin/complaintanalytics?${monthParams.toString()}`
+        );
+        setComplaintMonthTrend(monthJson?.chartData ?? []);
       } catch {
-        /* ignore */
+        setComplaintSummary(null);
+        setComplaintMonthTrend([]);
       } finally {
         setComplaintLoading(false);
         setComplaintChartLoading(false);
@@ -312,17 +344,15 @@ export function WasteAnalytics({
   }, [council]);
 
   const refreshComplaintSummary = useCallback(async () => {
-    const councilName = getCouncilApiName(council);
-    const params = new URLSearchParams();
-    params.set('filter', 'TODAY');
-    if (councilName) params.set('councilId', councilName);
-    const res = await fetch(`${BASE_URL}/api/admin/complaintanalytics?${params.toString()}`);
-    if (!res.ok) return;
-    const json = await res.json();
+    const params = withCouncilParam(new URLSearchParams({ filter: 'TODAY' }), council, 'councilId');
+    const json = await fetchDashboardData<{ summary?: ComplaintSummary }>(
+      `/api/admin/complaintanalytics?${params.toString()}`
+    );
+    if (!json?.summary) return;
     setComplaintSummary({
-      pendingCount: json.summary?.pendingCount ?? json.summary?.newCount ?? 0,
-      acceptedCount: json.summary?.acceptedCount ?? 0,
-      resolutionRate: json.summary?.resolutionRate ?? 0,
+      pendingCount: json.summary.pendingCount ?? 0,
+      acceptedCount: json.summary.acceptedCount ?? 0,
+      resolutionRate: json.summary.resolutionRate ?? 0,
     });
   }, [council]);
 
@@ -367,18 +397,22 @@ export function WasteAnalytics({
 
   useEffect(() => {
     const fetchThirdPartySummary = async () => {
+      setThirdPartyLoading(true);
       try {
-        const params = new URLSearchParams();
-        params.set('period', 'LAST_MONTH');
-        const councilName = getCouncilApiName(council);
-        if (councilName) params.set('councilId', councilName);
-
-        const res = await fetch(`${BASE_URL}/api/admin/thirdparty/analyze?${params.toString()}`);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const json = await res.json();
-        setThirdPartySummary({ totalRequests: json.totalRequests, completionRate: json.completionRate });
+        const params = withCouncilParam(new URLSearchParams({ period: 'LAST_MONTH' }), council, 'councilId');
+        const json = await fetchDashboardData<ThirdPartySummary>(
+          `/api/admin/thirdparty/analyze?${params.toString()}`
+        );
+        if (!json) {
+          setThirdPartySummary(null);
+          return;
+        }
+        setThirdPartySummary({
+          totalRequests: json.totalRequests ?? 0,
+          completionRate: json.completionRate ?? 0,
+        });
       } catch {
-        /* ignore */
+        setThirdPartySummary(null);
       } finally {
         setThirdPartyLoading(false);
       }
@@ -394,26 +428,30 @@ export function WasteAnalytics({
 
         const councilRows = await Promise.all(
           COUNCILS.map(async (entry) => {
-            const url = new URL(`${BASE_URL}/api/admin/bin-reports/analytics`);
-            url.searchParams.set('council', entry.name);
-            const res = await fetch(url.toString());
-            if (!res.ok) {
+            const params = new URLSearchParams({ council: entry.name });
+            const json = await fetchDashboardData<{
+              totalReportsToday?: number;
+              affectedBinsToday?: number;
+              reportFrequencyLastWeek?: { count: number }[];
+            }>(`/api/admin/bin-reports/analytics?${params.toString()}`);
+            if (!json) {
               return {
                 council: entry.name,
                 weekCount: 0,
                 todayCount: 0,
+                affectedBinsToday: 0,
                 isActive: entry.name === activeCouncilName,
               };
             }
-            const json = await res.json();
             const weekCount = (json.reportFrequencyLastWeek ?? []).reduce(
-              (sum: number, row: { count: number }) => sum + (row.count ?? 0),
+              (sum, row) => sum + (row.count ?? 0),
               0
             );
             return {
               council: entry.name,
               weekCount,
               todayCount: json.totalReportsToday ?? 0,
+              affectedBinsToday: json.affectedBinsToday ?? 0,
               isActive: entry.name === activeCouncilName,
             };
           })
@@ -427,20 +465,18 @@ export function WasteAnalytics({
           const activeRow = councilRows.find((row) => row.council === scopedCouncil);
           setBinReportSummary({
             totalReportsToday: activeRow?.todayCount ?? 0,
-            affectedBinsToday: 0,
+            affectedBinsToday: activeRow?.affectedBinsToday ?? 0,
           });
         } else {
-          const globalRes = await fetch(`${BASE_URL}/api/admin/bin-reports/analytics`);
-          if (globalRes.ok) {
-            const globalJson = await globalRes.json();
-            setBinReportSummary({
-              totalReportsToday: globalJson.totalReportsToday ?? 0,
-              affectedBinsToday: globalJson.affectedBinsToday ?? 0,
-            });
-          }
+          const globalJson = await fetchDashboardData<BinReportSummary>('/api/admin/bin-reports/analytics');
+          setBinReportSummary({
+            totalReportsToday: globalJson?.totalReportsToday ?? 0,
+            affectedBinsToday: globalJson?.affectedBinsToday ?? 0,
+          });
         }
       } catch {
         setReportByCouncil([]);
+        setBinReportSummary(null);
       } finally {
         setBinReportLoading(false);
       }
@@ -450,22 +486,24 @@ export function WasteAnalytics({
 
   useEffect(() => {
     const fetchVehicleSummary = async () => {
+      setVehicleLoading(true);
       try {
-        const params = new URLSearchParams();
-        const councilName = getCouncilApiName(council);
-        if (councilName) params.set('councilId', councilName);
-
-        const res = await fetch(`${BASE_URL}/api/admin/vehicles/analytics?${params.toString()}`);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const json = await res.json();
+        const params = withCouncilParam(new URLSearchParams(), council, 'councilId');
+        const json = await fetchDashboardData<VehicleSummary>(
+          `/api/admin/vehicles/analytics?${params.toString()}`
+        );
+        if (!json) {
+          setVehicleSummary(null);
+          return;
+        }
         setVehicleSummary({
-          totalFleet: json.totalFleet,
-          onRoute: json.onRoute,
-          available: json.available,
-          maintenance: json.maintenance,
+          totalFleet: json.totalFleet ?? 0,
+          onRoute: json.onRoute ?? 0,
+          available: json.available ?? 0,
+          maintenance: json.maintenance ?? 0,
         });
       } catch {
-        /* ignore */
+        setVehicleSummary(null);
       } finally {
         setVehicleLoading(false);
       }
@@ -475,19 +513,27 @@ export function WasteAnalytics({
 
   useEffect(() => {
     const fetchBinAnalytics = async () => {
+      setBinLoading(true);
       try {
-        const params = new URLSearchParams();
-        const councilName = getCouncilApiName(council);
-        if (councilName) params.set('councilId', councilName);
-
-        const res = await fetch(`${BASE_URL}/api/admin/bin-analytics?${params.toString()}`);
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        const json = await res.json();
+        const params = withCouncilParam(new URLSearchParams(), council, 'councilId');
+        const json = await fetchDashboardData<{
+          totalBins?: number;
+          urgentBins?: number;
+          zoneData?: ZoneBinRow[];
+        }>(`/api/admin/bin-analytics?${params.toString()}`);
+        if (!json) {
+          setTotalBins(0);
+          setUrgentBins(0);
+          setBinZoneRows([]);
+          return;
+        }
         setTotalBins(json.totalBins ?? 0);
         setUrgentBins(json.urgentBins ?? 0);
         setBinZoneRows(json.zoneData ?? []);
       } catch {
-        /* ignore */
+        setTotalBins(0);
+        setUrgentBins(0);
+        setBinZoneRows([]);
       } finally {
         setBinLoading(false);
       }
