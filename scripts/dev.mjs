@@ -70,9 +70,10 @@ function printNodeHelp() {
 }
 
 function startNext() {
+  const nextCli = join(process.cwd(), 'node_modules/next/dist/bin/next');
   const child = spawn(
-    process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['next', 'dev', '--webpack', '-p', String(PORT)],
+    process.execPath,
+    [nextCli, 'dev', '--webpack', '-p', String(PORT)],
     { stdio: 'inherit', env: process.env, cwd: process.cwd() }
   );
   child.on('exit', (code) => process.exit(code ?? 0));

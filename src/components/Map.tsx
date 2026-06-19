@@ -225,7 +225,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   const leafletMapRef = useRef<L.Map | null>(null);            // Leaflet map instance; null before initialisation
   const addModeRef = useRef(false);                         // Ref mirror of addMode — readable inside map event closures without stale state
   const routeLayerRef = useRef<L.FeatureGroup | null>(null);   // Parent layer group for all route sessions
-  const draftPreviewLayerRef = useRef<L.FeatureGroup | null>(null); // Auto-route draft preview polylines
+  const draftPreviewLayerRef = useRef<L.FeatureGroup | null>(null); // Cleared on planner close; polylines only after optimization
   const draftHighlightedBinIdsRef = useRef<Set<string>>(new Set());
   const sessionLayersRef = useRef<Map<string, L.FeatureGroup>>(new Map());
   const sessionSnapshotsRef = useRef<Map<string, RouteSessionSnapshot>>(new Map());
@@ -754,14 +754,16 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     }
   };
 
-  const renderDraftRoutesOnMap = async (
+  const applyAutoRouteBinHighlightsOnMap = (
     preview: AutoRoutePreview,
     focusId: string | null,
     confirmed: string[]
   ) => {
-    if (!leafletMapRef.current || !draftPreviewLayerRef.current) return;
+    if (!leafletMapRef.current) return;
 
-    draftPreviewLayerRef.current.clearLayers();
+    if (draftPreviewLayerRef.current) {
+      draftPreviewLayerRef.current.clearLayers();
+    }
     applyDraftBinHighlights(preview, focusId, confirmed);
 
     const depotLat = boundaryData?.depotLat ?? 6.775080;
@@ -773,57 +775,14 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       ? activeDrafts.filter((d) => d.draftId === focusId)
       : activeDrafts;
 
-    await Promise.all(
-      draftsToShow.map(async (draft) => {
-        const routeIndex = activeDrafts.findIndex((d) => d.draftId === draft.draftId);
-        const routeLabel = routeIndex >= 0 ? routeIndex + 1 : 1;
-        const color = ROUTE_COLORS[Math.max(routeIndex, 0) % ROUTE_COLORS.length];
-        const stops: [number, number][] = [];
-
-        for (const binId of draft.binIds) {
-          const entry = markers.get(String(binId));
-          if (entry?.data.lat && entry?.data.lng) {
-            stops.push([entry.data.lat, entry.data.lng]);
-            bounds.extend([entry.data.lat, entry.data.lng]);
-          }
+    for (const draft of draftsToShow) {
+      for (const binId of draft.binIds) {
+        const entry = markers.get(String(binId));
+        if (entry?.data.lat && entry?.data.lng) {
+          bounds.extend([entry.data.lat, entry.data.lng]);
         }
-
-        if (stops.length === 0) return;
-
-        L.circleMarker([depotLat, depotLng], {
-          radius: 9,
-          color: '#7c3aed',
-          fillColor: '#7c3aed',
-          fillOpacity: 0.9,
-          weight: 3,
-        })
-          .bindTooltip('Depot (start / end)')
-          .addTo(draftPreviewLayerRef.current!);
-
-        const path: [number, number][] = [[depotLat, depotLng], ...stops, [depotLat, depotLng]];
-        await drawRoadSnappedPath(path, draftPreviewLayerRef.current!, {
-          color,
-          weight: 6,
-          opacity: 0.95,
-          dashArray: '12, 8',
-          className: 'animate-route-flow',
-          tooltip: `Route ${routeLabel} · ${draft.binCount} bins`,
-        });
-
-        stops.forEach(([lat, lng], stopIdx) => {
-          const stopNum = stopIdx + 1;
-          const numberedIcon = L.divIcon({
-            className: 'draft-stop-marker',
-            html: `<span style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:9999px;background:${color};color:#fff;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25)">${stopNum}</span>`,
-            iconSize: [22, 22],
-            iconAnchor: [11, 11],
-          });
-          L.marker([lat, lng], { icon: numberedIcon, zIndexOffset: 500 })
-            .bindTooltip(`Stop ${stopNum}`)
-            .addTo(draftPreviewLayerRef.current!);
-        });
-      })
-    );
+      }
+    }
 
     if (bounds.isValid() && draftsToShow.length > 0) {
       leafletMapRef.current.fitBounds(bounds.pad(0.12), { animate: true, maxZoom: 16 });
@@ -1273,40 +1232,6 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
       tooltip: `Vehicle ${vehicleId}`,
       isCompleted,
     });
-  };
-
-  const renderManualRoutePreview = async () => {
-    if (!leafletMapRef.current || !draftPreviewLayerRef.current) return;
-    draftPreviewLayerRef.current.clearLayers();
-    if (selectedBins.length === 0) return;
-
-    const depotLat = boundaryData?.depotLat ?? 6.775080;
-    const depotLng = boundaryData?.depotLng ?? 79.882289;
-    const stops: [number, number][] = [];
-    const bounds = L.latLngBounds([[depotLat, depotLng]]);
-
-    for (const id of selectedBins) {
-      const entry = markers.get(id);
-      if (entry?.data.lat && entry?.data.lng) {
-        stops.push([entry.data.lat, entry.data.lng]);
-        bounds.extend([entry.data.lat, entry.data.lng]);
-      }
-    }
-    if (stops.length === 0) return;
-
-    const path: [number, number][] = [[depotLat, depotLng], ...stops, [depotLat, depotLng]];
-    await drawRoadSnappedPath(path, draftPreviewLayerRef.current, {
-      color: ROUTE_COLORS[0],
-      weight: 5,
-      opacity: 0.9,
-      dashArray: '12, 8',
-      className: 'animate-route-flow',
-      tooltip: `Manual route · ${stops.length} bins`,
-    });
-
-    if (bounds.isValid()) {
-      leafletMapRef.current.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
-    }
   };
 
   const visualizeRoutesInternal = async (
@@ -1760,16 +1685,18 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     };
   }, [boundaryLoading]);
 
-  // Road-snapped preview for manual bin selection
+  // Manual route: bin selection icons only — polylines after backend optimization
   useEffect(() => {
     if (!showRoutePlanner || routePlannerTab !== 'manual' || boundaryLoading) return;
-    void renderManualRoutePreview();
-  }, [showRoutePlanner, routePlannerTab, selectedBins, markers, boundaryData, boundaryLoading]);
+    if (draftPreviewLayerRef.current) {
+      draftPreviewLayerRef.current.clearLayers();
+    }
+  }, [showRoutePlanner, routePlannerTab, selectedBins, boundaryLoading]);
 
-  // Draw auto-route drafts on map (one focused route at a time) before confirm
+  // Auto route: highlight selected bins per draft — polylines after confirm + optimization
   useEffect(() => {
     if (!showRoutePlanner || routePlannerTab !== 'auto' || !autoRoutePreview || boundaryLoading) return;
-    void renderDraftRoutesOnMap(autoRoutePreview, focusedDraftId, confirmedDraftIds);
+    applyAutoRouteBinHighlightsOnMap(autoRoutePreview, focusedDraftId, confirmedDraftIds);
   }, [
     showRoutePlanner,
     autoRoutePreview,
@@ -2810,7 +2737,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                   {remainingDraftRoutes.length > 0 && focusedDraftIndex >= 0 && (
                     <div className="flex items-center justify-between gap-2 rounded-xl bg-green-600/10 border border-green-200/60 px-3 py-2">
                       <p className="text-[11px] font-semibold text-green-800">
-                        Map preview: Route {focusedDraftIndex + 1} of {remainingDraftRoutes.length}
+                        Selected bins: Route {focusedDraftIndex + 1} of {remainingDraftRoutes.length}
                       </p>
                       <span className="text-[10px] text-green-700 shrink-0">Tap a card to switch</span>
                     </div>
@@ -2825,7 +2752,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       Fleet: <strong>{autoRoutePreview.fleetSummary.availableVehicles}</strong> vehicles ·{' '}
                       <strong>{autoRoutePreview.fleetSummary.totalMaxBins}</strong> total bin capacity
                     </p>
-                    <p className="text-[var(--glass-text-muted)]">Bins auto-selected by fill level + map clustering. Assign vehicle & driver per route.</p>
+                    <p className="text-[var(--glass-text-muted)]">Bins auto-selected by fill level + map clustering. Route line appears after you confirm and optimize.</p>
                   </div>
                   {autoRoutePreview.warnings.map((w) => (
                     <p key={w} className="text-[11px] text-amber-700 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
