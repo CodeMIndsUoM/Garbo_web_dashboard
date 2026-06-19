@@ -114,6 +114,21 @@ NEXT_PUBLIC_API_BASE=http://localhost:8081
 
 Then restart `npm run dev`.
 
+## Monitoring & Sentry Error Tracking
+
+### 1. Sentry SDK Setup
+* The Next.js dashboard utilizes `@sentry/nextjs` to catch server, edge, and client-side page exceptions.
+* **Initialization**: Done in `sentry.client.config.ts`, `sentry.server.config.ts`, and `sentry.edge.config.ts`.
+* **Build Integration**: Wrapped in `next.config.mjs` using `withSentryConfig`. To prevent local build failures when offline, compile configurations only upload source maps when `SENTRY_AUTH_TOKEN` is provided in the build environment.
+
+### 2. DSN Configuration
+* Set via environment variable `NEXT_PUBLIC_SENTRY_DSN` (mapped in production from SSM Parameter Store path `/garbo/prod/next-public-sentry-dsn`).
+
+### 3. Manual Sentry Verification
+* You can test frontend exception logging by loading the app homepage with a test query parameter:
+  `https://garboadmin.duckdns.org/?sentry-test=1`
+  This triggers a mock client-side render error that logs to Sentry immediately.
+
 ## Security / dependency notes
 
 If `npm install` reports vulnerabilities:
