@@ -11,7 +11,8 @@
     "dev:turbo": "next dev --turbo",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "test": "jest"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.3",
@@ -40,6 +41,7 @@
     "@radix-ui/react-toggle": "^1.1.2",
     "@radix-ui/react-toggle-group": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
+    "@sentry/nextjs": "^10.70.0",
     "@stomp/stompjs": "^7.3.0",
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "@turf/helpers": "^7.3.5",
@@ -54,7 +56,6 @@
     "leaflet-routing-machine": "^3.2.12",
     "lucide-react": "^0.487.0",
     "next": "^16.2.4",
-    "@sentry/nextjs": "^10.70.0",
     "next-themes": "^0.4.6",
     "pg": "^8.21.0",
     "react": "^19.2.5",
@@ -71,6 +72,9 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20.10.0",
     "@types/react": "^19.0.0",
@@ -80,6 +84,8 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.0",
     "eslint-config-next": "^16.2.4",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
     "postcss": "^8.4.47",
     "typescript": "^5.9.3"
   }
