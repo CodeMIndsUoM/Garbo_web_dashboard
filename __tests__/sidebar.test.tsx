@@ -37,7 +37,7 @@ describe('Sidebar Navigation Roles Tests', () => {
       />
     );
 
-    expect(screen.queryByText('Security Logs')).not.inTheDocument();
+    expect(screen.queryByText('Security Logs')).not.toBeInTheDocument();
   });
 
   it('renders Security Logs for admins', () => {
