@@ -30,7 +30,6 @@ const PAGE_LABELS: Partial<Record<PageType, string>> = {
   'admin-assignment': 'Admin Assignment',
   'admin-edit-password': 'Change Password',
   'create-admin': 'Create Admin',
-  'security-audit': 'Security Logs',
 };
 
 interface DashboardShellProps {

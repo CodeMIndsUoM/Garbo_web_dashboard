@@ -40,7 +40,7 @@ global.fetch = jest.fn().mockImplementation((url: string) => {
       json: () => Promise.resolve({ success: true, data: [] }),
     });
   }
-  return Promise.reject(new Error('Unknown url'));
+  return Promise.reject(new Error('Unknown url: ' + url));
 });
 
 jest.mock('../src/components/layout/PageHeader', () => ({
@@ -53,13 +53,19 @@ jest.mock('../src/components/layout/management-ui', () => ({
   FormSelect: ({ children }: { children: React.ReactNode }) => <select>{children}</select>,
   CodeBadge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   DetailGrid: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DetailField: ({ label, value }: { label: string; value: string }) => (
+  DetailField: ({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) => (
     <div>
       <span>{label}: </span>
-      <span>{value}</span>
+      {value ? <span>{value}</span> : null}
+      {children}
     </div>
   ),
-  ExpandableRow: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ExpandableRow: ({ children, title }: { children: React.ReactNode; title: React.ReactNode }) => (
+    <div>
+      <div>{title}</div>
+      {children}
+    </div>
+  ),
 }));
 
 describe('GamificationManagement Page Tests', () => {
@@ -67,11 +73,13 @@ describe('GamificationManagement Page Tests', () => {
     render(<GamificationManagement />);
 
     // Wait for mock fetch to complete and table rows to render
-    const fieldMentorLabel = await screen.findByText('Field mentor');
-    const collectorLabel = await screen.findByText('Collector');
+    await screen.findByText('Report Bins');
 
-    expect(fieldMentorLabel).toBeInTheDocument();
-    expect(collectorLabel).toBeInTheDocument();
+    const fieldMentorLabels = screen.getAllByText('Field mentor');
+    const collectorLabels = screen.getAllByText('Collector');
+
+    expect(fieldMentorLabels.length).toBeGreaterThan(0);
+    expect(collectorLabels.length).toBeGreaterThan(0);
 
     expect(screen.getByText('Report Bins')).toBeInTheDocument();
     expect(screen.getByText('Complete Collection Route')).toBeInTheDocument();

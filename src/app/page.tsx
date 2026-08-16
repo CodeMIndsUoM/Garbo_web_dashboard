@@ -28,7 +28,6 @@ import { ExternalUsers } from '@/components/ExternalUsers';
 import { GamificationManagement } from '@/components/GamificationManagement';
 import { InternalUsers } from '@/components/InternalUsers';
 import { StaffNotifications } from '@/components/StaffNotifications';
-import { SecurityAudit } from '@/components/SecurityAudit';
 import dynamic from 'next/dynamic';
 
 const MapView = dynamic(() => import('@/components/Map'), { ssr: false });
@@ -52,8 +51,7 @@ export type PageType =
   | 'complaint-analytics'
   | 'third-party-analytics'
   | 'vehicle-analytics'
-  | 'bin-report-analytics'
-  | 'security-audit';
+  | 'bin-report-analytics';
 export type UserRole = 'admin' | 'superadmin' | null;
 
 interface AuthenticatedShellProps {
@@ -183,10 +181,6 @@ function AuthenticatedShell({
       case 'create-admin':
         return (
           <CreateAdminPage onBack={() => setCurrentPage('admin-assignment')} />
-        );
-      case 'security-audit':
-        return (
-          <SecurityAudit />
         );
       default:
         return (
