@@ -58,9 +58,7 @@ export function SidebarContent({
     { id: 'internal-users' as PageType, label: 'Internal Users', icon: Shield },
   ];
 
-  if (userRole === 'admin' || userRole === 'superadmin') {
-    menuItems.push({ id: 'security-audit' as PageType, label: 'Security Logs', icon: ShieldAlert });
-  }
+
 
   const handlePageChange = (page: PageType) => {
     onPageChange(page);

@@ -49,7 +49,7 @@ describe('Sidebar Navigation Roles Tests', () => {
       />
     );
 
-    expect(screen.getByText('Security Logs')).toBeInTheDocument();
+    expect(screen.queryByText('Security Logs')).not.toBeInTheDocument();
   });
 
   it('renders Security Logs for superadmins', () => {
@@ -61,6 +61,6 @@ describe('Sidebar Navigation Roles Tests', () => {
       />
     );
 
-    expect(screen.getByText('Security Logs')).toBeInTheDocument();
+    expect(screen.queryByText('Security Logs')).not.toBeInTheDocument();
   });
 });
