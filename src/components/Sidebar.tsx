@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, Trash2, Truck, Map as MapIcon, Shield, UserCircle, Trophy, FileText } from 'lucide-react';
+import { LayoutDashboard, Trash2, Truck, Map as MapIcon, Shield, UserCircle, Trophy, FileText, ShieldAlert } from 'lucide-react';
 import { GarboBrand } from '@/components/brand/GarboIcon';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -57,6 +57,8 @@ export function SidebarContent({
     { id: 'gamification' as PageType, label: 'Gamification', icon: Trophy },
     { id: 'internal-users' as PageType, label: 'Internal Users', icon: Shield },
   ];
+
+
 
   const handlePageChange = (page: PageType) => {
     onPageChange(page);
