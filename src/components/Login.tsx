@@ -63,13 +63,16 @@ export function Login({ onLogin }: LoginProps) {
         const { decodeJwtPayload } = await import('@/lib/jwt');
         const payload = decodeJwtPayload(token);
         const roleFromToken = payload?.role || payload?.roles || payload?.roleName;
-        const idFromToken = payload?.sub || payload?.id || payload?.userId;
+        // JWT `sub` is the user's email in this API, not their database employee ID.
+        // Route history uses this value to determine the council scope, so use the
+        // empId returned by the login endpoint instead.
+        const userId = data?.empId ?? data?.data?.empId ?? payload?.id ?? payload?.userId;
         const roleToStore = data.role || data.data?.role || roleFromToken || 'admin';
         sessionStorage.setItem('role', roleToStore);
-        sessionStorage.setItem('userId', idFromToken || '');
+        sessionStorage.setItem('userId', userId ? String(userId) : '');
         sessionStorage.setItem(
           'admin',
-          JSON.stringify({ username: data.email || data.data?.email, role: roleToStore, id: idFromToken || undefined })
+          JSON.stringify({ username: data.email || data.data?.email, role: roleToStore, id: userId || undefined })
         );
         try {
           sessionStorage.setItem('mustChangePassword', JSON.stringify(Boolean(mustChangePassword)));
