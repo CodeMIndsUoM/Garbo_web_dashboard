@@ -2,7 +2,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # ---- Stage 2: build ----
 FROM node:20-alpine AS builder
@@ -10,6 +10,8 @@ WORKDIR /app
 
 ARG NEXT_PUBLIC_API_BASE=http://localhost:8081
 ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 ENV NEXT_TELEMETRY_DISABLED=1
 # Allow Next.js font optimization to build without reaching Google Fonts in Docker/CI
 ENV NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1
