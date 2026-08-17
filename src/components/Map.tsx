@@ -900,6 +900,8 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   // Extracts the current user's ID from the persisted admin object in sessionStorage
   const getCurrentUserId = () => {
     if (typeof window === 'undefined') return 1; // SSR safety — default to a placeholder ID
+    const storedUserId = Number(sessionStorage.getItem('userId'));
+    if (Number.isFinite(storedUserId) && storedUserId > 0) return storedUserId;
     const raw = sessionStorage.getItem('admin');
     if (!raw) return 1;
     try {
