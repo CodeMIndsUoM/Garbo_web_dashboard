@@ -82,6 +82,7 @@ function AuthenticatedShell({
           <Dashboard
             onNavigate={(page) => setCurrentPage(page as PageType)}
             council={activeCouncil}
+            userRole={userRole}
           />
         );
       case 'bins':
@@ -187,6 +188,7 @@ function AuthenticatedShell({
           <Dashboard
             onNavigate={(page) => setCurrentPage(page as PageType)}
             council={activeCouncil}
+            userRole={userRole}
           />
         );
     }

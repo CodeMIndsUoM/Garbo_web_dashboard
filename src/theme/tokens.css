@@ -209,6 +209,12 @@
   --sidebar-border: var(--surface-border);
   --sidebar-ring: var(--brand-ring);
 
+  /* Auth layout */
+  --auth-hero-bg: #092113;
+  --auth-hero-overlay: rgb(0 0 0 / 0.4);
+  --auth-form-backdrop: rgba(26, 26, 26, 0.95);
+  --auth-form-column-bg: linear-gradient(180deg, #111111 0%, var(--surface-page) 72%);
+
   /* Tailwind utility scales (overrides only in dark) */
   --green-50: #142a1c;
   --green-100: #1a3324;
@@ -267,9 +273,13 @@
 
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.45), 0 1px 2px -1px rgb(0 0 0 / 0.45);
   --shadow-elevated: 0 10px 40px -10px rgb(0 0 0 / 0.55);
+  --shadow-auth-card:
+    0 0 0 1px rgb(61 61 61 / 0.7),
+    0 20px 50px -12px rgb(0 0 0 / 0.45),
+    0 8px 24px -8px rgb(0 0 0 / 0.35);
   --auth-form-backdrop: rgb(36 36 36 / 0.92);
   --auth-form-column-bg: var(--surface-page);
-  --auth-hero-bg: #0f3d22;
+  --auth-hero-bg: #0a2d18;
 
   --glass-surface: rgb(36 36 36 / 0.82);
   --glass-surface-solid: rgb(36 36 36 / 0.92);
