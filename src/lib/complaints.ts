@@ -44,6 +44,8 @@ export function complaintStatusLabel(status?: string): string {
       return 'Rejected';
     case 'IN_PROGRESS':
       return 'In Progress';
+    case 'ADDED_TO_ROUTE':
+      return 'Routed';
     default:
       return normalized.replaceAll('_', ' ');
   }
@@ -62,6 +64,9 @@ export function complaintStatusBadgeClass(status?: string): string {
   }
   if (normalized === 'IN_PROGRESS') {
     return 'bg-blue-100 text-blue-800';
+  }
+  if (normalized === 'ADDED_TO_ROUTE') {
+    return 'bg-purple-100 text-purple-800';
   }
   return 'bg-gray-100 text-gray-700';
 }

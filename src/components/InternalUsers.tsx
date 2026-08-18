@@ -258,8 +258,8 @@ export function InternalUsers({
     setSuccess('');
   };
 
-  const hideUser = async (id: string | number) => {
-    if (!confirm('Hide this user from the admin list?')) return;
+  const deleteUser = async (id: string | number) => {
+    if (!confirm('Delete this internal user? This cannot be undone.')) return;
     setListError('');
     try {
       const { response, data } = await apiFetch<ApiListResponse<unknown>>(
@@ -267,49 +267,34 @@ export function InternalUsers({
         { method: 'POST' }
       );
       if (response.status === 403) {
-        toast.error('Not allowed to hide this user');
-        return;
-      }
-      if (!response.ok) {
-        toast.error(data?.message || 'Failed to hide user');
-        return;
-      }
-      toast.success('User hidden');
-      void loadData();
-    } catch {
-      toast.error('Network error while hiding user');
-    }
-  };
-
-  const deleteUser = async (id: string | number) => {
-    if (!confirm('Delete this internal user? This action cannot be undone.')) return;
-    setListError('');
-    try {
-      const { response, data } = await apiFetch<ApiListResponse<unknown>>(
-        `/api/admins/staff/${id}`,
-        { method: 'DELETE' }
-      );
-      if (response.status === 403) {
         toast.error('Not allowed to delete this user');
         return;
       }
-      if (response.status === 404) {
-        toast.error('User not found');
-        void loadData();
-        return;
-      }
-      if (response.status === 409) {
-        toast.error('Cannot delete due to linked records');
-        return;
-      }
       if (!response.ok) {
-        toast.error(data?.message || 'Failed to delete internal user');
+        toast.error(data?.message || 'Failed to delete user');
         return;
       }
       toast.success('User deleted');
       void loadData();
     } catch {
       toast.error('Network error while deleting user');
+    }
+  };
+
+  const toggleOnDuty = async (id: string | number, currentOnDuty: boolean) => {
+    try {
+      const { response, data } = await apiFetch<ApiListResponse<unknown>>(
+        `/api/admins/staff/${id}/on-duty`,
+        { method: 'PATCH', body: JSON.stringify({ onDuty: !currentOnDuty }) }
+      );
+      if (!response.ok) {
+        toast.error(data?.message || 'Failed to update duty status');
+        return;
+      }
+      toast.success(!currentOnDuty ? 'Set to On Duty' : 'Set to Off Duty');
+      void loadData();
+    } catch {
+      toast.error('Network error while updating duty status');
     }
   };
 
@@ -653,9 +638,18 @@ export function InternalUsers({
                       <TableCell>{user.empName || '-'}</TableCell>
                       <TableCell>{user.email || '-'}</TableCell>
                       <TableCell>
-                        <Badge className={user.onDuty ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-muted-foreground'}>
+                        <button
+                          type="button"
+                          onClick={() => void toggleOnDuty(user.empId, !!user.onDuty)}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium cursor-pointer transition-colors ${
+                            user.onDuty
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-muted-foreground hover:bg-gray-200'
+                          }`}
+                          title={`Click to set ${user.onDuty ? 'Off Duty' : 'On Duty'}`}
+                        >
                           {user.onDuty ? 'On duty' : 'Off duty'}
-                        </Badge>
+                        </button>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
@@ -670,10 +664,16 @@ export function InternalUsers({
                           <Button type="button" size="sm" variant="outline" onClick={() => openEditUser(user)}>
                             Edit
                           </Button>
-                          <TableRowActions
-                            onHide={() => void hideUser(user.empId)}
-                            onDelete={() => void deleteUser(user.empId)}
-                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-status-danger-border text-status-danger hover:bg-status-danger-muted hover:text-status-danger"
+                            onClick={() => void deleteUser(user.empId)}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
