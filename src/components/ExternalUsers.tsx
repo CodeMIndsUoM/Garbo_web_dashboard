@@ -690,7 +690,6 @@ function CitizensTab({
               ) : (
                 <div className="space-y-4">
                   {publishedEvents.filter(e => e.eventDate && e.eventDate >= new Date().toISOString().split('T')[0]).map((event) => {
-                    const eventImage = resolveMediaUrl(event.imageUrl);
                     const timeRange = formatTimeRange(event.startTime, event.endTime);
                     const participants =
                       event.maxParticipants != null
@@ -701,19 +700,6 @@ function CitizensTab({
                         key={event.id}
                         className="border border-border rounded-xl overflow-hidden flex flex-col sm:flex-row"
                       >
-                        {eventImage ? (
-                          <a href={eventImage} target="_blank" rel="noreferrer" className="sm:w-40 shrink-0">
-                            <img
-                              src={eventImage}
-                              alt={event.title || 'Event'}
-                              className="w-full h-32 sm:h-full object-cover bg-gray-100"
-                            />
-                          </a>
-                        ) : (
-                          <div className="sm:w-40 shrink-0 h-32 sm:h-auto flex items-center justify-center bg-muted text-muted-foreground">
-                            <ImageIcon className="w-8 h-8" />
-                          </div>
-                        )}
                         <div className="flex-1 p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                           <div className="min-w-0">
                             {event.category && (
@@ -765,7 +751,6 @@ function CitizensTab({
               ) : (
                 <div className="space-y-4">
                   {events.map((event) => {
-                    const eventImage = resolveMediaUrl(event.imageUrl);
                     const timeRange = formatTimeRange(event.startTime, event.endTime);
                     const participants =
                       event.maxParticipants != null
@@ -776,19 +761,6 @@ function CitizensTab({
                         key={event.id}
                         className="border border-border rounded-xl overflow-hidden flex flex-col sm:flex-row"
                       >
-                        {eventImage ? (
-                          <a href={eventImage} target="_blank" rel="noreferrer" className="sm:w-40 shrink-0">
-                            <img
-                              src={eventImage}
-                              alt={event.title || 'Event'}
-                              className="w-full h-32 sm:h-full object-cover bg-gray-100"
-                            />
-                          </a>
-                        ) : (
-                          <div className="sm:w-40 shrink-0 h-32 sm:h-auto flex items-center justify-center bg-muted text-muted-foreground">
-                            <ImageIcon className="w-8 h-8" />
-                          </div>
-                        )}
                         <div className="flex-1 p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                           <div className="min-w-0">
                             {event.category && (
