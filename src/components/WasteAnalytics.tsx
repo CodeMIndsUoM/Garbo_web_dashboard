@@ -147,9 +147,11 @@ const hasChartValues = (rows: { count?: number; collected?: number; pendingCount
 export function WasteAnalytics({
   onNavigate,
   council,
+  userRole,
 }: {
   onNavigate?: (page: string) => void;
   council?: { id?: string; name?: string } | null;
+  userRole?: 'admin' | 'superadmin' | null;
 }) {
   const [zoneFilter, setZoneFilter] = useState<'Daily' | 'Weekly' | 'Monthly'>('Weekly');
   const [zoneData, setZoneData] = useState<ZonePoint[]>([]);
@@ -939,56 +941,58 @@ export function WasteAnalytics({
             )}
           </AnalyticsChartCard>
 
-          <AnalyticsChartCard
-            title="Bin Reports by Council"
-            subtitle="Last 7 days — compare report volume across councils"
-          >
-            {binReportLoading ? (
-              chartLoader(280)
-            ) : reportByCouncil.length === 0 ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
-                Unable to load bin report data
-              </div>
-            ) : !hasReportCouncilActivity ? (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-dashed border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
-                  No bin reports in the last 7 days across any council.
+          {userRole === 'superadmin' && (
+            <AnalyticsChartCard
+              title="Bin Reports by Council"
+              subtitle="Last 7 days — compare report volume across councils"
+            >
+              {binReportLoading ? (
+                chartLoader(280)
+              ) : reportByCouncil.length === 0 ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
+                  Unable to load bin report data
                 </div>
-                <ResponsiveContainer width="100%" height={220}>
+              ) : !hasReportCouncilActivity ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-dashed border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+                    No bin reports in the last 7 days across any council.
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={reportByCouncil} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART.grid} />
+                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} allowDecimals={false} domain={[0, 1]} />
+                      <YAxis type="category" dataKey="council" width={120} axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} />
+                      <Tooltip contentStyle={CHART.tooltipStyle} formatter={(value: number) => [value, 'Reports (7 days)']} />
+                      <Bar dataKey="weekCount" name="Reports (7 days)" fill={CHART.neutral} radius={[0, 6, 6, 0]} barSize={18} {...CHART_ANIMATION} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={reportByCouncil} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART.grid} />
-                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} allowDecimals={false} domain={[0, 1]} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} allowDecimals={false} domain={[0, 'auto']} />
                     <YAxis type="category" dataKey="council" width={120} axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} />
-                    <Tooltip contentStyle={CHART.tooltipStyle} formatter={(value: number) => [value, 'Reports (7 days)']} />
-                    <Bar dataKey="weekCount" name="Reports (7 days)" fill={CHART.neutral} radius={[0, 6, 6, 0]} barSize={18} {...CHART_ANIMATION} />
+                    <Tooltip
+                      contentStyle={CHART.tooltipStyle}
+                      formatter={(value: number, _name, item) => {
+                        const row = item.payload as CouncilReportCount;
+                        return [`${value} this week · ${row.todayCount} today`, 'Reports'];
+                      }}
+                    />
+                    <Bar dataKey="weekCount" name="Reports (7 days)" radius={[0, 6, 6, 0]} barSize={20} minPointSize={4} {...CHART_ANIMATION}>
+                      {reportByCouncil.map((row) => (
+                        <Cell
+                          key={row.council}
+                          fill={row.isActive ? CHART.brand : row.weekCount > 0 ? '#22c55e' : CHART.neutral}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={reportByCouncil} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={CHART.grid} />
-                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} allowDecimals={false} domain={[0, 'auto']} />
-                  <YAxis type="category" dataKey="council" width={120} axisLine={false} tickLine={false} tick={{ fill: CHART.neutral, fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={CHART.tooltipStyle}
-                    formatter={(value: number, _name, item) => {
-                      const row = item.payload as CouncilReportCount;
-                      return [`${value} this week · ${row.todayCount} today`, 'Reports'];
-                    }}
-                  />
-                  <Bar dataKey="weekCount" name="Reports (7 days)" radius={[0, 6, 6, 0]} barSize={20} minPointSize={4} {...CHART_ANIMATION}>
-                    {reportByCouncil.map((row) => (
-                      <Cell
-                        key={row.council}
-                        fill={row.isActive ? CHART.brand : row.weekCount > 0 ? '#22c55e' : CHART.neutral}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </AnalyticsChartCard>
+              )}
+            </AnalyticsChartCard>
+          )}
         </div>
       </DashboardSection>
     </div>

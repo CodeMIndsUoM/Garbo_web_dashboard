@@ -88,7 +88,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 bg-white p-6 rounded-lg shadow">
+    <div className="max-w-md mx-auto mt-10 bg-card text-card-foreground p-6 rounded-lg shadow border border-border">
       <h2 className="text-xl font-semibold mb-4">Change Password</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -96,7 +96,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
           <div className="relative">
             <input
               type={showCurrentPassword ? 'text' : 'password'}
-              className="w-full border rounded px-3 py-2 pr-10"
+              className="w-full bg-background border border-input text-foreground rounded px-3 py-2 pr-10 focus:ring-2 focus:ring-ring focus:outline-none"
               value={currentPassword}
               onChange={e => setCurrentPassword(e.target.value)}
               required
@@ -127,7 +127,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
           <div className="relative">
             <input
               type={showNewPassword ? 'text' : 'password'}
-              className="w-full border rounded px-3 py-2 pr-10"
+              className="w-full bg-background border border-input text-foreground rounded px-3 py-2 pr-10 focus:ring-2 focus:ring-ring focus:outline-none"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               required
@@ -158,7 +158,7 @@ const AdminEditPassword: React.FC<{ onPasswordChanged?: () => void; onLogout?: (
           <div className="relative">
             <input
               type={showConfirmPassword ? 'text' : 'password'}
-              className="w-full border rounded px-3 py-2 pr-10"
+              className="w-full bg-background border border-input text-foreground rounded px-3 py-2 pr-10 focus:ring-2 focus:ring-ring focus:outline-none"
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               required

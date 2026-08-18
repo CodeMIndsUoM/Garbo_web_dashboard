@@ -49,6 +49,53 @@ const AUTO_ROUTE_PREVIEW_API = `${ROUTE_SESSION_API}/auto-preview`;
 const ROUTE_COLORS = ['#16a34a', '#2563eb', '#ea580c', '#7c3aed', '#db2777', '#0891b2']; // Distinct colors cycled per vehicle route
 
 // Maps bin fill status strings to their corresponding indicator colors
+
+const DRIVER_VEHICLE_CACHE_KEY = 'garbo_driver_vehicle_prefs';
+
+
+const getLatestVehicleForDriver = (driverId: string, drivers: any[], vehicles: any[], assignedRoutes: any[]) => {
+  if (!driverId) return null;
+  // 1. Try local storage cache
+  const cached = getSavedVehicleForDriver(driverId);
+  if (cached) return cached;
+  
+  // 2. Fallback to assigned routes history
+  const driver = drivers.find(d => d.empId.toString() === driverId);
+  if (driver && driver.empName) {
+    // assignedRoutes is usually sorted by createdDate descending
+    const lastRoute = assignedRoutes.find(r => r.driverName === driver.empName);
+    if (lastRoute && lastRoute.vehicleCode) {
+      const vehicle = vehicles.find(v => v.vehicleCode === lastRoute.vehicleCode || v.licensePlate === lastRoute.vehicleCode);
+      if (vehicle) return vehicle.id.toString();
+    }
+  }
+  return null;
+};
+
+const getSavedVehicleForDriver = (driverId: string) => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const prefs = JSON.parse(localStorage.getItem(DRIVER_VEHICLE_CACHE_KEY) || '{}');
+    return prefs[driverId] || null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveVehicleForDriver = (driverId: string, vehicleId: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const prefs = JSON.parse(localStorage.getItem(DRIVER_VEHICLE_CACHE_KEY) || '{}');
+    if (vehicleId) {
+      prefs[driverId] = vehicleId;
+    } else {
+      delete prefs[driverId];
+    }
+    localStorage.setItem(DRIVER_VEHICLE_CACHE_KEY, JSON.stringify(prefs));
+  } catch (e) {
+  }
+};
+
 const STATUS_COLOR_MAP: Record<string, string> = {
   full: '#ef4444',       // Red — bin needs immediate collection
   half: '#f59e0b',       // Amber — bin is partially filled
@@ -412,21 +459,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
   }, [council?.name]); // Re-fetch if the council changes (e.g., admin switching councils)
 
   // Derives the next sequential bin code for this council, e.g. "Moratuwa-42"
-  const nextBinCode = useMemo(() => {
-    if (!council?.name) return 'Auto-generated';
-    const prefix = `${council.name.trim()}-`.toLowerCase(); // Normalised prefix for matching existing codes
-    let maxNumber = 0;
-    markers.forEach((entry) => {
-      const code = entry.data.binCode?.toLowerCase() || '';
-      if (code.startsWith(prefix)) {
-        const numStr = code.slice(prefix.length).trim();
-        if (/^\d+$/.test(numStr)) {
-          maxNumber = Math.max(maxNumber, parseInt(numStr, 10)); // Track the highest numeric suffix seen
-        }
-      }
-    });
-    return `${council.name.trim()}-${maxNumber + 1}`; // Increment by one for the new bin
-  }, [council, markers]); // Recompute whenever the council or the set of markers changes
+  const nextBinCode = useMemo(() => 'Auto-generated', []);
 
   // Keep refs in sync with their corresponding state values so Leaflet closures always read current values
   useEffect(() => { addModeRef.current = addMode; }, [addMode]);
@@ -1042,6 +1075,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     vehicleId: string,
     driverId: string
   ) => {
+    saveVehicleForDriver(driverId, vehicleId);
     const vehicle = vehicles.find((v) => String(v.id) === vehicleId);
     const capacity = vehicle ? getVehicleMaxBins(vehicle) : DEFAULT_VEHICLE_MAX_BINS;
     const res = await fetch(ROUTE_SESSION_API, {
@@ -1507,6 +1541,9 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
           const snapshot = JSON.parse(message.body) as RouteSessionSnapshot;
           setActiveSessionId(snapshot.sessionId);
           setRouteStatus(snapshot.status || '');
+          setAssignedRoutes(prev => prev.map(r => 
+            r.sessionId === snapshot.sessionId ? { ...r, status: snapshot.status } : r
+          ));
           if (snapshot.status === 'ERROR') {
             setRouteError(snapshot.message || 'Route optimization failed');
             return; // Stop processing; error banner will display the message
@@ -1940,7 +1977,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
     const statusLabel = statusKey === 'full' ? 'Full' : statusKey === 'half' ? 'Half' :
       statusKey === 'empty' ? 'Empty' : 'Not Checked';
     return `<div>
-      <strong>Code:</strong> ${d.binCode || d.id}<br/>
+      <strong>Bin:</strong> #${d.id}<br/>
       <strong>Fill Status:</strong> ${statusLabel}<br/>
       ${d.hasDiscrepancy ? '<strong style="color:#d97706;">Status discrepancy reported</strong><br/>' : ''}
       <strong>Priority:</strong> ${d.priority}<br/>
@@ -2890,7 +2927,7 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                           className="w-2 h-2 rounded-full"
                           style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}
                         />
-                        <span>{entry?.data.binCode || id}</span>
+                        <span>Bin: #{id}</span>
                         <button
                           type="button"
                           onClick={() => toggleBinSelection(id)}
@@ -2907,26 +2944,20 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
               <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
-                    Vehicle
-                  </label>
-                  <select
-                    value={selectedVehicleId}
-                    onChange={(e) => setSelectedVehicleId(e.target.value)}
-                    className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
-                  >
-                    {renderVehicleOptions(selectedBins.length, selectedVehicleId)}
-                  </select>
-                  {selectedBins.length > 0 && vehicles.every((v) => !isVehicleCapacitySufficient(v, selectedBins.length)) && (
-                    <p className="text-[10px] text-red-600 mt-1">No vehicle has enough capacity for {selectedBins.length} bins</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
                     Driver
                   </label>
                   <select
                     value={selectedDriverId}
-                    onChange={(e) => setSelectedDriverId(e.target.value)}
+                    onChange={(e) => {
+                      const newDriverId = e.target.value;
+                      setSelectedDriverId(newDriverId);
+                      if (newDriverId) {
+                        const latest = getLatestVehicleForDriver(newDriverId, drivers, vehicles, assignedRoutes);
+                        if (latest && vehicles.some(v => v.id.toString() === latest || v.vehicleCode === latest)) {
+                          setSelectedVehicleId(latest);
+                        }
+                      }
+                    }}
                     className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
                   >
                     <option value="">-- Driver --</option>
@@ -2936,6 +2967,27 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-[var(--glass-text-muted)] mb-1 text-[10px] font-bold uppercase tracking-wider">
+                    Vehicle
+                  </label>
+                  <select
+                    value={selectedVehicleId}
+                    onChange={(e) => {
+                      const newVehicleId = e.target.value;
+                      setSelectedVehicleId(newVehicleId);
+                      if (selectedDriverId) {
+                        saveVehicleForDriver(selectedDriverId, newVehicleId);
+                      }
+                    }}
+                    className="w-full rounded-lg border border-[var(--glass-border)] bg-[var(--glass-field)] px-3 py-2 text-xs text-[var(--glass-text)] outline-none focus:border-brand-600"
+                  >
+                    {renderVehicleOptions(selectedBins.length, selectedVehicleId)}
+                  </select>
+                  {selectedBins.length > 0 && vehicles.every((v) => !isVehicleCapacitySufficient(v, selectedBins.length)) && (
+                    <p className="text-[10px] text-red-600 mt-1">No vehicle has enough capacity for {selectedBins.length} bins</p>
+                  )}
                 </div>
               </div>
 
@@ -2968,115 +3020,76 @@ export default function MapView({ council: initialCouncil }: { council?: { name?
         </div>
       </MapSidePanel>
 
-      {/* COLLAPSIBLE BULK BIN DELETION BOTTOM DRAWER */}
-      {deleteSelectionMode && (
-        <div
-          style={{ zIndex: 999 }}
-          className={`absolute bottom-0 left-0 right-0 bg-[var(--glass-surface-solid)] backdrop-blur-md border-t border-border shadow-[var(--shadow-elevated)] transition-all duration-300 ease-in-out flex flex-col ${isPlannerExpanded ? 'h-[280px]' : 'h-14'
-            }`}
-        >
-          {/* Header/Collapsed Panel Bar */}
-          <div
-            className="flex items-center justify-between px-6 h-14 border-b border-border shrink-0 cursor-pointer select-none bg-red-50/50 hover:bg-red-50/80 transition-colors"
-            onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
+      {/* BULK BIN DELETION SIDE PANEL */}
+      <MapSidePanel
+        open={deleteSelectionMode}
+        onClose={() => {
+          setDeleteSelectionMode(false);
+          clearSelectedBinIcons(selectedBinsToDelete);
+          setSelectedBinsToDelete([]);
+        }}
+        title="Bulk Bin Deletion"
+        icon={<Trash2 className="w-5 h-5 text-red-600 shrink-0" />}
+        bodyClassName="flex flex-col gap-4 p-4 overflow-y-auto"
+      >
+        <div className="bg-red-50/50 rounded-xl p-3 border border-red-100 flex items-center justify-between">
+          <span className="text-xs font-semibold text-red-800">
+            {selectedBinsToDelete.length} Bins Selected
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px] px-2 font-semibold border-red-200 text-red-700 hover:bg-red-100"
+            onClick={() => {
+              clearSelectedBinIcons(selectedBinsToDelete);
+              setSelectedBinsToDelete([]);
+            }}
           >
-            <div className="flex items-center gap-3">
-              {isPlannerExpanded ? (
-                <ChevronDown className="w-5 h-5 text-red-500 animate-bounce" />
-              ) : (
-                <ChevronUp className="w-5 h-5 text-red-500 animate-bounce" />
-              )}
-              <span className="font-semibold text-foreground text-sm">Bulk Bin Deletion</span>
-              <span className="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-semibold">
-                {selectedBinsToDelete.length} Bins Selected for Deletion
-              </span>
-            </div>
-            <div className="flex items-center gap-4" onClick={e => e.stopPropagation()}>
-              {!isPlannerExpanded && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs font-semibold"
-                  onClick={() => {
-                    setDeleteSelectionMode(false);
-                    clearSelectedBinIcons(selectedBinsToDelete);
-                    setSelectedBinsToDelete([]);
-                    setIsPlannerExpanded(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              )}
-              <button
-                onClick={() => setIsPlannerExpanded(!isPlannerExpanded)}
-                className="text-xs font-bold text-red-700 hover:text-red-800 transition-colors"
-              >
-                {isPlannerExpanded ? "Collapse" : "Expand Configuration"}
-              </button>
-            </div>
-          </div>
+            Clear All
+          </Button>
+        </div>
 
-          {/* Expanded Configuration Details */}
-          {isPlannerExpanded && (
-            <div className="p-5 flex flex-col md:flex-row gap-6 overflow-hidden flex-1 bg-card">
-              {/* Left Column: Selected Bins Tag Chips */}
-              <div className="flex-1 flex flex-col gap-2 min-w-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Bins to Delete</span>
-                {selectedBinsToDelete.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-border rounded-xl p-4 bg-muted/50">
-                    <Trash2 className="w-6 h-6 text-muted-foreground/50 mb-1" />
-                    <p className="text-muted-foreground text-xs text-center">Click bins on the map to add them to the deletion list</p>
+        <div className="flex-1 flex flex-col gap-2 min-w-0">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Bins to Delete</span>
+          {selectedBinsToDelete.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-border rounded-xl p-6 bg-muted/50 min-h-[120px]">
+              <Trash2 className="w-8 h-8 text-muted-foreground/30 mb-2" />
+              <p className="text-muted-foreground text-[11px] text-center max-w-[160px]">Click bins on the map to add them to the deletion list</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[300px] p-2 border border-border rounded-xl bg-slate-50/50">
+              {selectedBinsToDelete.map(id => {
+                const entry = markers.get(id);
+                return (
+                  <div key={id} className="flex items-center gap-1.5 bg-[var(--glass-field)] text-foreground px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm shrink-0">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}></span>
+                    <span>Bin: #{id}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleDeleteBinSelection(id)}
+                      className="text-muted-foreground hover:text-red-500 font-bold ml-1 transition-colors"
+                    >
+                      ✕
+                    </button>
                   </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2 overflow-y-auto max-h-[140px] p-2 border border-border rounded-xl bg-slate-50/50">
-                    {selectedBinsToDelete.map(id => {
-                      const entry = markers.get(id);
-                      return (
-                        <div key={id} className="flex items-center gap-1.5 bg-[var(--glass-field)] text-foreground px-3 py-1 rounded-full text-xs font-medium border border-border shadow-sm shrink-0">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_COLOR_MAP[entry?.data.status || 'not_checked'] }}></span>
-                          <span>{entry?.data.binCode || id}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleDeleteBinSelection(id)}
-                            className="text-muted-foreground hover:text-red-500 font-bold ml-1 transition-colors"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column: Actions */}
-              <div className="w-full md:w-80 flex flex-col justify-end gap-4">
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-xs h-10 border-border"
-                    onClick={() => {
-                      clearSelectedBinIcons(selectedBinsToDelete);
-                      setSelectedBinsToDelete([]);
-                    }}
-                  >
-                    Clear All
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    disabled={selectedBinsToDelete.length === 0}
-                    className="flex-1 text-xs h-10 bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    onClick={handleBulkDelete}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete Selected Bins
-                  </Button>
-                </div>
-              </div>
+                );
+              })}
             </div>
           )}
         </div>
-      )}
+
+        <div className="mt-auto pt-4 pb-2">
+          <Button
+            variant="destructive"
+            disabled={selectedBinsToDelete.length === 0}
+            className="w-full text-xs h-11 bg-red-600 hover:bg-red-700 text-white font-semibold shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete {selectedBinsToDelete.length > 0 ? selectedBinsToDelete.length : ''} Bins
+          </Button>
+        </div>
+      </MapSidePanel>
 
       {/* ROUTE HISTORY SIDE PANEL */}
       <MapSidePanel
