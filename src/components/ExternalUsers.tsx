@@ -1009,8 +1009,8 @@ function CitizensTab({
                   {complaintDetail.fieldStaffPhotoUrl && (
                     <div className="mt-2">
                       <p className="text-xs font-medium text-muted-foreground mb-1">Field Staff Photo</p>
-                      <a href={resolveMediaUrl(complaintDetail.fieldStaffPhotoUrl)} target="_blank" rel="noreferrer" className="block">
-                        <img src={resolveMediaUrl(complaintDetail.fieldStaffPhotoUrl)} alt="Field Staff Photo" className="rounded-lg border border-border max-h-48 object-cover w-full" />
+                      <a href={resolveMediaUrl(complaintDetail.fieldStaffPhotoUrl as string) || undefined} target="_blank" rel="noreferrer" className="block">
+                        <img src={resolveMediaUrl(complaintDetail.fieldStaffPhotoUrl as string) || undefined} alt="Field Staff Photo" className="rounded-lg border border-border max-h-48 object-cover w-full" />
                       </a>
                     </div>
                   )}
