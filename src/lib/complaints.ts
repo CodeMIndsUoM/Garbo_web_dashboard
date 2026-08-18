@@ -12,6 +12,8 @@ export interface ComplaintItem {
   council?: string;
   imageUrl?: string;
   resolutionNotes?: string;
+  fieldStaffNote?: string;
+  fieldStaffPhotoUrl?: string | null;
   createdAt?: string;
 }
 
