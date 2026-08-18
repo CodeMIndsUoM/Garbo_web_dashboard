@@ -309,4 +309,18 @@ html {
   .garbo-auth-hero-dot:hover {
     background: rgb(255 255 255 / 0.65);
   }
+
+  /* ── Dark-mode auth overrides ── */
+  .dark .garbo-auth-hero-overlay {
+    background: linear-gradient(
+      180deg,
+      rgb(0 0 0 / 0.15) 0%,
+      transparent 42%,
+      rgb(0 0 0 / 0.45) 100%
+    );
+  }
+
+  .dark .garbo-auth-hero-footer {
+    color: rgb(255 255 255 / 0.55);
+  }
 }

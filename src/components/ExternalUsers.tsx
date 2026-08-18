@@ -197,7 +197,8 @@ function CitizensTab({
   const [section, setSection] = useState<CitizensSection>('users');
   const [citizens, setCitizens] = useState<CitizenUser[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]); // These are suggestions
+  const [publishedEvents, setPublishedEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedComplaintId, setSelectedComplaintId] = useState<number | null>(null);
   const [complaintDetail, setComplaintDetail] = useState<ComplaintItem | null>(null);
@@ -219,15 +220,72 @@ function CitizensTab({
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  const [selectedComplaintIds, setSelectedComplaintIds] = useState<number[]>([]);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showComplaintHistoryModal, setShowComplaintHistoryModal] = useState(false);
+  const [showEventHistoryModal, setShowEventHistoryModal] = useState(false);
+  const [fieldStaffList, setFieldStaffList] = useState<any[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
+  const [assigningComplaints, setAssigningComplaints] = useState(false);
+  const [addingToRoute, setAddingToRoute] = useState(false);
+
+  const toggleComplaintSelection = (id: number) => {
+    setSelectedComplaintIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const loadFieldStaff = async () => {
+    try {
+      const res = await apiFetch<any>(`/api/admins/staff${councilQuery(councilName)}`);
+      if (res.response.ok && Array.isArray(res.data?.data)) {
+        const staff = res.data.data.filter((s: any) => s.role === 'FIELD_MENTOR' || s.role === 'ROLE_FIELD_MENTOR');
+        setFieldStaffList(staff);
+      }
+    } catch (e) {
+      toast.error('Failed to load field staff');
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (!selectedStaffId || selectedComplaintIds.length === 0) return;
+    setAssigningComplaints(true);
+    try {
+      const res = await apiFetch<any>('/api/complaints/bulk-assign', {
+        method: 'POST',
+        body: JSON.stringify({
+          complaintIds: selectedComplaintIds,
+          personnelId: selectedStaffId
+        })
+      });
+      if (res.response.ok) {
+        toast.success('Complaints assigned to field staff');
+        setSelectedComplaintIds([]);
+        setShowAssignModal(false);
+        loadData();
+      } else {
+        toast.error(res.data?.error || 'Failed to assign complaints');
+      }
+    } catch (e) {
+      toast.error('Network error during assignment');
+    } finally {
+      setAssigningComplaints(false);
+    }
+  };
+
+
+
+
   const councilName = council?.name;
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [citizensRes, complaintsRes, eventsRes] = await Promise.all([
+      const [citizensRes, complaintsRes, eventsRes, publishedEventsRes] = await Promise.all([
         apiFetch<{ success?: boolean; data?: CitizenUser[] }>(`/api/admin/citizens${councilQuery(councilName)}`),
         apiFetch<ComplaintItem[]>('/api/complaints'),
         apiFetch<EventItem[]>('/api/events/suggestions'),
+        apiFetch<EventItem[]>('/api/events'),
       ]);
 
       const citizenList = citizensRes.data?.success && Array.isArray(citizensRes.data.data)
@@ -238,6 +296,7 @@ function CitizensTab({
 
       const rawComplaints = Array.isArray(complaintsRes.data) ? complaintsRes.data : [];
       const rawEvents = Array.isArray(eventsRes.data) ? eventsRes.data : [];
+      const rawPublishedEvents = Array.isArray(publishedEventsRes.data) ? publishedEventsRes.data : [];
 
       setCitizens(citizenList);
       const filteredComplaints = filterComplaintsByCouncil(rawComplaints, councilName);
@@ -254,6 +313,11 @@ function CitizensTab({
         councilName
           ? rawEvents.filter((e) => matchesCouncil(councilName, e.council, e.location))
           : rawEvents
+      );
+      setPublishedEvents(
+        councilName
+          ? rawPublishedEvents.filter((e) => matchesCouncil(councilName, e.council, e.location))
+          : rawPublishedEvents
       );
     } catch {
       toast.error('Failed to load citizen data');
@@ -502,16 +566,39 @@ function CitizensTab({
       {section === 'complaints' && (
         <Card>
           <CardHeader>
-            <CardTitle>Citizen Complaints</CardTitle>
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <CardTitle>Citizen Complaints</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                {selectedComplaintIds.length > 0 && (
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      loadFieldStaff();
+                      setShowAssignModal(true);
+                    }}
+                  >
+                    Assign Field Mentor ({selectedComplaintIds.length})
+                  </Button>
+                )}
+              </div>
+            </div>
+
           </CardHeader>
           <CardContent>
             {loading ? (
               <p className="text-muted-foreground">Loading complaints...</p>
-            ) : complaints.length === 0 ? (
-              <p className="text-muted-foreground">No complaints found.</p>
+            ) : complaints.filter(c => {
+                const s = (c.status || 'PENDING').trim().toUpperCase();
+                return s !== 'COMPLETED' && s !== 'REJECTED';
+              }).length === 0 ? (
+              <p className="text-muted-foreground">No active complaints found.</p>
             ) : (
               <div className="space-y-3">
-                {complaints.map((complaint) => {
+                {complaints.filter(c => {
+                  const s = (c.status || 'PENDING').trim().toUpperCase();
+                  return s !== 'COMPLETED' && s !== 'REJECTED';
+                }).map((complaint) => {
                   const pending = isPendingComplaint(complaint.status);
                   const isActing = actingComplaintId === complaint.id;
                   return (
@@ -519,11 +606,13 @@ function CitizensTab({
                       key={complaint.id}
                       className="p-4 border border-border rounded-lg hover:border-green-300 hover:bg-green-50/30 transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-4"
                     >
-                      <button
-                        type="button"
-                        onClick={() => void openComplaint(complaint.id)}
-                        className="min-w-0 flex-1 text-left"
-                      >
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => void openComplaint(complaint.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+
                         <p className="text-foreground font-medium">{complaintTitle(complaint)}</p>
                         <p className="text-sm text-muted-foreground mt-1">{complaint.location || 'No location'}</p>
                         {complaint.issueType && (
@@ -534,7 +623,17 @@ function CitizensTab({
                             {new Date(complaint.createdAt).toLocaleString()}
                           </p>
                         )}
+                        {complaint.imageUrl && (
+                          <div className="mt-2">
+                            <img 
+                              src={complaint.imageUrl} 
+                              alt="Complaint image" 
+                              className="max-h-32 rounded object-contain border border-border" 
+                            />
+                          </div>
+                        )}
                       </button>
+                      </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <Badge className={complaintStatusBadgeClass(complaint.status)}>
                           {complaintStatusLabel(complaint.status)}
@@ -559,19 +658,14 @@ function CitizensTab({
                             </Button>
                           </>
                         )}
-                        {(complaint.status || '').toUpperCase() === 'APPROVED' ||
-                        (complaint.status || '').toUpperCase() === 'ACCEPTED' ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              storeRoutePrefillFromComplaint(complaint);
-                              onNavigateToMap?.();
-                            }}
-                          >
-                            Send to route
-                          </Button>
-                        ) : null}
+                        {complaint.status === 'APPROVED' && (
+                          <input
+                            type="checkbox"
+                            className="ml-2 w-4 h-4 cursor-pointer"
+                            checked={selectedComplaintIds.includes(complaint.id)}
+                            onChange={() => toggleComplaintSelection(complaint.id)}
+                          />
+                        )}
                       </div>
                     </div>
                   );
@@ -584,6 +678,81 @@ function CitizensTab({
 
       {section === 'events' && (
         <>
+          <Card className="mb-6">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Upcoming Events</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-muted-foreground">Loading upcoming events...</p>
+              ) : publishedEvents.filter(e => e.eventDate && e.eventDate >= new Date().toISOString().split('T')[0]).length === 0 ? (
+                <p className="text-muted-foreground">No upcoming events.</p>
+              ) : (
+                <div className="space-y-4">
+                  {publishedEvents.filter(e => e.eventDate && e.eventDate >= new Date().toISOString().split('T')[0]).map((event) => {
+                    const eventImage = resolveMediaUrl(event.imageUrl);
+                    const timeRange = formatTimeRange(event.startTime, event.endTime);
+                    const participants =
+                      event.maxParticipants != null
+                        ? `${event.enrolledCount ?? 0} / ${event.maxParticipants} participants`
+                        : null;
+                    return (
+                      <div
+                        key={event.id}
+                        className="border border-border rounded-xl overflow-hidden flex flex-col sm:flex-row"
+                      >
+                        {eventImage ? (
+                          <a href={eventImage} target="_blank" rel="noreferrer" className="sm:w-40 shrink-0">
+                            <img
+                              src={eventImage}
+                              alt={event.title || 'Event'}
+                              className="w-full h-32 sm:h-full object-cover bg-gray-100"
+                            />
+                          </a>
+                        ) : (
+                          <div className="sm:w-40 shrink-0 h-32 sm:h-auto flex items-center justify-center bg-muted text-muted-foreground">
+                            <ImageIcon className="w-8 h-8" />
+                          </div>
+                        )}
+                        <div className="flex-1 p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            {event.category && (
+                              <Badge className={`mb-2 ${categoryBadgeClass(event.category)}`}>{event.category}</Badge>
+                            )}
+                            <p className="text-foreground font-semibold">{event.title}</p>
+                            <p className="text-sm text-muted-foreground mt-1">{event.description || 'No description'}</p>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
+                              {event.eventDate && (
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {event.eventDate}
+                                </span>
+                              )}
+                              {timeRange && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {timeRange}
+                                </span>
+                              )}
+                              {event.location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {event.location}
+                                </span>
+                              )}
+                              {participants && <span>{participants}</span>}
+                              {event.council && <span>Council: {event.council}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Event Suggestions</CardTitle>
@@ -829,6 +998,22 @@ function CitizensTab({
                       </p>
                     </div>
                   )}
+                  {complaintDetail.fieldStaffNote && (
+                    <div className="rounded-lg bg-secondary/20 border border-border p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Field Staff Note</p>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">
+                        {complaintDetail.fieldStaffNote}
+                      </p>
+                    </div>
+                  )}
+                  {complaintDetail.fieldStaffPhotoUrl && (
+                    <div className="mt-2">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Field Staff Photo</p>
+                      <a href={resolveMediaUrl(complaintDetail.fieldStaffPhotoUrl)} target="_blank" rel="noreferrer" className="block">
+                        <img src={resolveMediaUrl(complaintDetail.fieldStaffPhotoUrl)} alt="Field Staff Photo" className="rounded-lg border border-border max-h-48 object-cover w-full" />
+                      </a>
+                    </div>
+                  )}
                   <div className="flex justify-end gap-2 pt-2">
                     <Button variant="outline" onClick={() => { setSelectedComplaintId(null); setComplaintDetail(null); setResolutionNotes(''); }}>
                       Close
@@ -855,6 +1040,37 @@ function CitizensTab({
                   </div>
                 </>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-background rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-border">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-surface-subtle">
+              <h2 className="text-lg font-semibold">Assign to Field Staff</h2>
+              <button type="button" onClick={() => setShowAssignModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <label className="text-sm font-medium">Select Field Staff</label>
+              <select 
+                className="w-full flex h-10 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onChange={(e) => setSelectedStaffId(Number(e.target.value))}
+                value={selectedStaffId || ''}
+              >
+                <option value="" disabled>Select a staff member</option>
+                {fieldStaffList.map(staff => (
+                  <option key={staff.empId} value={staff.empId}>{staff.empName || staff.email}</option>
+                ))}
+              </select>
+            </div>
+            <div className="p-4 border-t border-border flex justify-end gap-3 bg-surface-subtle">
+              <Button variant="outline" onClick={() => setShowAssignModal(false)}>Cancel</Button>
+              <Button onClick={() => void handleBulkAssign()} disabled={!selectedStaffId || assigningComplaints}>
+                {assigningComplaints ? 'Assigning...' : 'Assign'}
+              </Button>
             </div>
           </div>
         </div>
@@ -1385,6 +1601,7 @@ function CollectorsTab({ council }: { council?: { name?: string } | null }) {
           </CardContent>
         </Card>
       )}
+
     </div>
   );
 }
