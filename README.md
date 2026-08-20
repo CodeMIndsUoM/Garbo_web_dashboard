@@ -21,7 +21,7 @@
   - [Interactive GIS Map & Automated Route Planner](#interactive-gis-map--automated-route-planner)
   - [Municipal Analytics & Overflow Hotspots](#municipal-analytics--overflow-hotspots)
   - [Council Staff & Fleet Management](#council-staff--fleet-management)
-  - [3rd-Party Recycler Verification](#3rd-party-recycler-verification)
+  - [3rd-Party Collector Verification](#3rd-party-collector-verification)
 - [5. Technology Stack](#5-technology-stack)
 - [6. Project Structure](#6-project-structure)
 - [7. Getting Started & Local Setup](#7-getting-started--local-setup)
@@ -99,60 +99,10 @@ graph TB
 
 ## 4. User Interface Showcase
 
----
-
-### Authentication & Council Selection
-
-Secure administrative sign-in featuring council context resolution and multi-tenant council switching for SuperAdmins.
-
-| Login Interface | Council Switcher (SuperAdmin) |
-|:---:|:---:|
-| ![Login Interface](docs/screenshots/web_login.png) | ![Council Switcher](docs/screenshots/web_council_switch.png) |
-| *Role-aware administrative authentication* | *Dynamic cross-council jurisdiction selection* |
-
----
-
-### Interactive GIS Map & Automated Route Planner
-
-Real-time map visualizing smart bins, vehicle routes, and dynamic algorithmic route generation with Google OR-Tools.
-
-| Automated Route Generation | Live Map & Bin Hotspots |
-|:---:|:---:|
-| ![Route Generation](docs/screenshots/web_route_planner.png) | ![Live Map View](docs/screenshots/web_map_view.png) |
-| *One-click algorithmic route generation & dispatch* | *Color-coded bin telemetry & active fleet tracking* |
-
----
-
-### Municipal Analytics & Overflow Hotspots
-
-Comprehensive analytics reporting collection rates, complaint resolution timelines, and bin overflow frequencies.
-
-| Analytics Overview | Waste Breakdown & Charts |
-|:---:|:---:|
-| ![Analytics Overview](docs/screenshots/web_analytics.png) | ![Charts Breakdown](docs/screenshots/web_charts.png) |
-| *High-level KPI metrics & operational health* | *Waste volume trends & recycling efficiency* |
-
----
-
-### Council Staff & Fleet Management
-
-Manage internal field staff, vehicle assignments, duty schedules, and citizen records.
-
-| Staff & Mentor Directory | Vehicle Fleet Allocation |
-|:---:|:---:|
-| ![Staff Directory](docs/screenshots/web_staff.png) | ![Fleet Allocation](docs/screenshots/web_vehicles.png) |
-| *Internal mentors and collector duty rosters* | *Vehicle capacity and route status tracking* |
-
----
-
-### 3rd-Party Recycler Verification
-
-Review license credentials, approve private recyclers, and monitor specialized collection marketplaces.
-
-| 3rd-Party Recycler Verification | Marketplace Bids Oversight |
-|:---:|:---:|
-| ![Recycler Verification](docs/screenshots/web_third_party.png) | ![Marketplace Oversight](docs/screenshots/web_marketplace.png) |
-| *Commercial recycler license audit* | *Specialized waste bidding transparency* |
+| Administrative Login | Main Operations Dashboard | Interactive GIS Map & Route Planner |
+|:---:|:---:|:---:|
+| ![Administrative Login](docs/screenshots/web_login.png) | ![Main Operations Dashboard](docs/screenshots/web_dashboard.png) | ![Interactive GIS Map](docs/screenshots/web_map.png) |
+| *Role-aware administrative sign-in* | *Live municipal telemetry & KPI summary* | *Color-coded smart bin map & route dispatch* |
 
 ---
 
